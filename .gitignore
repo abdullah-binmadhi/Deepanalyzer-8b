@@ -1,0 +1,7 @@
+*.xlsx
+*.csv
+*.gguf
+*.bin
+__pycache__/
+.DS_Store
+charts/

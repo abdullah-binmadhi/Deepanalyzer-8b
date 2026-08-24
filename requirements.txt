@@ -1,0 +1,10 @@
+pandas
+numpy
+duckdb
+httpx
+openai
+ipython
+matplotlib
+seaborn
+scikit-learn
+openpyxl
