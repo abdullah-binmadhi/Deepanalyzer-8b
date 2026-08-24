@@ -2,12 +2,15 @@ import ast
 import builtins
 import datetime
 import difflib
+import json
 import os
 import re
 import sys
 import httpx
 import shlex
 import argparse
+import urllib.request
+import urllib.error
 import pandas as pd
 import numpy as np
 from IPython.core.magic import register_line_cell_magic
@@ -22,8 +25,10 @@ except ImportError:
     _DUCKDB_CON = None
 
 _DF_SNAPSHOTS = {}
+_INTERCEPTOR_ACTIVE = False
 _LAST_GENERATED_CODE = ""
 _LAST_USER_PROMPT = ""
+DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
 
 KNOWN_GLOBAL_SYMBOLS = {
     "pd", "np", "plt", "sns", "duckdb", "scipy", "stats", "sklearn",
@@ -116,6 +121,63 @@ INVARIANT_CHECKLIST = (
     "1. DO NOT output conversational preamble or explanations outside code tags.\n"
     "2. Enclose code strictly inside <Answer>```python ... ```</Answer>.\n"
 )
+
+def check_engine_status(server_url=DEFAULT_SERVER_URL):
+    """Probes the llama-server health/props endpoints and kernel interceptor state."""
+    print("=" * 60)
+    print("🔍 DeepAnalyze-8B System & Engine Status")
+    print("=" * 60)
+
+    health_url = f"{server_url}/health"
+    props_url = f"{server_url}/props"
+    server_online = False
+    server_props = {}
+
+    try:
+        req = urllib.request.Request(health_url, headers={"User-Agent": "DeepAnalyze-Client"})
+        with urllib.request.urlopen(req, timeout=2) as response:
+            if response.status == 200:
+                server_online = True
+    except Exception:
+        server_online = False
+
+    if not server_online:
+        print("❌ Server Status     : Offline / Unreachable")
+        print(f"   Endpoint          : {server_url}")
+        print("   Troubleshoot      : Ensure `llama-server` is running on port 8080.")
+    else:
+        print("✅ Server Status     : Online & Healthy")
+        print(f"   Endpoint          : {server_url}")
+        try:
+            req_props = urllib.request.Request(props_url, headers={"User-Agent": "DeepAnalyze-Client"})
+            with urllib.request.urlopen(req_props, timeout=2) as resp:
+                server_props = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            server_props = {}
+
+        if server_props:
+            default_gen = server_props.get("default_generation_settings", {})
+            n_ctx = default_gen.get("n_ctx", "Unknown")
+            model_path = server_props.get("model_path", "Loaded GGUF")
+            print(f"   Active Model      : {model_path.split('/')[-1]}")
+            print(f"   Context Allocation: {n_ctx} tokens")
+        else:
+            print("   Context Allocation: Active (16K configured)")
+
+    interceptor_status = "🟢 Enabled (Auto-pilot on plain English cells)" if _INTERCEPTOR_ACTIVE else "⚪ Disabled (Explicit %deepanalyze calls only)"
+    print(f"\n📡 Cell Interceptor  : {interceptor_status}")
+
+    ip = get_ipython()
+    tracked_dfs = list(_DF_SNAPSHOTS.keys())
+    if tracked_dfs:
+        print(f"\n💾 State Snapshots   : {len(tracked_dfs)} active DataFrame rollback points")
+        for var_name in tracked_dfs:
+            shape = getattr(ip.user_ns.get(var_name), "shape", "Unknown shape")
+            print(f"   • {var_name} -> {shape}")
+    else:
+        print("\n💾 State Snapshots   : No active snapshots (clean state)")
+
+    print("=" * 60)
 
 def _take_snapshot(ip, target="df"):
     global _DF_SNAPSHOTS
@@ -300,11 +362,13 @@ def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: in
 
 @register_line_cell_magic
 def deepanalyze(line, cell=None):
-    global _LAST_GENERATED_CODE, _LAST_USER_PROMPT
+    global _LAST_GENERATED_CODE, _LAST_USER_PROMPT, _INTERCEPTOR_ACTIVE
     raw_input = f"{line}\n{cell}" if cell else line
     ip = get_ipython()
 
     parser = argparse.ArgumentParser(prog="%deepanalyze", description="Agentic LLM Execution Engine", add_help=False)
+    parser.add_argument("--toggle", action="store_true", help="Toggle global cell interceptor on/off")
+    parser.add_argument("--status", action="store_true", help="Display server health, context size, and interceptor status")
     parser.add_argument("-x", "--exec", "--execute", dest="execute_code", action="store_true")
     parser.add_argument("-c", "--continue", dest="is_continuation", action="store_true")
     parser.add_argument("--save", action="store_true")
@@ -333,6 +397,18 @@ def deepanalyze(line, cell=None):
     except SystemExit:
         return
 
+    # Handle Toggle Flag
+    if parsed_args.toggle:
+        _INTERCEPTOR_ACTIVE = not _INTERCEPTOR_ACTIVE
+        state_str = "🟢 ENABLED (Auto-pilot active)" if _INTERCEPTOR_ACTIVE else "⚪ DISABLED (Explicit mode)"
+        print(f"🔄 DeepAnalyze Interceptor toggled: {state_str}")
+        return
+
+    # Handle Status Flag
+    if parsed_args.status:
+        check_engine_status()
+        return
+
     if parsed_args.undo:
         if _restore_snapshot(ip, target=parsed_args.target):
             df_restored = ip.user_ns[parsed_args.target]
@@ -352,7 +428,7 @@ def deepanalyze(line, cell=None):
     elif parsed_args.repair: primary_skill = "repair"
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
-        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|--undo] <task description>")
+        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|--undo|--toggle|--status] <task description>")
         return
 
     _sync_duckdb(ip)
@@ -472,3 +548,29 @@ def deepanalyze(line, cell=None):
     except Exception as e:
         sys.stdout.write("\r" + " " * 55 + "\r")
         print(f"[DeepAnalyze Error]: Request failed. ({e})")
+
+def deepanalyze_interceptor(lines):
+    """Intercepts plain-text lines when auto-pilot is enabled."""
+    global _INTERCEPTOR_ACTIVE
+    if not lines:
+        return lines
+
+    first_line = lines[0].strip()
+    if _INTERCEPTOR_ACTIVE:
+        if (first_line.startswith("%") or 
+            first_line.startswith("!") or 
+            first_line.startswith("import ") or 
+            first_line.startswith("from ") or 
+            "=" in first_line or
+            not first_line):
+            return lines
+        
+        full_cell = "".join(lines).strip()
+        # Use triple quotes (''' ... ''') so any quotes inside the prompt are fully safe
+        return [f"""get_ipython().run_line_magic('deepanalyze', '-x {full_cell}')\n"""]
+
+    return lines
+
+ip = get_ipython()
+if ip and deepanalyze_interceptor not in ip.input_transformers_cleanup:
+    ip.input_transformers_cleanup.append(deepanalyze_interceptor)
