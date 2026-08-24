@@ -137,6 +137,8 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 
 | Directive | Flag | Behavior | Primary Use Case |
 | :--- | :--- | :--- | :--- |
+| **Engine Status** | `--status` | Probes `llama-server` health endpoints, context window size, active model parameters, and current interceptor state. | Engine monitoring, health checks, and runtime environment inspection. |
+| **Auto-Pilot Toggle** | `--toggle` | Dynamically flips the global cell interceptor on or off for plain-English auto-pilot execution. | Toggling between explicit magic calls and natural language auto-interception without restarting Jupyter. |
 | **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
 | **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
 | **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
@@ -147,7 +149,7 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Profile** | `-p`, `--profile` | Generates a strategic structural health audit alongside safe diagnostic sampling. | Schema inspection, cardinality profiling, and null distribution checks. |
 | **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable, exact syntax. | Strict ETL pipelines and reproducible transformations. |
 | **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
-| **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to `1`). | Fault-tolerant execution handling transient syntax or execution exceptions. |
+| **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to 1). | Fault-tolerant execution handling transient syntax or execution exceptions. |
 | **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
 
 ---
