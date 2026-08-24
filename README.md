@@ -6,35 +6,51 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ---
 
+## Key Capabilities
+
+* **Zero-Friction In-Memory Analytics:** Directly inspects variable schemas and DataFrame dtypes from active kernel memory.
+* **Auto-Pilot Interceptor:** Intercepts plain English instructions in standard code cells without requiring explicit magic prefixes.
+* **DuckDB SQL Engine:** Zero-copy querying over in-memory pandas DataFrames using standard SQL dialect.
+* **Hierarchical Unravelling:** Deterministic state machines that parse and forward-fill ragged, non-rectangular tabular text reports.
+* **State Snapshot & Rollback:** Automated deepcopy snapshotting before execution, allowing instant state rollbacks via `--undo`.
+* **Runtime Auto-Repair Loop:** Traps syntax errors and runtime exceptions, feeds AST tracebacks back into the model, and retries execution autonomously.
+
+---
 ## System Architecture
 
 The core of DeepAnalyze is its ability to extract context directly from the host environment, formulate a solution, and validate it before applying changes.
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│              IPython / Jupyter Notebook Session         │
-│  User: %deepanalyze -x -u "Flatten invoice df"          │
-└───────────────────────────┬─────────────────────────────┘
-                            │ (Context: df.head + dtypes)
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│            Local Server (aboOod3d/deepanalyze-8b)       │
-│  Outputs structured <Execute> Python/SQL state machine  │
-└───────────────────────────┬─────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│             AST Verification & Self-Repair Loop         │
-│  * Parses syntax tree for unsafe/deprecated calls       │
-│  * In-memory test execution & error feedback capture    │
-│  * Auto-patches code on runtime exceptions              │
-└───────────────────────────┬─────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│               In-Memory Mutation / DuckDB Query         │
-│  Mutates `df` in-place with zero-copy execution         │
-└─────────────────────────────────────────────────────────┘
+text
+```
+ ┌──────────────────────────────────────────────────────────┐
+ │               IPython / Jupyter Kernel                   │
+ │                                                          │
+ │   Plain English Prompt / %deepanalyze Directive          │
+ │                            │                             │
+ │                            ▼                             │
+ │         Input Interceptor / Magic Flag Parser            │
+ │                            │                             │
+ │                            ▼                             │
+ │          Runtime Schema & Dtype Inspection               │
+ │                            │                             │
+ └────────────────────────────┼─────────────────────────────┘
+                              ▼
+ ┌──────────────────────────────────────────────────────────┐
+ │          Local Inference Server (llama-server)           │
+ │                                                          │
+ │     Prompt + Skill Rulebooks (SQL / Viz / Wrangling)     │
+ │                            │                             │
+ │                            ▼                             │
+ │             DeepAnalyze-8B Reasoning Core                │
+ └────────────────────────────┼─────────────────────────────┘
+                              ▼
+ ┌──────────────────────────────────────────────────────────┐
+ │                  Execution Engine                        │
+ │                                                          │
+ │   AST Validation ──► [Auto-Repair on Error (1-3x)]       │
+ │   DuckDB Engine  ──► Zero-Copy In-Memory SQL Execution   │
+ │   State Manager  ──► Deepcopy Snapshots & `--undo`       │
+ └──────────────────────────────────────────────────────────┘
 ```
 
 ### The Autonomous Self-Repair Cycle
@@ -66,16 +82,7 @@ When the model generates a block of code, it does not immediately overwrite user
 
 DeepAnalyze requires a local inference server to host the quantized 8B model. The base weights are hosted on Hugging Face: **[aboOod3d/deepanalyze-8b](https://huggingface.co/aboOod3d/deepanalyze-8b)**.
 
-Initialize the backend via `llama.cpp` or standard `llama-server` distributions:
 
-```bash
-llama-server \
-  --hf-repo aboOod3d/deepanalyze-8b \
-  --hf-file deepanalyze-8b.gguf \
-  --port 8080 \
-  -c 8192 \
-  -ngl 99
-```
 ### Context Window & Memory Profiles (16GB Unified Memory)
 
 The native pre-trained context window for DeepAnalyze-8B is **8,192 tokens**. However, `llama-server` supports dynamic context expansion via the `-c` flag. 
@@ -99,22 +106,47 @@ llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
 ```
 ---
 
-## Installation
 
-Once the backend is running, install the agent frontend into your local IPython profile.
+## Installation & Setup
+
+### 1. Prerequisites
+
+Ensure you have a local instance of `llama-server` or an OpenAI-compatible server running the quantized DeepAnalyze GGUF model:
 
 ```bash
-# 1. Clone the environment integration repository
-git clone [https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git](https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git)
-
-# 2. Register the IPython magic extension
-mkdir -p ~/.ipython/profile_default/startup/
-cp Deepanalyzer-8b/startup/00_deepanalyze_magic.py ~/.ipython/profile_default/startup/
-
-# 3. Install runtime dependencies
-pip install -r Deepanalyzer-8b/requirements.txt
+# Example: Running llama-server locally
+llama-server \
+  -m models/deepanalyze-8b-q4_k_m.gguf \
+  --port 8080 \
+  -c 16384 \
+  --host 127.0.0.1
 ```
 
+### 2. Python Dependencies
+
+Install the scientific computing stack:
+
+```bash
+pip install pandas numpy duckdb matplotlib seaborn openai
+```
+
+### 3. Deploy the IPython Magic Extension
+
+Clone this repository and link the startup script into your default IPython profile:
+
+```bash
+# Clone the repository
+git clone [https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git](https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git) ~/Desktop/deepanalyze
+cd ~/Desktop/deepanalyze
+
+# Create IPython startup directory if it doesn't exist
+mkdir -p ~/.ipython/profile_default/startup/
+
+# Copy the startup magic script
+cp startup/00_deepanalyze_magic.py ~/.ipython/profile_default/startup/00_deepanalyze_magic.py
+```
+
+Launch `ipython` or start a Jupyter notebook. The `%deepanalyze` magic will load automatically into your session.
 ---
 
 ## Usage Guide
@@ -196,6 +228,109 @@ Execution complete. The variable `cleaned_df` is now available.
 
 ---
 
+## Example Test Suite & Benchmarks
+
+### 1. Initialize Benchmark Data
+
+```python
+import pandas as pd
+import numpy as np
+
+# Financial ledger with dirty strings and missing values
+sales_data = pd.DataFrame({
+    'invoice_id': ['INV-1001', 'INV-1002', 'INV-1003', 'INV-1004', 'INV-1005', 'INV-1006'],
+    'customer_name': ['  Alice Corp ', 'BOB LLC', 'Charlie & Co.  ', 'David Inc', 'Eve Ltd', 'Frank Corp'],
+    'gross_revenue': ['$1,250.50', '$3,400.00', 'N/A', '$450.75', '   ', '$9,100.20'],
+    'tax_rate': ['5%', '10%', '7.5%', 'missing', '5%', '12%'],
+    'order_date': ['2026-01-15', '16/01/2026', '2026-02-01', 'invalid_date', '2026-02-20', '2026-03-05'],
+    'status': ['PAID', 'pending', 'Paid', 'REFUNDED', 'paid', 'PENDING']
+})
+
+# Hierarchical, ragged ERP export
+erp_export = pd.DataFrame({
+    'raw_line': [
+        'BRANCH: NORTH REGION - 2026',
+        'EMP-01 | John Doe | Senior Analyst | 85000',
+        'EMP-02 | Jane Smith | Lead Engineer | 110000',
+        'BRANCH: SOUTH REGION - 2026',
+        'EMP-03 | Mark Brown | Consultant | 72000',
+        'EMP-04 | Lucy Liu | Product Manager | 95000',
+        'EMP-05 | David Clark | QA Specialist | 68000'
+    ]
+})
+
+# Telemetry sensor log
+np.random.seed(42)
+telemetry_df = pd.DataFrame({
+    'device_id': np.random.choice(['DEV_A', 'DEV_B', 'DEV_C', 'DEV_D'], size=20),
+    'temperature_c': np.random.uniform(20.0, 95.0, size=20).round(2),
+    'vibration_hz': np.random.uniform(0.1, 4.5, size=20).round(3),
+    'status_code': np.random.choice([200, 200, 200, 500, 503], size=20)
+})
+```
+
+---
+
+### 2. Auto-Pilot Mode (Cell Interceptor)
+
+```python
+# Check backend server health
+%deepanalyze --status
+
+# Toggle auto-pilot interceptor on
+%deepanalyze --toggle
+
+# Execute natural language directly without %deepanalyze prefix
+Print the shape and column types of telemetry_df
+
+# Toggle auto-pilot off
+%deepanalyze --toggle
+```
+
+---
+
+### 3. Defensive Feature Engineering (`-f`, `-x`)
+
+```python
+%deepanalyze -x -f -d --target sales_data Clean gross_revenue by stripping non-numeric characters using pd.to_numeric with errors='coerce' filling NaNs with 0. Standardize status to uppercase and strip customer_name.
+```
+
+---
+
+### 4. Hierarchical ERP Unravelling (`-u`, `--ultra`, `-x`)
+
+```python
+%deepanalyze -x --ultra -u --target erp_export Parse raw_line into a structured DataFrame named erp_clean with columns: branch, emp_id, emp_name, role, and salary (as integer).
+```
+
+---
+
+### 5. Zero-Copy In-Memory DuckDB Engine (`-s`, `-x`)
+
+```python
+%deepanalyze -x -s -d --target telemetry_df Find average temperature_c and maximum vibration_hz per device_id where status_code is 200 using DuckDB.
+```
+
+---
+
+### 6. Visual Diagnostics & 300 DPI Export (`-v`, `--save`, `-x`)
+
+```python
+%deepanalyze -x -v --save --target telemetry_df Create a boxplot of temperature_c grouped by device_id and save the figure to disk.
+```
+
+---
+
+### 7. Transactional State Rollback (`--undo`)
+
+```python
+# Accidental or experimental destructive operation
+%deepanalyze -x -f --target sales_data Keep only the status column in sales_data and drop everything else in place.
+
+# Restore the target DataFrame back to its pre-execution state
+%deepanalyze --undo --target sales_data
+```
+---
 ## Attribution & Licensing
 
 * **Base Architecture & Research:** [RUC-DataLab/DeepAnalyze-8B](https://huggingface.co/RUC-DataLab/DeepAnalyze-8B)
