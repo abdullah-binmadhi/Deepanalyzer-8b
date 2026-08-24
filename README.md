@@ -113,17 +113,22 @@ df = pd.read_excel("raw_hierarchical_invoice.xlsx", header=None)
 
 ### Runtime Directives
 
-The execution engine is controlled via CLI flags passed to the magic command, allowing you to define the strictness and scope of the agent's memory access.
+The execution engine is controlled via CLI flags passed to the magic command, allowing you to define the strictness, target variable, and execution scope of the agent.
 
 | Directive | Flag | Behavior | Primary Use Case |
 | :--- | :--- | :--- | :--- |
-| **Execute** | `-x` | Bypasses the confirmation prompt, running the generated AST directly in the active session. | Continuous workflows and trusted transformations. |
-| **Unravel** | `-u` | Invokes the state-machine parsing logic. | Normalizing complex, non-rectangular ERP exports. |
-| **Feature** | `-f` | Constrains the agent to in-place column mutations and vector operations. | Feature engineering and data enrichment. |
-| **SQL** | `-s` | Forces the model to utilize DuckDB for in-memory querying instead of pandas APIs. | High-performance aggregations on massive datasets. |
-| **Visualize** | `-v` | Directs the model to synthesize Seaborn or Matplotlib rendering code. | Automated Exploratory Data Analysis (EDA). |
-| **Expanded** | `--ultra` | Expands the reasoning window allocation up to 4,096 tokens. | Handling massive traceback chains or complex logic. |
-| **Revert State**| `--undo` | Restores the in-memory dataframe to the exact snapshot captured prior to execution. | Error recovery and experiment rollback. |
+| **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
+| **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
+| **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
+| **Feature** | `-f`, `--feat` | Constrains the model to vectorized operations, safe casting, and in-place transformations. | Defensive feature engineering, missing value imputation, and schema cleaning. |
+| **SQL Engine** | `-s`, `--sql` | Routes transformations through DuckDB for zero-copy memory execution. | High-performance SQL queries and complex relational joins directly on DataFrames. |
+| **Visualize** | `-v`, `--viz` | Instructs the model to generate styled Matplotlib/Seaborn rendering scripts. | Automated exploratory data analysis (EDA) and publication-quality distributions. |
+| **Save Charts** | `--save` | Forces the visualization generator to write figures to disk (`charts/<slug>.png`) at 300 DPI. | Batch artifact export and automated reporting workflows. |
+| **Profile** | `-p`, `--profile` | Generates a strategic structural health audit alongside safe diagnostic sampling. | Schema inspection, cardinality profiling, and null distribution checks. |
+| **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable, exact syntax. | Strict ETL pipelines and reproducible transformations. |
+| **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
+| **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to `1`). | Fault-tolerant execution handling transient syntax or execution exceptions. |
+| **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
 
 ---
 
