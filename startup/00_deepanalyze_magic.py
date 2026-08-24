@@ -6,6 +6,8 @@ import os
 import re
 import sys
 import httpx
+import shlex
+import argparse
 import pandas as pd
 import numpy as np
 from IPython.core.magic import register_line_cell_magic
@@ -19,7 +21,7 @@ except ImportError:
     duckdb = None
     _DUCKDB_CON = None
 
-_DF_SNAPSHOT = None
+_DF_SNAPSHOTS = {}
 _LAST_GENERATED_CODE = ""
 _LAST_USER_PROMPT = ""
 
@@ -55,32 +57,32 @@ SKILL_RULEBOOKS = {
         "You parse messy, unstructured multi-row ERP accounting exports into clean 2D tabular DataFrames.\n"
         "Layout & Defensive Parsing Directives:\n"
         "1. Positional Access: Access raw cells with `row.iloc[col_index]`.\n"
-        "2. TYPE-SAFETY INVARIANT: Sub-header rows contain string text (e.g. \x27Quantity\x27, \x27Unit Price\x27). NEVER convert float(row.iloc[col]) at the loop header. Cast to float ONLY inside line-item conditions (`if c0.isdigit():`) using safe conversion:\n"
-        "   `qty = float(row.iloc[10]) if pd.notna(row.iloc[10]) and str(row.iloc[10]).replace(\x27.\x27, \x27\x27, 1).isdigit() else 0.0`\n"
+        "2. TYPE-SAFETY INVARIANT: Sub-header rows contain string text (e.g. 'Quantity', 'Unit Price'). NEVER convert float(row.iloc[col]) at the loop header. Cast to float ONLY inside line-item conditions (`if c0.isdigit():`) using safe conversion:\n"
+        "   `qty = float(row.iloc[10]) if pd.notna(row.iloc[10]) and str(row.iloc[10]).replace('.', '', 1).isdigit() else 0.0`\n"
         "3. Output Variable Invariant: Assign the parsed records directly to `df = pd.DataFrame(records)`. DO NOT use `df_flat` or `clean_df`.\n"
         "4. Parsing Pattern:\n"
-        "   - Identify invoice headers (e.g. `c0.startswith(\x27IV-\x27)`) and update active invoice state.\n"
-        "   - Identify detail rows (e.g. `c0.isdigit()` and `c1 != \x27\x27`) and append records.\n"
-        "   - Identify wrapped multiline text (e.g. `not c0 and c3 and last_item is not None`) and append to `last_item[\x27description\x27]`.\n"
-        "   - Stop processing when reaching summary sections (\x27grand total\x27, \x27account summary\x27, \x27item code summary\x27).\n"
+        "   - Identify invoice headers (e.g. `c0.startswith('IV-')`) and update active invoice state.\n"
+        "   - Identify detail rows (e.g. `c0.isdigit()` and `c1 != ''`) and append records.\n"
+        "   - Identify wrapped multiline text (e.g. `not c0 and c3 and last_item is not None`) and append to `last_item['description']`.\n"
+        "   - Stop processing when reaching summary sections ('grand total', 'account summary', 'item code summary').\n"
         "5. Output ONLY executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "feature": (
         "[FEATURE ENGINEERING & WRANGLING RULEBOOK]:\n"
-        "1. Transform df directly using df.loc[mask, \x27col\x27] = value.\n"
+        "1. Transform df directly using df.loc[mask, 'col'] = value.\n"
         "2. Protect against division by zero: np.where(denom == 0, np.nan, num / denom).\n"
-        "3. Assertions: assert len(df) > 0, \x27DataFrame is empty\x27\n"
+        "3. Assertions: assert len(df) > 0, 'DataFrame is empty'\n"
         "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "sql": (
         "[DUCKDB SQL ANALYTICS RULEBOOK]:\n"
         "1. Wrap table or column names in double quotes if needed: FROM \"df\".\n"
-        "2. Execute zero-copy queries: import duckdb; print(duckdb.query(\x27SELECT ... FROM df\x27).df())\n"
+        "2. Execute zero-copy queries: import duckdb; print(duckdb.query('SELECT ... FROM df').df())\n"
         "3. Output code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "viz": (
         "[SEABORN / MATPLOTLIB VISUALIZATION RULEBOOK]:\n"
-        "1. Always set fig, ax = plt.subplots(figsize=(10, 6)) and sns.set_theme(style=\x27whitegrid\x27).\n"
+        "1. Always set fig, ax = plt.subplots(figsize=(10, 6)) and sns.set_theme(style='whitegrid').\n"
         "2. Always call plt.tight_layout() before plt.show().\n"
         "3. Output code inside <Answer>```python ... ```</Answer>.\n"
     ),
@@ -93,7 +95,7 @@ SKILL_RULEBOOKS = {
     "ml": (
         "[SCIKIT-LEARN MACHINE LEARNING RULEBOOK]:\n"
         "1. Bundle preprocessing and estimators using Pipeline and ColumnTransformer.\n"
-        "2. Verify: assert not pd.isna(y_pred).any(), \x27Nulls in predictions\x27\n"
+        "2. Verify: assert not pd.isna(y_pred).any(), 'Nulls in predictions'\n"
         "3. Print: print(classification_report(y_test, y_pred, zero_division=0))\n"
         "4. Output code inside <Answer>```python ... ```</Answer>.\n"
     ),
@@ -115,15 +117,15 @@ INVARIANT_CHECKLIST = (
     "2. Enclose code strictly inside <Answer>```python ... ```</Answer>.\n"
 )
 
-def _take_snapshot(ip):
-    global _DF_SNAPSHOT
-    if ip and "df" in ip.user_ns and isinstance(ip.user_ns["df"], pd.DataFrame):
-        _DF_SNAPSHOT = ip.user_ns["df"].copy(deep=True)
+def _take_snapshot(ip, target="df"):
+    global _DF_SNAPSHOTS
+    if ip and target in ip.user_ns and isinstance(ip.user_ns[target], pd.DataFrame):
+        _DF_SNAPSHOTS[target] = ip.user_ns[target].copy(deep=True)
 
-def _restore_snapshot(ip) -> bool:
-    global _DF_SNAPSHOT
-    if _DF_SNAPSHOT is not None and ip:
-        ip.user_ns["df"] = _DF_SNAPSHOT.copy(deep=True)
+def _restore_snapshot(ip, target="df") -> bool:
+    global _DF_SNAPSHOTS
+    if ip and target in _DF_SNAPSHOTS and _DF_SNAPSHOTS[target] is not None:
+        ip.user_ns[target] = _DF_SNAPSHOTS[target].copy(deep=True)
         return True
     return False
 
@@ -137,10 +139,10 @@ def _sync_duckdb(ip):
             except Exception:
                 pass
 
-def _fuzzy_match_columns(prompt: str, ip) -> str:
-    if not ip or "df" not in ip.user_ns:
+def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
+    if not ip or target not in ip.user_ns:
         return ""
-    df = ip.user_ns["df"]
+    df = ip.user_ns[target]
     if not isinstance(df, pd.DataFrame):
         return ""
 
@@ -156,7 +158,7 @@ def _fuzzy_match_columns(prompt: str, ip) -> str:
         if close:
             orig = next(c for c in cols if c.lower() == close[0])
             if orig != t and not t.lower().startswith("new_") and not t.lower().startswith("mean_"):
-                matches.append(f"  - Typo \x27{t}\x27 -> EXACT Column: `{orig}`")
+                matches.append(f"  - Typo '{t}' -> EXACT Column: `{orig}`")
 
     if matches:
         return "\n--- PRE-FLIGHT COLUMN RESOLUTION ALIASES ---\n" + "\n".join(set(matches)) + "\n---------------------------------------------\n"
@@ -194,7 +196,7 @@ def _get_deep_workspace_context(ip) -> tuple[str, set]:
                     dtype = str(obj[col].dtype)
                     null_pct = round(obj[col].isna().mean() * 100, 1)
                     sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
-                    col_profiles.append(f"    - \x27{col_str}\x27 ({dtype}) | Nulls: {null_pct}% | Sample: {sample}")
+                    col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Sample: {sample}")
 
                 context_lines.append(
                     f"DataFrame `{name}` (Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
@@ -232,29 +234,8 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
                 defined_in_code.add(node.args.vararg.arg)
             if node.args.kwarg:
                 defined_in_code.add(node.args.kwarg.arg)
-        elif isinstance(node, ast.ClassDef):
-            defined_in_code.add(node.name)
-        elif isinstance(node, ast.Lambda):
-            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
-                defined_in_code.add(arg.arg)
-            if node.args.vararg:
-                defined_in_code.add(node.args.vararg.arg)
-            if node.args.kwarg:
-                defined_in_code.add(node.args.kwarg.arg)
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             defined_in_code.add(node.id)
-        elif isinstance(node, ast.For) and isinstance(node.target, ast.Name):
-            defined_in_code.add(node.target.id)
-        elif isinstance(node, ast.comprehension):
-            for elt in ast.walk(node.target):
-                if isinstance(elt, ast.Name):
-                    defined_in_code.add(elt.id)
-        elif isinstance(node, ast.ExceptHandler) and node.name:
-            defined_in_code.add(node.name)
-        elif isinstance(node, ast.withitem) and node.optional_vars:
-            for elt in ast.walk(node.optional_vars):
-                if isinstance(elt, ast.Name):
-                    defined_in_code.add(elt.id)
 
     undefined = set()
     for node in ast.walk(tree):
@@ -323,91 +304,80 @@ def deepanalyze(line, cell=None):
     raw_input = f"{line}\n{cell}" if cell else line
     ip = get_ipython()
 
-    words = raw_input.strip().split()
+    parser = argparse.ArgumentParser(prog="%deepanalyze", description="Agentic LLM Execution Engine", add_help=False)
+    parser.add_argument("-x", "--exec", "--execute", dest="execute_code", action="store_true")
+    parser.add_argument("-c", "--continue", dest="is_continuation", action="store_true")
+    parser.add_argument("--save", action="store_true")
+    parser.add_argument("--fast", action="store_true")
+    parser.add_argument("--deep", action="store_true")
+    parser.add_argument("--ultra", action="store_true")
+    
+    parser.add_argument("-u", "--unravel", action="store_true")
+    parser.add_argument("-p", "--profile", action="store_true")
+    parser.add_argument("-v", "--viz", action="store_true")
+    parser.add_argument("-s", "--sql", action="store_true")
+    parser.add_argument("-f", "--feat", action="store_true")
+    parser.add_argument("-t", "--stat", action="store_true")
+    parser.add_argument("-m", "--ml", action="store_true")
+    parser.add_argument("-r", "--repair", action="store_true")
+    
+    parser.add_argument("-d", "--deterministic", action="store_true")
+    parser.add_argument("--target", type=str, default="df")
+    parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--undo", action="store_true")
 
-    if "--undo" in words:
-        if _restore_snapshot(ip):
-            df_restored = ip.user_ns["df"]
-            print(f"[DeepAnalyze Undo]: Restored `df` from snapshot. Shape: {df_restored.shape[0]} rows, {df_restored.shape[1]} columns.")
-        else:
-            print("[DeepAnalyze Undo]: No previous snapshot found in memory.")
+    try:
+        parsed_args, remaining_words = parser.parse_known_args(shlex.split(raw_input))
+        prompt = " ".join(remaining_words).strip()
+    except SystemExit:
         return
 
-    auto_execute = False
-    is_continuation = False
-    save_figures = False
-    active_skills = []
-    remaining_words = []
-
-    temp, max_tokens = 0.0, 3500
-
-    if "--fast" in words:
-        temp, max_tokens = 0.0, 1000
-    elif "--deep" in words:
-        temp, max_tokens = 0.0, 3500
-    elif "--ultra" in words:
-        temp, max_tokens = 0.05, 4096
-
-    for w in words:
-        if w in ("--fast", "--deep", "--ultra"):
-            continue
-        elif w in ("-x", "--exec"):
-            auto_execute = True
-        elif w in ("-c", "--continue"):
-            is_continuation = True
-        elif w in ("--save",):
-            save_figures = True
-        elif w in ("-u", "--unravel"):
-            active_skills.append("unravel")
-        elif w in ("-p", "--profile", "--plan"):
-            active_skills.append("profile")
-        elif w in ("-v", "--viz"):
-            active_skills.append("viz")
-        elif w in ("-s", "--sql"):
-            active_skills.append("sql")
-        elif w in ("-f", "--feat"):
-            active_skills.append("feature")
-        elif w in ("-t", "--stat"):
-            active_skills.append("stat")
-        elif w in ("-m", "--ml"):
-            active_skills.append("ml")
-        elif w in ("-r", "--repair", "--fix"):
-            active_skills.append("repair")
+    if parsed_args.undo:
+        if _restore_snapshot(ip, target=parsed_args.target):
+            df_restored = ip.user_ns[parsed_args.target]
+            print(f"[DeepAnalyze Undo]: Restored `{parsed_args.target}` from snapshot. Shape: {df_restored.shape[0]} rows, {df_restored.shape[1]} columns.")
         else:
-            remaining_words.append(w)
+            print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
+        return
 
-    prompt = " ".join(remaining_words).strip()
-    primary_skill = active_skills[0] if active_skills else "general"
+    primary_skill = "general"
+    if parsed_args.unravel: primary_skill = "unravel"
+    elif parsed_args.profile: primary_skill = "profile"
+    elif parsed_args.viz: primary_skill = "viz"
+    elif parsed_args.sql: primary_skill = "sql"
+    elif parsed_args.feat: primary_skill = "feature"
+    elif parsed_args.stat: primary_skill = "stat"
+    elif parsed_args.ml: primary_skill = "ml"
+    elif parsed_args.repair: primary_skill = "repair"
 
-    if not prompt and primary_skill != "profile" and not is_continuation:
-        print("Usage: %deepanalyze [-x] [-c] [--save] [--fast|--deep|--ultra] [-u|-p|-v|-s|-f|-t|-m|-r|--undo] <task description>")
+    if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
+        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|--undo] <task description>")
         return
 
     _sync_duckdb(ip)
 
+    temp, max_tokens = (0.0, 3500) if parsed_args.deterministic else (0.7, 3500)
+    if parsed_args.fast: temp, max_tokens = 0.0, 1000
+    elif parsed_args.ultra: temp, max_tokens = 0.05, 4096
+
     env_context, available_vars = _get_deep_workspace_context(ip)
-    fuzzy_aliases = _fuzzy_match_columns(prompt, ip)
+    fuzzy_aliases = _fuzzy_match_columns(prompt, ip, target=parsed_args.target)
     rulebook = SKILL_RULEBOOKS.get(primary_skill, SKILL_RULEBOOKS["general"])
 
     save_directive = ""
-    if save_figures:
+    if parsed_args.save:
         os.makedirs("charts", exist_ok=True)
         save_directive = (
             "\n[AUTO-SAVE FIGURE DIRECTIVE]:\n"
-            "Ensure the directory \x27charts\x27 exists. "
-            "Before calling `plt.show()`, call `plt.savefig(\x27charts/<meaningful_slug>.png\x27, dpi=300, bbox_inches=\x27tight\x27)` "
+            "Ensure the directory 'charts' exists. "
+            "Before calling `plt.show()`, call `plt.savefig('charts/<meaningful_slug>.png', dpi=300, bbox_inches='tight')` "
             "and print the saved filepath.\n"
         )
 
-    system_prompt = (
-        f"{rulebook}\n"
-        f"{INVARIANT_CHECKLIST}\n"
-        f"{save_directive}\n"
-        f"{env_context}\n"
-        f"{fuzzy_aliases}"
-    )
+    system_prompt = f"{rulebook}\n{INVARIANT_CHECKLIST}\n{save_directive}\n{env_context}\n{fuzzy_aliases}"
 
-    if is_continuation and _LAST_GENERATED_CODE:
+    if parsed_args.is_continuation and _LAST_GENERATED_CODE:
         full_prompt = (
             f"PREVIOUS EXECUTED CODE:\n```python\n{_LAST_GENERATED_CODE}\n```\n\n"
             f"USER REFINEMENT REQUEST: {prompt}\n"
@@ -416,7 +386,7 @@ def deepanalyze(line, cell=None):
     else:
         full_prompt = f"User Task: {prompt}" if prompt else "Analyze active dataset schema and provide executive summary."
 
-    if primary_skill == "profile" and "--fast" not in words:
+    if primary_skill == "profile" and not parsed_args.fast and not parsed_args.deterministic:
         temp = max(temp, 0.2)
 
     try:
@@ -446,49 +416,52 @@ def deepanalyze(line, cell=None):
                 if is_valid_repair and rep_code:
                     clean_code = rep_code
                     is_valid = True
-                else:
-                    print(f"[DeepAnalyze Pre-Flight Repair Failed]: {lint_error}\nRaw Repair: {fixed_raw}")
 
             if clean_code:
                 _LAST_GENERATED_CODE = clean_code
                 _LAST_USER_PROMPT = prompt
 
-                if auto_execute and is_valid:
-                    _take_snapshot(ip)
+                if parsed_args.execute_code and is_valid:
+                    _take_snapshot(ip, target=parsed_args.target)
+                    
+                    original_row_count = ip.user_ns[parsed_args.target].shape[0] if parsed_args.target in ip.user_ns else None
+
                     print("[DeepAnalyze Executing]:\n" + clean_code + "\n" + "-" * 40)
                     result = ip.run_cell(clean_code)
 
-                    # POST-EXECUTION REBIND SAFETY:
-                    # If the model assigned to df_flat or clean_df instead of df, rebind to df
                     for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
                         if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
-                            if "df" in ip.user_ns and ip.user_ns["df"].shape[0] == 3924:
-                                ip.user_ns["df"] = ip.user_ns[alias]
-                                print(f"[DeepAnalyze Safe-Rebind]: Bound `{alias}` to `df` (Shape: {ip.user_ns['df'].shape})")
+                            if original_row_count and parsed_args.target in ip.user_ns and ip.user_ns[parsed_args.target].shape[0] == original_row_count:
+                                ip.user_ns[parsed_args.target] = ip.user_ns[alias]
                             break
 
-                    if result.error_in_exec:
+                    if result.error_in_exec and parsed_args.retries > 0:
                         err = result.error_in_exec
-                        print(f"\n[DeepAnalyze Runtime Auto-Repair]: Caught {type(err).__name__}: {err}")
-                        repair_prompt = (
-                            f"Code raised runtime error {type(err).__name__}: {err}\n"
-                            f"```python\n{clean_code}\n```\n"
-                            f"Fix the runtime error while strictly maintaining the task objective:\n{env_context}"
-                        )
-                        fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens)
-                        fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
-                        is_valid_repair, final_code, rep_err = _lint_and_format_code(fixed_code, available_vars)
-                        if is_valid_repair and final_code:
-                            _LAST_GENERATED_CODE = final_code
-                            print("[DeepAnalyze Re-Executing]:\n" + final_code + "\n" + "-" * 40)
-                            ip.run_cell(final_code)
-                            for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
-                                if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
-                                    if "df" in ip.user_ns and ip.user_ns["df"].shape[0] == 3924:
-                                        ip.user_ns["df"] = ip.user_ns[alias]
+                        for attempt in range(1, parsed_args.retries + 1):
+                            print(f"\n[DeepAnalyze Runtime Auto-Repair {attempt}/{parsed_args.retries}]: Caught {type(err).__name__}: {err}")
+                            repair_prompt = (
+                                f"Code raised runtime error {type(err).__name__}: {err}\n"
+                                f"```python\n{clean_code}\n```\n"
+                                f"Fix the runtime error while strictly maintaining the task objective:\n{env_context}"
+                            )
+                            fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens)
+                            fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
+                            is_valid_repair, final_code, rep_err = _lint_and_format_code(fixed_code, available_vars)
+                            
+                            if is_valid_repair and final_code:
+                                _LAST_GENERATED_CODE = final_code
+                                print("[DeepAnalyze Re-Executing]:\n" + final_code + "\n" + "-" * 40)
+                                result = ip.run_cell(final_code)
+                                
+                                if not result.error_in_exec:
+                                    for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
+                                        if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
+                                            ip.user_ns[parsed_args.target] = ip.user_ns[alias]
+                                            break
                                     break
-                        else:
-                            print(f"[DeepAnalyze Runtime Repair Unsuccessful]: {rep_err}\n{fixed_raw}")
+                                err = result.error_in_exec
+                            else:
+                                break
                 else:
                     ip.set_next_input(clean_code)
                     if not is_valid:
