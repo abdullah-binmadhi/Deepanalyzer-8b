@@ -74,16 +74,18 @@ SKILL_RULEBOOKS = {
     ),
     "feature": (
         "[FEATURE ENGINEERING & WRANGLING RULEBOOK]:\n"
-        "1. Transform df directly using df.loc[mask, 'col'] = value.\n"
-        "2. Protect against division by zero: np.where(denom == 0, np.nan, num / denom).\n"
-        "3. Assertions: assert len(df) > 0, 'DataFrame is empty'\n"
-        "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
+        "1. Transform target DataFrame directly (e.g. `sales_data['col'] = ...`). DO NOT create `df_clean` or copy variables unless requested.\n"
+        "2. SAFE NUMERIC CASTING: ALWAYS use `pd.to_numeric(df['col'].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0)` instead of `.astype(float)`.\n"
+        "3. Protect against division by zero: `np.where(denom == 0, np.nan, num / denom)`.\n"
+        "4. Assertions: assert len(df) > 0, 'DataFrame is empty'\n"
+        "5. Output executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "sql": (
-        "[DUCKDB SQL ANALYTICS RULEBOOK]:\n"
-        "1. Wrap table or column names in double quotes if needed: FROM \"df\".\n"
-        "2. Execute zero-copy queries: import duckdb; print(duckdb.query('SELECT ... FROM df').df())\n"
-        "3. Output code inside <Answer>```python ... ```</Answer>.\n"
+        "[DUCKDB SQL RULEBOOK]:\n"
+        "1. Query the target DataFrame directly using DuckDB in-memory session (e.g. `duckdb.query('SELECT ... FROM df').df()`).\n"
+        "2. Keep SQL clean and standard. Reference columns directly without quotes or string slicing (e.g. `AVG(temperature_c)`).\n"
+        "3. Column names must NEVER be enclosed in single quotes (single quotes are string literals in SQL).\n"
+        "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "viz": (
         "[SEABORN / MATPLOTLIB VISUALIZATION RULEBOOK]:\n"
