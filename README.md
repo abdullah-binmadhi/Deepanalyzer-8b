@@ -76,7 +76,27 @@ llama-server \
   -c 8192 \
   -ngl 99
 ```
+### Context Window & Memory Profiles (16GB Unified Memory)
 
+The native pre-trained context window for DeepAnalyze-8B is **8,192 tokens**. However, `llama-server` supports dynamic context expansion via the `-c` flag. 
+
+When running locally on Apple Silicon (e.g., M2 16GB), allocate context according to your workspace workload:
+
+| Context Length (`-c`) | Total RAM Footprint | Feasibility & Speed (16 GB Unified Memory) | Recommended Workload |
+| :--- | :--- | :--- | :--- |
+| **8,192 (Stock Default)** | ~6.0 GB total | **Optimal** (Fast Metal execution, 0% SSD swap) | Standard DataFrames, routine feature engineering, SQL tasks. |
+| **16,384 (16K)** | ~7.2 GB total | **Very Fast & Safe** (Leaves ~8 GB for OS & Jupyter) | Multi-table joins, detailed correlation matrices, Seaborn plotting. |
+| **32,768 (32K)** | ~9.2 GB total | **Recommended Sweet Spot** for deep data analytics | Hierarchical ERP log parsing, multi-step ML pipelines, large raw matrix dumps. |
+| **65,536 (64K)** | ~13.0 GB total | **Upper Limit** (High memory pressure; slight swap risk) | Massive multi-page accounting text files and extensive tracebacks. |
+| **128K+** | >18.0 GB total | **Not Recommended** (Forces heavy SSD swap; <1 tok/sec) | Exceeds physical 16GB RAM budget. |
+
+#### Launching with Custom Context
+
+To scale up to 32K context for deep unravelling and traceback analysis, run:
+
+```bash
+llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
+```
 ---
 
 ## Installation
