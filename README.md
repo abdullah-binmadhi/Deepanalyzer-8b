@@ -162,7 +162,7 @@ llama-server \
   -m models/deepanalyze-8b-q4_k_m.gguf \
   --port 8080 \
   -c 16384 \
-  -fa \
+  -fa on \
   --cache-type-k q8_0 \
   --cache-type-v q8_0 \
   --grammar-file grammars/deepanalyze.gbnf
@@ -179,7 +179,7 @@ llama-server \
 | `-ngl`, `--n-gpu-layers` | `99` | Offloads all transformer layers to GPU/Metal unified memory for hardware acceleration. |
 | `--cache-type-k` | `q8_0` | Quantizes Key-cache to 8-bit precision, cutting context memory usage in half with no degradation. |
 | `--cache-type-v` | `q8_0` | Quantizes Value-cache to 8-bit precision to maintain low RAM overhead during multi-step runs. |
-| `-fa ` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
+| `-fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
 | `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
 
 ### Quick-Launch Shell Configuration (`start-deepanalyze`)
@@ -193,7 +193,7 @@ start-deepanalyze() {
     -m ~/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf \
     --port 8080 \
     -c 16384 \
-    -fa \
+    -fa on \
     --cache-type-k q8_0 \
     --cache-type-v q8_0 \
     --grammar-file ~/Desktop/deepanalyze/grammars/deepanalyze.gbnf \
