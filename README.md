@@ -182,6 +182,52 @@ llama-server \
 | `--fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
 | `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
 
+### Quick-Launch Shell Configuration (`start-deepanalyze`)
+
+To avoid manually typing long startup commands while maintaining the ability to override flags on the fly, add a dedicated launcher function to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+# Add to ~/.zshrc
+start-deepanalyze() {
+  llama-server \
+    -m ~/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf \
+    --port 8080 \
+    -c 16384 \
+    --fa on \
+    --cache-type-k q8_0 \
+    --cache-type-v q8_0 \
+    --grammar-file ~/Desktop/deepanalyze/grammars/deepanalyze.gbnf \
+    "$@"
+}
+```
+Apply the updated configuration:
+```
+source ~/.zshrc
+```
+
+Default Launch (16K Context + 8-bit KV Quantization + GBNF):
+```
+start-deepanalyze
+```
+
+Dynamic Context Expansion (e.g., Scaling to 32K Context):
+
+```
+start-deepanalyze -c 32768
+```
+
+Port Reassignment:
+
+```
+start-deepanalyze --port 8000
+```
+
+Custom Model Path Override:
+
+```
+start-deepanalyze -m /path/to/another-model.gguf
+```
+
 ### 2. Python Dependencies
 
 Install the scientific computing stack:
