@@ -31,6 +31,24 @@ _LAST_GENERATED_CODE = ""
 _LAST_USER_PROMPT = ""
 DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
 
+# --- DEEPSEEK CLOUD CONFIGURATION ---
+# Set your API key here or export it in your terminal via: export DEEPSEEK_API_KEY="sk-"
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+
+def _get_client(is_deepseek=False):
+    """Dynamic Client Router: Local Server vs DeepSeek Cloud"""
+    if is_deepseek:
+        return OpenAI(
+            base_url="https://api.deepseek.com/v1",
+            api_key=DEEPSEEK_API_KEY,
+            http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
+        )
+    return OpenAI(
+        base_url="http://127.0.0.1:8080/v1",
+        api_key="none",
+        http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
+    )
+
 KNOWN_GLOBAL_SYMBOLS = {
     "pd", "np", "plt", "sns", "duckdb", "scipy", "stats", "sklearn",
     "math", "os", "sys", "re", "json", "datetime", "warnings", "difflib",
@@ -43,13 +61,6 @@ TRANSIENT_VARS = {
     "column_summary", "null_percentage", "executive_summary", "data_health_audit", "strategic_roadmap",
     "records", "item", "last_item", "df_flat", "clean_df"
 }
-
-def _get_client():
-    return OpenAI(
-        base_url="http://127.0.0.1:8080/v1",
-        api_key="none",
-        http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
-    )
 
 SKILL_RULEBOOKS = {
     "general": (
@@ -128,13 +139,11 @@ INVARIANT_CHECKLIST = (
 def check_engine_status(server_url=DEFAULT_SERVER_URL):
     """Probes the llama-server health/props endpoints and kernel interceptor state."""
     print("=" * 60)
-    print("🔍 DeepAnalyze-8B System & Engine Status")
+    print("🔍 DeepAnalyze System & Engine Status")
     print("=" * 60)
 
     health_url = f"{server_url}/health"
-    props_url = f"{server_url}/props"
     server_online = False
-    server_props = {}
 
     try:
         req = urllib.request.Request(health_url, headers={"User-Agent": "DeepAnalyze-Client"})
@@ -142,43 +151,23 @@ def check_engine_status(server_url=DEFAULT_SERVER_URL):
             if response.status == 200:
                 server_online = True
     except Exception:
-        server_online = False
+        pass
 
-    if not server_online:
-        print("❌ Server Status     : Offline / Unreachable")
-        print(f"   Endpoint          : {server_url}")
-        print("   Troubleshoot      : Ensure `llama-server` is running on port 8080.")
-    else:
-        print("✅ Server Status     : Online & Healthy")
-        print(f"   Endpoint          : {server_url}")
-        try:
-            req_props = urllib.request.Request(props_url, headers={"User-Agent": "DeepAnalyze-Client"})
-            with urllib.request.urlopen(req_props, timeout=2) as resp:
-                server_props = json.loads(resp.read().decode("utf-8"))
-        except Exception:
-            server_props = {}
-
-        if server_props:
-            default_gen = server_props.get("default_generation_settings", {})
-            n_ctx = default_gen.get("n_ctx", "Unknown")
-            model_path = server_props.get("model_path", "Loaded GGUF")
-            print(f"   Active Model      : {model_path.split('/')[-1]}")
-            print(f"   Context Allocation: {n_ctx} tokens")
-        else:
-            print("   Context Allocation: Active (16K configured)")
-
+    print(f"{'✅' if server_online else '❌'} Local Server Status : {'Online & Healthy' if server_online else 'Offline / Unreachable'}")
+    print(f"☁️ DeepSeek API Auth  : {'Configured' if DEEPSEEK_API_KEY.startswith('sk-') else 'Missing API Key'}")
+    
     interceptor_status = "🟢 Enabled (Auto-pilot on plain English cells)" if _INTERCEPTOR_ACTIVE else "⚪ Disabled (Explicit %deepanalyze calls only)"
-    print(f"\n📡 Cell Interceptor  : {interceptor_status}")
+    print(f"📡 Cell Interceptor   : {interceptor_status}")
 
     ip = get_ipython()
     tracked_dfs = list(_DF_SNAPSHOTS.keys())
     if tracked_dfs:
-        print(f"\n💾 State Snapshots   : {len(tracked_dfs)} active DataFrame rollback points")
+        print(f"\n💾 State Snapshots    : {len(tracked_dfs)} active DataFrame rollback points")
         for var_name in tracked_dfs:
             shape = getattr(ip.user_ns.get(var_name), "shape", "Unknown shape")
             print(f"   • {var_name} -> {shape}")
     else:
-        print("\n💾 State Snapshots   : No active snapshots (clean state)")
+        print("\n💾 State Snapshots    : No active snapshots (clean state)")
 
     print("=" * 60)
 
@@ -260,7 +249,6 @@ def _get_deep_workspace_context(ip) -> tuple[str, set]:
                     col_str = str(col)
                     dtype = str(obj[col].dtype)
                     null_pct = round(obj[col].isna().mean() * 100, 1)
-                    # RICH DATA PROFILING: Added unique cardinality count to prevent coercion errors
                     unique_count = obj[col].nunique()
                     sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
                     col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
@@ -333,35 +321,37 @@ def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
 
     return code, narrative
 
-def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500) -> str:
-    sys.stdout.write("[DeepAnalyze]: Analyzing report topology & invariants...")
+def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500, target_model: str = "deepanalyze-8b") -> str:
+    is_ds = target_model.startswith("deepseek")
+    engine_name = "☁️ DeepSeek Cloud" if is_ds else "💻 Local Engine"
+    
+    sys.stdout.write(f"\r[{engine_name} ({target_model})]: Analyzing request invariants...")
     sys.stdout.flush()
 
-    client = _get_client()
+    client = _get_client(is_deepseek=is_ds)
     response = client.chat.completions.create(
-        model="deepanalyze-8b",
+        model=target_model,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         temperature=temp,
         max_tokens=max_tokens,
-        stop=["</Answer>", "<|im_end|>", "<|endoftext|>", "<|eot_id|>"],
         stream=True,
     )
 
     full_text = []
     token_count = 0
     for chunk in response:
-        delta = chunk.choices[0].delta.content
+        delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
         if delta:
             full_text.append(delta)
             token_count += 1
             if token_count % 20 == 0:
-                sys.stdout.write(f"\r[DeepAnalyze]: Generating text... ({token_count} tokens)")
+                sys.stdout.write(f"\r[{engine_name}]: Generating... ({token_count} tokens)")
                 sys.stdout.flush()
 
-    sys.stdout.write("\r" + " " * 55 + "\r")
+    sys.stdout.write("\r" + " " * 75 + "\r")
     sys.stdout.flush()
     return "".join(full_text)
 
@@ -381,9 +371,12 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--deep", action="store_true")
     parser.add_argument("--ultra", action="store_true")
     
-    # NEW INSIGHT FLAG
-    parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from execution output")
+    # NEW ON-DEMAND CLOUD FLAGS
+    parser.add_argument("--pro", action="store_true", help="Route prompt to DeepSeek-V4-Pro (deepseek-chat)")
+    parser.add_argument("--flash", action="store_true", help="Route prompt to DeepSeek-V4-Flash (deepseek-chat)")
+    parser.add_argument("--think", action="store_true", help="Route prompt to DeepSeek-Reasoner (deepseek-reasoner)")
     
+    parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from execution output")
     parser.add_argument("-u", "--unravel", action="store_true")
     parser.add_argument("-p", "--profile", action="store_true")
     parser.add_argument("-v", "--viz", action="store_true")
@@ -425,6 +418,13 @@ def deepanalyze(line, cell=None):
             print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
         return
 
+    # ON-DEMAND MODEL ROUTING
+    active_model = "deepanalyze-8b"
+    if parsed_args.pro or parsed_args.flash:
+        active_model = "deepseek-chat"
+    elif parsed_args.think:
+        active_model = "deepseek-reasoner"
+
     primary_skill = "general"
     if parsed_args.unravel: primary_skill = "unravel"
     elif parsed_args.profile: primary_skill = "profile"
@@ -436,7 +436,7 @@ def deepanalyze(line, cell=None):
     elif parsed_args.repair: primary_skill = "repair"
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
-        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|-i|--undo|--toggle|--status] <task description>")
+        print("Usage: %deepanalyze [-x] [--target df] [--think|--pro] [-u|-p|-v|-s|-f|-i] <task description>")
         return
 
     _sync_duckdb(ip)
@@ -474,7 +474,7 @@ def deepanalyze(line, cell=None):
         temp = max(temp, 0.2)
 
     try:
-        raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens)
+        raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens, target_model=active_model)
         code, narrative = _extract_deepanalyze_content(raw_output)
 
         if narrative and primary_skill == "profile":
@@ -487,6 +487,7 @@ def deepanalyze(line, cell=None):
         if code:
             is_valid, clean_code, lint_error = _lint_and_format_code(code, available_vars)
 
+            # Pre-flight Auto Repair
             if not is_valid and clean_code:
                 print(f"[DeepAnalyze Pre-Flight Catch]: {lint_error}. Auto-repairing...")
                 repair_prompt = (
@@ -494,7 +495,7 @@ def deepanalyze(line, cell=None):
                     f"```python\n{code}\n```\n"
                     f"Fix this code to strictly match available variables and exact column casings:\n{env_context}"
                 )
-                fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens)
+                fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens, target_model=active_model)
                 fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
                 is_valid_repair, rep_code, _ = _lint_and_format_code(fixed_code, available_vars)
                 if is_valid_repair and rep_code:
@@ -510,15 +511,13 @@ def deepanalyze(line, cell=None):
                     
                     original_row_count = ip.user_ns[parsed_args.target].shape[0] if parsed_args.target in ip.user_ns else None
 
-                    print("[DeepAnalyze Executing]:\n" + clean_code + "\n" + "-" * 40)
+                    print(f"[{active_model} Executing]:\n" + clean_code + "\n" + "-" * 40)
                     
-                    # Execution Block with optional Insight Capture
                     captured_output = None
                     if parsed_args.insight:
                         with ipy_io.capture_output() as captured:
                             result = ip.run_cell(clean_code)
                         captured_output = captured
-                        # Print captured stdout/stderr so the user still sees the output
                         if captured.stdout: sys.stdout.write(captured.stdout)
                         if captured.stderr: sys.stderr.write(captured.stderr)
                     else:
@@ -530,12 +529,33 @@ def deepanalyze(line, cell=None):
                                 ip.user_ns[parsed_args.target] = ip.user_ns[alias]
                             break
 
+                    # --- 3. INTERACTIVE AUTO-REPAIR & ESCALATOR ROUTER ---
                     if result.error_in_exec and parsed_args.retries > 0:
                         err = result.error_in_exec
                         for attempt in range(1, parsed_args.retries + 1):
-                            print(f"\n[DeepAnalyze Runtime Auto-Repair {attempt}/{parsed_args.retries}]: Caught {type(err).__name__}: {err}")
+                            print(f"\n⚠️ [Runtime Crash]: Caught {type(err).__name__}: {err}")
                             
-                            # STRUCTURED ERROR REFLECTION: Forces Root Cause Analysis
+                            # Interactive User Prompt inside Notebook / Terminal
+                            try:
+                                user_choice = input("How would you like to resolve this error?\n"
+                                                    "  [1] Retry locally with DeepAnalyze-8B (Free / Local)\n"
+                                                    "  [2] Escalate to DeepSeek Cloud (High-Reasoning Fix)\n"
+                                                    "  [3] Abort & Cancel Repair\n"
+                                                    "Select [1/2/3] (default: 1): ").strip()
+                            except (KeyboardInterrupt, EOFError):
+                                user_choice = "3"
+
+                            if user_choice == "2":
+                                repair_model = "deepseek-reasoner"
+                                print(f"\n🚀 Escalating repair traceback to Cloud [{repair_model}]...")
+                            elif user_choice == "3":
+                                print("\n🛑 Auto-repair aborted by user. Restore previous state with `%deepanalyze --undo` if needed.")
+                                break
+                            else:
+                                repair_model = "deepanalyze-8b"
+                                print(f"\n🔄 Retrying repair locally with [{repair_model}]...")
+
+                            # Structured Root-Cause Reflection Prompt
                             repair_prompt = (
                                 f"[EXECUTION FAILURE REFLECTION]\n"
                                 f"The code you generated failed with the following traceback:\n"
@@ -547,13 +567,13 @@ def deepanalyze(line, cell=None):
                                 f"Context:\n{env_context}"
                             )
                             
-                            fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens)
+                            fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens, target_model=repair_model)
                             fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
                             is_valid_repair, final_code, rep_err = _lint_and_format_code(fixed_code, available_vars)
                             
                             if is_valid_repair and final_code:
                                 _LAST_GENERATED_CODE = final_code
-                                print("[DeepAnalyze Re-Executing]:\n" + final_code + "\n" + "-" * 40)
+                                print(f"\n[{repair_model} Re-Executing]:\n" + final_code + "\n" + "-" * 40)
                                 
                                 if parsed_args.insight:
                                     with ipy_io.capture_output() as captured:
@@ -569,18 +589,20 @@ def deepanalyze(line, cell=None):
                                         if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
                                             ip.user_ns[parsed_args.target] = ip.user_ns[alias]
                                             break
+                                    print("✅ Auto-repair succeeded!")
                                     break
                                 err = result.error_in_exec
                             else:
+                                print(f"❌ Failed to parse valid python code during repair.")
                                 break
 
                     # INSIGHT SYNTHESIS POST-EXECUTION
                     if parsed_args.insight and not result.error_in_exec:
                         out_str = captured_output.stdout.strip() if (captured_output and captured_output.stdout) else "Execution succeeded but produced no console output."
-                        print("\n🔍 [DeepAnalyze Insights Synthesis]:")
+                        print(f"\n🔍 [{active_model} Insights Synthesis]:")
                         insight_sys = "You are a senior data analyst. Provide 2-3 concise, actionable business bullet points based on this data output."
                         insight_prompt = f"User Request: {prompt}\n\nExecution Output:\n{out_str}\n\nProvide the insights."
-                        _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000)
+                        _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000, target_model=active_model)
                         print("\n" + "-" * 40)
 
                 else:
