@@ -8,13 +8,14 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ## Key Capabilities
 
-* **Zero-Friction In-Memory Analytics:** Directly inspects variable schemas and DataFrame dtypes from active kernel memory.
-* **Auto-Pilot Interceptor:** Intercepts plain English instructions in standard code cells without requiring explicit magic prefixes.
-* **DuckDB SQL Engine:** Zero-copy querying over in-memory pandas DataFrames using standard SQL dialect.
-* **Hierarchical Unravelling:** Deterministic state machines that parse and forward-fill ragged, non-rectangular tabular text reports.
-* **State Snapshot & Rollback:** Automated deepcopy snapshotting before execution, allowing instant state rollbacks via `--undo`.
-* **Runtime Auto-Repair Loop:** Traps syntax errors and runtime exceptions, feeds AST tracebacks back into the model, and retries execution autonomously.
-
+* **Zero-Friction In-Memory Analytics:** Directly inspects variable schemas, dtypes, and unique cardinality counts from active kernel memory to eliminate hallucinated column names and type coercion errors.
+* **Auto-Pilot Interceptor:** Intercepts plain-English instructions in standard notebook cells without requiring explicit `%deepanalyze` magic prefixes.
+* **DuckDB SQL Engine:** Zero-copy querying over in-memory pandas DataFrames. Automatically registers all active session DataFrames for seamless cross-table joins.
+* **Insight Synthesis (`-i`, `--insight`):** Captures execution stdout/metrics and triggers a secondary reasoning pass to translate raw numbers into concise, actionable business takeaways.
+* **Structured Error Reflection:** Traps syntax errors and runtime exceptions, forcing the model to perform a root cause analysis and identify defensive strategies before generating patched code.
+* **Hierarchical Unravelling (`-u`, `--unravel`):** Deterministic state machines and regex heuristics that parse and forward-fill ragged, non-rectangular tabular text reports into clean 2D tables.
+* **State Snapshot & Rollback (`--undo`):** Automated deepcopy snapshotting prior to execution, enabling instant state rollback and safe experimentation.
+* **Defensive Feature Engineering (`-f`, `--feat`):** Enforces safe numeric coercion, zero-division guards, and in-place vectorization invariants.
 ---
 ## System Architecture
 
@@ -173,17 +174,19 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Auto-Pilot Toggle** | `--toggle` | Dynamically flips the global cell interceptor on or off for plain-English auto-pilot execution. | Toggling between explicit magic calls and natural language auto-interception without restarting Jupyter. |
 | **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
 | **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
+| **Insight Synthesis** | `-i`, `--insight` | Captures execution stdout and triggers a secondary LLM pass to explain the metrics. | Translating raw numbers into actionable business insights. |
 | **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
 | **Feature** | `-f`, `--feat` | Constrains the model to vectorized operations, safe casting, and in-place transformations. | Defensive feature engineering, missing value imputation, and schema cleaning. |
 | **SQL Engine** | `-s`, `--sql` | Routes transformations through DuckDB for zero-copy memory execution. | High-performance SQL queries and complex relational joins directly on DataFrames. |
 | **Visualize** | `-v`, `--viz` | Instructs the model to generate styled Matplotlib/Seaborn rendering scripts. | Automated exploratory data analysis (EDA) and publication-quality distributions. |
+| **Statistical Test** | `-t`, `--stat` | Automatically selects and runs parametric/non-parametric tests. | Hypothesis testing (ANOVA, t-test, Chi-square). |
+| **Machine Learning** | `-m`, `--ml` | Bundles scikit-learn preprocessing and estimators via Pipeline. | Rapid baseline model training and classification reports. |
 | **Save Charts** | `--save` | Forces the visualization generator to write figures to disk (`charts/<slug>.png`) at 300 DPI. | Batch artifact export and automated reporting workflows. |
 | **Profile** | `-p`, `--profile` | Generates a strategic structural health audit alongside safe diagnostic sampling. | Schema inspection, cardinality profiling, and null distribution checks. |
 | **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable, exact syntax. | Strict ETL pipelines and reproducible transformations. |
 | **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
 | **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to 1). | Fault-tolerant execution handling transient syntax or execution exceptions. |
 | **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
-
 ---
 
 ## Protocol & Prompt Architecture
