@@ -8,6 +8,9 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ## Key Capabilities
 
+* **Dual-Brain Cloud Routing:** Runs entirely locally via `llama-server` by default, but allows on-demand routing to DeepSeek-V3/R1 cloud models (`--pro`, `--think`) to handle complex, high-reasoning workloads seamlessly.
+* **Interactive Auto-Escalator:** When generated code throws a runtime error, the engine pauses and provides a human-in-the-loop CLI interface. You can manually choose to retry the repair locally, abort the operation, or escalate the traceback to a cloud reasoning model for an advanced root-cause fix.
+* **BYOK (Bring Your Own Key) Security:** Eliminates hardcoded secrets by pulling API credentials dynamically from OS-level environment variables (e.g., `DEEPSEEK_API_KEY`). This ensures zero security liability and keeps the codebase 100% safe for public version control.
 * **Zero-Friction In-Memory Analytics:** Directly inspects variable schemas, dtypes, and unique cardinality counts from active kernel memory to eliminate hallucinated column names and type coercion errors.
 * **Auto-Pilot Interceptor:** Intercepts plain-English instructions in standard notebook cells without requiring explicit `%deepanalyze` magic prefixes.
 * **DuckDB SQL Engine:** Zero-copy querying over in-memory pandas DataFrames. Automatically registers all active session DataFrames for seamless cross-table joins.
@@ -23,58 +26,69 @@ The core of DeepAnalyze is its ability to extract context directly from the host
 
 text
 ```
- ┌──────────────────────────────────────────────────────────┐
- │               IPython / Jupyter Kernel                   │
- │                                                          │
- │   Plain English Prompt / %deepanalyze Directive          │
- │                            │                             │
- │                            ▼                             │
- │         Input Interceptor / Magic Flag Parser            │
- │                            │                             │
- │                            ▼                             │
- │          Runtime Schema & Dtype Inspection               │
- │                            │                             │
- └────────────────────────────┼─────────────────────────────┘
-                              ▼
- ┌──────────────────────────────────────────────────────────┐
- │          Local Inference Server (llama-server)           │
- │                                                          │
- │     Prompt + Skill Rulebooks (SQL / Viz / Wrangling)     │
- │                            │                             │
- │                            ▼                             │
- │             DeepAnalyze-8B Reasoning Core                │
- └────────────────────────────┼─────────────────────────────┘
-                              ▼
- ┌──────────────────────────────────────────────────────────┐
- │                  Execution Engine                        │
- │                                                          │
- │   AST Validation ──► [Auto-Repair on Error (1-3x)]       │
- │   DuckDB Engine  ──► Zero-Copy In-Memory SQL Execution   │
- │   State Manager  ──► Deepcopy Snapshots & `--undo`       │
- └──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                 IPython / Jupyter Kernel                 │
+│                                                          │
+│    Plain English Prompt / %deepanalyze Directive         │
+│                           │                              │
+│                           ▼                              │
+│        Input Interceptor / Magic Flag Parser             │
+│                           │                              │
+│                           ▼                              │
+│         Runtime Schema & Dtype Inspection                │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│                 Dual-Brain Model Router                  │
+│          (--pro / --flash / --think / Local)             │
+└─────────────┬──────────────────────────────┬─────────────┘
+              │ (Local Default)              │ (Cloud Flags)
+              ▼                              ▼
+┌───────────────────────────┐  ┌───────────────────────────┐
+│ Local Inference Server    │  │ DeepSeek Cloud API        │
+│ (llama-server / 8B Core)  │  │ (Pro / Flash / Reasoner)  │
+└─────────────┬─────────────┘  └─────────────┬─────────────┘
+              │                              │
+              └──────────────┬───────────────┘
+                             ▼
+┌──────────────────────────────────────────────────────────┐
+│                     Execution Engine                     │
+│                                                          │
+│ AST Validation ──► [Interactive Auto-Escalator (1-3x)]   │
+│ DuckDB Engine  ──► Zero-Copy In-Memory SQL Execution     │
+│ State Manager  ──► Deepcopy Snapshots & `--undo`         │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### The Autonomous Self-Repair Cycle
+### The Interactive Auto-Escalator & Self-Repair Cycle
 
-When the model generates a block of code, it does not immediately overwrite user variables. Instead, it enters a sandbox verification loop. If the generated logic fails on edge cases (e.g., hidden NaN values, index mismatches), the engine captures the Python traceback and feeds it back to the LLM for autonomous patching.
+When the model generates a block of code, it does not immediately overwrite user variables. Instead, it enters a sandbox verification loop. If the generated logic throws a runtime exception, the engine pauses execution and opens an interactive human-in-the-loop prompt in your notebook:
+
+[Runtime Crash]: Caught KeyError: 'gross_revenue'
+How would you like to resolve this error?
+  [1] Retry locally with DeepAnalyze-8B (Free / Local)
+  [2] Escalate to DeepSeek Cloud (High-Reasoning Fix)
+  [3] Abort & Cancel Repair
+Select [1/2/3] (default: 1):
 
 ```text
 ┌────────────────────────┐      ┌────────────────────────┐
 │     Code Generation    │─────▶│   AST Linting Engine   │
-│  (Extracts <Execute>)  │      │  (Validates structure) │
+│  (Extracts <Answer>)   │      │ (Validates structure)  │
 └────────────────────────┘      └──────────┬─────────────┘
-            ▲                              │ (Syntax Safe)
-(Traceback) │                              ▼ 
+                    ▲                              │ (Syntax Safe)
+        (User Selection)                           ▼ 
 ┌────────────────────────┐      ┌────────────────────────┐
-│ LLM Context Injection  │◀─────│  Sandbox Test Runtime  │ (Runtime Exception)
-│ (Appends Error Data)   │      │  (Executes in-memory)  │
+│  Interactive Escalator │◀─────│  Sandbox Test Runtime  │ (Runtime Exception)
+│  [1] Local [2] Cloud   │      │  (Executes in-memory)  │
 └────────────────────────┘      └──────────┬─────────────┘
-                                           │
-                                           ▼ (Success)
-                                ┌────────────────────────┐
-                                │  Environment Mutation  │
-                                │  (Updates live data)   │
-                                └────────────────────────┘
+                    ▲                              │
+                    │                              ▼ (Success)
+                    │                   ┌────────────────────────┐
+                    └───────────────────│  Environment Mutation  │
+                                        │  (Updates live data)   │
+                                        └────────────────────────┘
 ```
 
 ---
@@ -174,6 +188,9 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Auto-Pilot Toggle** | `--toggle` | Dynamically flips the global cell interceptor on or off for plain-English auto-pilot execution. | Toggling between explicit magic calls and natural language auto-interception without restarting Jupyter. |
 | **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
 | **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
+| **Cloud Pro** | `--pro` | Bypasses the local engine and routes the prompt to `deepseek-chat` (DeepSeek-V4-Pro). | Fast, highly accurate cloud processing for standard heavy analytics. |
+| **Cloud Flash** | `--flash` | Routes the prompt to the lighter, high-speed `deepseek-chat` variant. | Rapid cloud execution for simple parsing or lighter workloads. |
+| **Deep Reasoner** | `--think` | Routes the prompt to `deepseek-reasoner` (R1) for deep Chain-of-Thought processing. | Highly complex transformations, dense mathematical modeling, or debugging tricky tracebacks. |
 | **Insight Synthesis** | `-i`, `--insight` | Captures execution stdout and triggers a secondary LLM pass to explain the metrics. | Translating raw numbers into actionable business insights. |
 | **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
 | **Feature** | `-f`, `--feat` | Constrains the model to vectorized operations, safe casting, and in-place transformations. | Defensive feature engineering, missing value imputation, and schema cleaning. |
