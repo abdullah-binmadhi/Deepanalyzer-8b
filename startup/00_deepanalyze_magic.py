@@ -13,6 +13,7 @@ import urllib.request
 import urllib.error
 import pandas as pd
 import numpy as np
+import traceback
 from IPython.core.magic import register_line_cell_magic
 from IPython import get_ipython
 from IPython.utils import io as ipy_io
@@ -32,15 +33,19 @@ _LAST_USER_PROMPT = ""
 DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
 
 # --- DEEPSEEK CLOUD CONFIGURATION ---
-# Set your API key here or export it in your terminal via: export DEEPSEEK_API_KEY="sk-"
+# Set your API key here or export it in your terminal via: export DEEPSEEK_API_KEY="sk.."
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 def _get_client(is_deepseek=False):
     """Dynamic Client Router: Local Server vs DeepSeek Cloud"""
     if is_deepseek:
+        # Pulls live from Python's environment dictionary every time
+        api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("Missing DEEPSEEK_API_KEY! Run `import os; os.environ['DEEPSEEK_API_KEY'] = 'sk-...'` in your session.")
         return OpenAI(
             base_url="https://api.deepseek.com/v1",
-            api_key=DEEPSEEK_API_KEY,
+            api_key=api_key,
             http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
         )
     return OpenAI(
@@ -74,7 +79,7 @@ SKILL_RULEBOOKS = {
         "You parse messy, unstructured multi-row ERP accounting exports into clean 2D tabular DataFrames.\n"
         "Layout & Defensive Parsing Directives:\n"
         "1. Positional Access: Access raw cells with `row.iloc[col_index]`.\n"
-        "2. TYPE-SAFETY INVARIANT: Sub-header rows contain string text (e.g. 'Quantity', 'Unit Price'). NEVER convert float(row.iloc[col]) at the loop header. Cast to float ONLY inside line-item conditions (`if c0.isdigit():`) using safe conversion:\n"
+        "2. TYPE-SAFETY INVARIANT: Sub-header rows contain string text (e.g. 'Quantity', 'Unit Price'). NEVER convert float(row.iloc[col]) at the loop header. Cast to float ONLY inside line-item conditions (`if    c0.isdigit():`) using safe conversion:\n"
         "   `qty = float(row.iloc[10]) if pd.notna(row.iloc[10]) and str(row.iloc[10]).replace('.', '', 1).isdigit() else 0.0`\n"
         "3. Output Variable Invariant: Assign the parsed records directly to `df = pd.DataFrame(records)`. DO NOT use `df_flat` or `clean_df`.\n"
         "4. Parsing Pattern:\n"
@@ -127,7 +132,28 @@ SKILL_RULEBOOKS = {
     "repair": (
         "[AUTONOMOUS STATIC & RUNTIME REPAIR RULEBOOK]:\n"
         "1. Fix the error/traceback and output ONLY pure, runnable Python code in <Answer>```python ... ```</Answer>.\n"
-    )
+    ),
+    "validate": (
+        "[RIGOROUS STATISTICAL & ML VALIDATION RULEBOOK]:\n"
+        "1. For ML tasks, always implement cross-validation or stratified holdout splits.\n"
+        "2. Print comprehensive evaluation metrics (Confusion Matrix, Classification Report, RMSE, or R2 depending on task).\n"
+        "3. Include structural assertions (e.g., shape matching, target bounds, no NaN in predictions). DO NOT assert arbitrary metric threshold minimums unless explicitly requested.\n"
+        "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
+    ),
+    "tune": (
+        "[LEAK-FREE HYPERPARAMETER TUNING & PIPELINE RULEBOOK]:\n"
+        "1. DATA EXTRACTION: Always extract feature matrix `X = df[feature_cols]` and target vector `y = df[target_col]` from the active DataFrame.\n"
+        "2. ZERO LEAKAGE PIPELINE: Wrap all scalers, imputers, and estimators inside a `Pipeline` or `ColumnTransformer`.\n"
+        "3. FIT BEFORE ACCESS: Always call `grid.fit(X, y)` before accessing `grid.best_params_` or `grid.best_score_`.\n"
+        "4. Output pure, executable code inside <Answer>```python ... ```</Answer>.\n"
+    ),
+    "explain": (
+        "[MODEL INTERPRETABILITY & EXPLAINABILITY RULEBOOK]:\n"
+        "1. After training any ML model, extract and print feature importances (e.g., `model.feature_importances_` for tree-based models or coefficients for linear models).\n"
+        "2. Rank features from highest to lowest impact and print them clearly.\n"
+        "3. Include an assertion verifying that feature importance weights sum to expected bounds or that all features are accounted for.\n"
+        "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
+    ),
 }
 
 INVARIANT_CHECKLIST = (
@@ -184,12 +210,14 @@ def _restore_snapshot(ip, target="df") -> bool:
     return False
 
 def _sync_duckdb(ip):
-    if not _DUCKDB_CON or not ip:
+    # --- SNIPPET 1: AUTOMATIC DUCKDB BRIDGE ---
+    # Registers DataFrames directly to duckdb's global connection
+    if duckdb is None or not ip:
         return
     for k, v in ip.user_ns.items():
         if isinstance(v, pd.DataFrame) and not k.startswith("_") and k not in TRANSIENT_VARS:
             try:
-                _DUCKDB_CON.register(k, v)
+                duckdb.register(k, v)
             except Exception:
                 pass
 
@@ -304,19 +332,35 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
 
     return True, normalized_code, ""
 
+def _sanitize_traceback(tb_str: str, max_lines: int = 25) -> str:
+    """Filter out repetitive warnings and keep only the core traceback."""
+    lines = [line for line in tb_str.splitlines() if not ("FutureWarning:" in line or "UserWarning:" in line)]
+    # Keep the final lines (where the actual crash occurred)
+    return "\n".join(lines[-max_lines:])
+
 def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
-    raw_blocks = re.findall(r"```(?:python|py)?\s*\n?(.*?)(?:```|$)", text, flags=re.DOTALL | re.IGNORECASE)
+    cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # 1. Search for markdown fences ```python ... ```
+    raw_blocks = re.findall(r"```(?:python|py)?\s*\n?(.*?)(?:```|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
     code = raw_blocks[0].strip() if raw_blocks else ""
 
+    # 2. Search for <Answer> tags
     if not code:
-        answer_match = re.search(r"<Answer>(.*?)(?:</Answer>|$)", text, flags=re.DOTALL | re.IGNORECASE)
+        answer_match = re.search(r"<Answer>(.*?)(?:</Answer>|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
         if answer_match:
             code = answer_match.group(1).strip()
             code = re.sub(r"```(?:python|py)?", "", code).replace("```", "").strip()
 
-    narrative = re.sub(r"<Analyze>.*?(?:</Analyze>|$)", "", text, flags=re.DOTALL | re.IGNORECASE)
-    narrative = re.sub(r"<think>.*?(?:</think>|$)", "", narrative, flags=re.DOTALL | re.IGNORECASE)
-    narrative = re.sub(r"</?(?:Analyze|think|Answer|Code)>", "", narrative, flags=re.IGNORECASE)
+    # 3. Fallback: If no tags or fences, extract code lines (for 8B repair outputs)
+    if not code:
+        lines = [l for l in cleaned_text.splitlines() if not l.startswith(('Root Cause:', 'Safe Strategy:', '1.', '2.', '3.'))]
+        potential_code = "\n".join(lines).strip()
+        if any(keyword in potential_code for keyword in ('import ', 'def ', '=', 'pd.', 'plt.', 'Pipeline', 'GridSearchCV')):
+            code = potential_code
+
+    narrative = re.sub(r"<Analyze>.*?(?:</Analyze>|$)", "", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
+    narrative = re.sub(r"</?(?:Analyze|Answer|Code)>", "", narrative, flags=re.IGNORECASE)
     narrative = re.sub(r"```(?:python|py|sql)?\s*\n?.*?(?:```|$)", "", narrative, flags=re.DOTALL | re.IGNORECASE).strip()
 
     return code, narrative
@@ -376,6 +420,11 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--flash", action="store_true", help="Route prompt to DeepSeek-V4-Flash (deepseek-chat)")
     parser.add_argument("--think", action="store_true", help="Route prompt to DeepSeek-Reasoner (deepseek-reasoner)")
     
+    #ADVANCED DATA SCIENCE FLAGS
+    parser.add_argument("--validate", action="store_true", help="Enable rigorous ML and statistical validation mode")
+    parser.add_argument("--tune", action="store_true", help="Enable leak-free hyperparameter tuning mode")
+    parser.add_argument("--explain", action="store_true", help="Enable model interpretability and feature importance mode")
+    
     parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from execution output")
     parser.add_argument("-u", "--unravel", action="store_true")
     parser.add_argument("-p", "--profile", action="store_true")
@@ -434,6 +483,9 @@ def deepanalyze(line, cell=None):
     elif parsed_args.stat: primary_skill = "stat"
     elif parsed_args.ml: primary_skill = "ml"
     elif parsed_args.repair: primary_skill = "repair"
+    elif parsed_args.validate: primary_skill = "validate"
+    elif parsed_args.tune: primary_skill = "tune"
+    elif parsed_args.explain: primary_skill = "explain"
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
         print("Usage: %deepanalyze [-x] [--target df] [--think|--pro] [-u|-p|-v|-s|-f|-i] <task description>")
@@ -555,11 +607,20 @@ def deepanalyze(line, cell=None):
                                 repair_model = "deepanalyze-8b"
                                 print(f"\n🔄 Retrying repair locally with [{repair_model}]...")
 
+                            # ---> NEW TRACEBACK EXTRACTION & SANITIZATION <---
+                            import traceback
+                            if hasattr(err, '__traceback__') and err.__traceback__ is not None:
+                                raw_tb = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+                            else:
+                                raw_tb = f"{type(err).__name__}: {err}"
+                            
+                            clean_tb = _sanitize_traceback(raw_tb)
+
                             # Structured Root-Cause Reflection Prompt
                             repair_prompt = (
                                 f"[EXECUTION FAILURE REFLECTION]\n"
                                 f"The code you generated failed with the following traceback:\n"
-                                f"{type(err).__name__}: {err}\n\n"
+                                f"{clean_tb}\n\n"
                                 f"Follow this exact structure to fix it:\n"
                                 f"1. Root Cause: (Explain in 1 sentence why this failed based on column types or shapes)\n"
                                 f"2. Safe Strategy: (Identify which defensive pandas/duckdb method prevents this)\n"
@@ -596,13 +657,20 @@ def deepanalyze(line, cell=None):
                                 print(f"❌ Failed to parse valid python code during repair.")
                                 break
 
+                   
                     # INSIGHT SYNTHESIS POST-EXECUTION
                     if parsed_args.insight and not result.error_in_exec:
                         out_str = captured_output.stdout.strip() if (captured_output and captured_output.stdout) else "Execution succeeded but produced no console output."
                         print(f"\n🔍 [{active_model} Insights Synthesis]:")
                         insight_sys = "You are a senior data analyst. Provide 2-3 concise, actionable business bullet points based on this data output."
                         insight_prompt = f"User Request: {prompt}\n\nExecution Output:\n{out_str}\n\nProvide the insights."
-                        _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000, target_model=active_model)
+                        
+                        # Capture the output this time!
+                        raw_insights = _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000, target_model=active_model)
+                        
+                        # Clean out any <think> tags before printing
+                        clean_insights = re.sub(r'<think>.*?</think>', '', raw_insights, flags=re.DOTALL | re.IGNORECASE).strip()
+                        print(clean_insights)
                         print("\n" + "-" * 40)
 
                 else:
