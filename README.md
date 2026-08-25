@@ -100,7 +100,18 @@ DeepAnalyze enforces strict data science best practices through targeted skill f
 *   **`--tune` (Leak-Free Pipelines):** Prevents data leakage by encapsulating all imputers, scalers, and estimators inside strict scikit-learn `Pipeline` or `ColumnTransformer` objects, combined with `GridSearchCV` for isolated out-of-fold hyperparameter tuning.
 *   **`--explain` (Model Interpretability):** Extracts feature importances (or coefficients), ranks them to provide transparent insights into model decision-making, and validates weight distributions.
 
-  
+---
+
+## ⚡ Hardware & Syntax Optimizations
+
+DeepAnalyze integrates low-level runtime optimizations for efficient local inference on Apple Silicon (Unified Memory):
+
+* **8-bit KV-Cache Quantization (`--cache-type-k q8_0 --cache-type-v q8_0`):** Compresses the key-value context memory footprint by ~50%, allowing seamless 16K to 32K context windows without risking unified memory exhaustion or OS SSD swap lag.
+* **Flash Attention (`--fa on`):** Accelerates memory-bandwidth operations on Metal GPUs during multi-turn notebook sessions.
+* **Grammar-Constrained Inference (`grammars/deepanalyze.gbnf`):** Applies formal context-free grammar constraints at the token logit level, mathematically guaranteeing that generated output strictly adheres to `<Execute>` syntax blocks without formatting degradation or parser crashes.
+
+---
+
 ## Model Serving
 
 DeepAnalyze requires a local inference server to host the quantized 8B model. The base weights are hosted on Hugging Face: **[aboOod3d/deepanalyze-8b](https://huggingface.co/aboOod3d/deepanalyze-8b)**.
@@ -136,14 +147,40 @@ llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
 
 Ensure you have a local instance of `llama-server` or an OpenAI-compatible server running the quantized DeepAnalyze GGUF model:
 
-```bash
+
 # Example: Running llama-server locally
+```bash
 llama-server \
   -m models/deepanalyze-8b-q4_k_m.gguf \
   --port 8080 \
   -c 16384 \
   --host 127.0.0.1
 ```
+# High-Efficiency Startup with KV-Cache Quantization & GBNF Enforcement
+```bash
+llama-server \
+  -m models/deepanalyze-8b-q4_k_m.gguf \
+  --port 8080 \
+  -c 16384 \
+  --fa on \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0 \
+  --grammar-file grammars/deepanalyze.gbnf
+```
+
+### `llama-server` Configuration Reference
+
+| Parameter / Flag | Recommended Value | Purpose & Description |
+| :--- | :--- | :--- |
+| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Specifies the path to the quantized model weights file. |
+| `--port` | `8080` | Sets the HTTP port for the local OpenAI-compatible API expected by DeepAnalyze. |
+| `--host` | `127.0.0.1` | Binds the server to localhost, restricting network access strictly to your local machine. |
+| `-c`, `--ctx-size` | `16384` | Context window size in tokens. Use `16384` (16K) for standard data science workflows or `32768` (32K) for large matrices. |
+| `-ngl`, `--n-gpu-layers` | `99` | Offloads all transformer layers to GPU/Metal unified memory for hardware acceleration. |
+| `--cache-type-k` | `q8_0` | Quantizes Key-cache to 8-bit precision, cutting context memory usage in half with no degradation. |
+| `--cache-type-v` | `q8_0` | Quantizes Value-cache to 8-bit precision to maintain low RAM overhead during multi-step runs. |
+| `--fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
+| `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
 
 ### 2. Python Dependencies
 
