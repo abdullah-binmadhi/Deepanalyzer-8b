@@ -63,7 +63,7 @@ text
 
 ### The Interactive Auto-Escalator & Self-Repair Cycle
 
-When the model generates a block of code, it does not immediately overwrite user variables. Instead, it enters a sandbox verification loop. If the generated logic throws a runtime exception, the engine pauses execution and opens an interactive human-in-the-loop prompt in your notebook:
+When the model generates a block of code, it does not immediately overwrite user variables. Instead, it enters a sandbox verification loop. If the generated logic throws a runtime exception, the engine pauses execution, **sanitizes the traceback to prevent token-overflow from repetitive warnings**, and opens an interactive human-in-the-loop prompt in your notebook:
 
 [Runtime Crash]: Caught KeyError: 'gross_revenue'
 How would you like to resolve this error?
@@ -92,7 +92,15 @@ Select [1/2/3] (default: 1):
 ```
 
 ---
+## 🔬 Enterprise Machine Learning Guardrails
 
+DeepAnalyze enforces strict data science best practices through targeted skill flags, bridging the gap between raw code generation and production-ready ML:
+
+*   **`--validate` (Rigorous Validation):** For ML tasks, the engine automatically implements cross-validation or stratified holdout splits, prints comprehensive metrics (Classification Reports, Confusion Matrices), and embeds programmatic `assert` statements to guarantee shape matching and mathematical integrity.
+*   **`--tune` (Leak-Free Pipelines):** Prevents data leakage by encapsulating all imputers, scalers, and estimators inside strict scikit-learn `Pipeline` or `ColumnTransformer` objects, combined with `GridSearchCV` for isolated out-of-fold hyperparameter tuning.
+*   **`--explain` (Model Interpretability):** Extracts feature importances (or coefficients), ranks them to provide transparent insights into model decision-making, and validates weight distributions.
+
+  
 ## Model Serving
 
 DeepAnalyze requires a local inference server to host the quantized 8B model. The base weights are hosted on Hugging Face: **[aboOod3d/deepanalyze-8b](https://huggingface.co/aboOod3d/deepanalyze-8b)**.
@@ -204,6 +212,9 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
 | **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to 1). | Fault-tolerant execution handling transient syntax or execution exceptions. |
 | **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
+| **Validate** | `--validate` | Forces strict cross-validation, explicit metric reporting, and shape/type assertions. | Ensuring model integrity and preventing evaluation on training data. |
+| **Tune** | `--tune` | Encapsulates all estimators/scalers in `Pipeline` and `GridSearchCV`. | Zero-leakage hyperparameter optimization. |
+| **Explain** | `--explain` | Extracts and ranks feature importances/coefficients with mathematical invariants. | Model interpretability and auditing. |
 ---
 
 ## Protocol & Prompt Architecture
@@ -351,6 +362,14 @@ Print the shape and column types of telemetry_df
 %deepanalyze --undo --target sales_data
 ```
 ---
+
+### 8. Multi-Model Evaluation & Guardrails (`--tune`, `--validate`, `--pro`)
+
+```python
+%deepanalyze -x --tune --validate --pro --target retail_df Train and evaluate Logistic Regression, Random Forest, and Gradient Boosting to predict is_returned. Use GridSearchCV with 5-fold StratifiedKFold. Calculate out-of-fold Mean CV Accuracy, CV Std Dev, and F1-score, displaying results in a consolidated DataFrame.
+```
+---
+
 ## Attribution & Licensing
 
 * **Base Architecture & Research:** [RUC-DataLab/DeepAnalyze-8B](https://huggingface.co/RUC-DataLab/DeepAnalyze-8B)
