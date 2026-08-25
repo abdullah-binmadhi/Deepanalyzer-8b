@@ -116,7 +116,7 @@ Select [1/2/3] (default: 1):
 ```
 
 ---
-## 🔬 Enterprise Machine Learning Guardrails
+##  Enterprise Machine Learning Guardrails
 
 DeepAnalyze enforces strict data science best practices through targeted skill flags, bridging the gap between raw code generation and production-ready ML:
 
@@ -126,7 +126,7 @@ DeepAnalyze enforces strict data science best practices through targeted skill f
 
 ---
 
-## ⚡ Hardware & Syntax Optimizations
+##  Hardware & Syntax Optimizations
 
 DeepAnalyze integrates low-level runtime optimizations for efficient local inference on Apple Silicon (Unified Memory):
 
