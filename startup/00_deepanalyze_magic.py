@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 from IPython.core.magic import register_line_cell_magic
 from IPython import get_ipython
+from IPython.utils import io as ipy_io
 from openai import OpenAI
 
 try:
@@ -259,8 +260,10 @@ def _get_deep_workspace_context(ip) -> tuple[str, set]:
                     col_str = str(col)
                     dtype = str(obj[col].dtype)
                     null_pct = round(obj[col].isna().mean() * 100, 1)
+                    # RICH DATA PROFILING: Added unique cardinality count to prevent coercion errors
+                    unique_count = obj[col].nunique()
                     sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
-                    col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Sample: {sample}")
+                    col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
 
                 context_lines.append(
                     f"DataFrame `{name}` (Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
@@ -355,7 +358,7 @@ def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: in
             full_text.append(delta)
             token_count += 1
             if token_count % 20 == 0:
-                sys.stdout.write(f"\r[DeepAnalyze]: Generating parser code... ({token_count} tokens)")
+                sys.stdout.write(f"\r[DeepAnalyze]: Generating text... ({token_count} tokens)")
                 sys.stdout.flush()
 
     sys.stdout.write("\r" + " " * 55 + "\r")
@@ -377,6 +380,9 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--fast", action="store_true")
     parser.add_argument("--deep", action="store_true")
     parser.add_argument("--ultra", action="store_true")
+    
+    # NEW INSIGHT FLAG
+    parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from execution output")
     
     parser.add_argument("-u", "--unravel", action="store_true")
     parser.add_argument("-p", "--profile", action="store_true")
@@ -430,7 +436,7 @@ def deepanalyze(line, cell=None):
     elif parsed_args.repair: primary_skill = "repair"
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
-        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|--undo|--toggle|--status] <task description>")
+        print("Usage: %deepanalyze [-x] [--target df] [-u|-p|-v|-s|-f|-t|-m|-r|-i|--undo|--toggle|--status] <task description>")
         return
 
     _sync_duckdb(ip)
@@ -505,7 +511,18 @@ def deepanalyze(line, cell=None):
                     original_row_count = ip.user_ns[parsed_args.target].shape[0] if parsed_args.target in ip.user_ns else None
 
                     print("[DeepAnalyze Executing]:\n" + clean_code + "\n" + "-" * 40)
-                    result = ip.run_cell(clean_code)
+                    
+                    # Execution Block with optional Insight Capture
+                    captured_output = None
+                    if parsed_args.insight:
+                        with ipy_io.capture_output() as captured:
+                            result = ip.run_cell(clean_code)
+                        captured_output = captured
+                        # Print captured stdout/stderr so the user still sees the output
+                        if captured.stdout: sys.stdout.write(captured.stdout)
+                        if captured.stderr: sys.stderr.write(captured.stderr)
+                    else:
+                        result = ip.run_cell(clean_code)
 
                     for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
                         if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
@@ -517,11 +534,19 @@ def deepanalyze(line, cell=None):
                         err = result.error_in_exec
                         for attempt in range(1, parsed_args.retries + 1):
                             print(f"\n[DeepAnalyze Runtime Auto-Repair {attempt}/{parsed_args.retries}]: Caught {type(err).__name__}: {err}")
+                            
+                            # STRUCTURED ERROR REFLECTION: Forces Root Cause Analysis
                             repair_prompt = (
-                                f"Code raised runtime error {type(err).__name__}: {err}\n"
-                                f"```python\n{clean_code}\n```\n"
-                                f"Fix the runtime error while strictly maintaining the task objective:\n{env_context}"
+                                f"[EXECUTION FAILURE REFLECTION]\n"
+                                f"The code you generated failed with the following traceback:\n"
+                                f"{type(err).__name__}: {err}\n\n"
+                                f"Follow this exact structure to fix it:\n"
+                                f"1. Root Cause: (Explain in 1 sentence why this failed based on column types or shapes)\n"
+                                f"2. Safe Strategy: (Identify which defensive pandas/duckdb method prevents this)\n"
+                                f"3. Output ONLY the final corrected code inside <Answer>```python ... ```</Answer>.\n"
+                                f"Context:\n{env_context}"
                             )
+                            
                             fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens)
                             fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
                             is_valid_repair, final_code, rep_err = _lint_and_format_code(fixed_code, available_vars)
@@ -529,7 +554,15 @@ def deepanalyze(line, cell=None):
                             if is_valid_repair and final_code:
                                 _LAST_GENERATED_CODE = final_code
                                 print("[DeepAnalyze Re-Executing]:\n" + final_code + "\n" + "-" * 40)
-                                result = ip.run_cell(final_code)
+                                
+                                if parsed_args.insight:
+                                    with ipy_io.capture_output() as captured:
+                                        result = ip.run_cell(final_code)
+                                    captured_output = captured
+                                    if captured.stdout: sys.stdout.write(captured.stdout)
+                                    if captured.stderr: sys.stderr.write(captured.stderr)
+                                else:
+                                    result = ip.run_cell(final_code)
                                 
                                 if not result.error_in_exec:
                                     for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
@@ -540,6 +573,16 @@ def deepanalyze(line, cell=None):
                                 err = result.error_in_exec
                             else:
                                 break
+
+                    # INSIGHT SYNTHESIS POST-EXECUTION
+                    if parsed_args.insight and not result.error_in_exec:
+                        out_str = captured_output.stdout.strip() if (captured_output and captured_output.stdout) else "Execution succeeded but produced no console output."
+                        print("\n🔍 [DeepAnalyze Insights Synthesis]:")
+                        insight_sys = "You are a senior data analyst. Provide 2-3 concise, actionable business bullet points based on this data output."
+                        insight_prompt = f"User Request: {prompt}\n\nExecution Output:\n{out_str}\n\nProvide the insights."
+                        _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000)
+                        print("\n" + "-" * 40)
+
                 else:
                     ip.set_next_input(clean_code)
                     if not is_valid:
