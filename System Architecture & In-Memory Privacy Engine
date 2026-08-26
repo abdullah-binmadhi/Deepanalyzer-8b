@@ -73,10 +73,11 @@ DeepAnalyze eliminates this trade-off by decoupling **layout reasoning** from **
 ## 2. Deep Dive: The 7-Tier Architecture
 
 ### Tier 1: In-Memory Raw Input
-Data is loaded directly into your Python session memory (e.g., `df_erp = pd.read_excel(...)` or a multi-line ragged matrix). DeepAnalyze never forces you to export staging files or write unencrypted intermediate tables to disk.
+Data is loaded directly into your Python session memory as either a **Pandas DataFrame** (`pd.read_excel(...)`) or a **Polars DataFrame** (`pl.read_parquet(...)` / `pl.read_csv(...)`). 
+The Universal Polymorphic Adapter dynamically detects the engine type at runtime. DeepAnalyze never forces you to export staging files or write unencrypted intermediate tables to disk.
 
 ### Tier 2: The Local Gatekeeper (`privacy_knife.py`)
-Before anything touches a model (local or cloud), `LocalGatekeeper` inspects the structure of your DataFrame on-device using fast deterministic heuristics:
+Before anything touches a model (local or cloud), `LocalGatekeeper` inspects the structure of your DataFrame on-device using fast deterministic heuristics across both Pandas and Polars objects:
 
 ```text
 [Raw DataFrame] ──► [Tier 1: Deterministic Heuristics (<5ms)] ──► Auto-Configured Stack
@@ -127,7 +128,7 @@ When code returns from an LLM, DeepAnalyze runs an Abstract Syntax Tree (AST) se
 
 ### Tier 6: Local Execution, State Rollback & Interactive Repair
 The validated code executes against the **original, unmasked DataFrame in local RAM**.
-* **Automatic Snapshots (`--undo`):** A deepcopy of the DataFrame is saved before running, so you can revert any accidental transformation instantly.
+* **Automatic Snapshots (`--undo`):** A deepcopy (Pandas) or an instant Apache Arrow zero-copy clone (Polars) is captured prior to execution, allowing instant rollbacks without RAM bloat.
 * **Interactive Auto-Escalator:** If a runtime exception occurs (e.g., a `KeyError` or type mismatch), execution pauses and opens a repair menu:
 
 ```text
@@ -216,7 +217,7 @@ If a transformation produces unexpected results, roll back your DataFrame to its
 | `--audit-only` | **Privacy Audit** | Security | Displays the sanitized context payload without calling an LLM or running code. |
 | `--privacy <mode>` | **Privacy Override** | Security | Enforces sanitization mode: `auto`, `mask` (ERP), `mock` (PII), `profile` (Stats), or `none`. |
 | `-u`, `--unravel` | **Unravel** | Skill | Injects hierarchical state-machine heuristics for ragged spreadsheet reports. |
-| `-s`, `--sql` | **DuckDB SQL** | Skill | Executes analytical SQL queries directly on DataFrames via DuckDB. |
+| `-s`, `--sql` | **DuckDB SQL** | Skill | Executes analytical SQL queries directly on active in-memory Pandas and Polars DataFrames via zero-copy Arrow buffers. |
 | `-f`, `--feat` | **Feature Engineering** | Skill | Constrains the model to vectorized operations, zero-division guards, and in-place typing. |
 | `-v`, `--viz` | **Visualization** | Skill | Generates themed Seaborn/Matplotlib visualization scripts. |
 | `--save` | **Save Figure** | Output | Automatically saves generated plots to disk (`charts/<slug>.png`) at 300 DPI. |
@@ -234,11 +235,11 @@ If a transformation produces unexpected results, roll back your DataFrame to its
 | `-d`, `--deterministic`| **Deterministic** | Model Tuning | Clamps generation temperature to `0.0` for exact, repeatable code output. |
 | `--fast` | **Fast Profile** | Model Tuning | Sets temperature to `0.0` and caps output at 1,000 tokens for rapid execution. |
 | `--ultra` | **Ultra Context** | Model Tuning | Expands generation ceiling to 4,096 tokens for large matrices and multi-step state machines. |
-| `--undo` | **State Rollback** | State Manager| Restores the target DataFrame to its exact pre-execution deepcopy snapshot. |
+| `--undo` | **State Rollback** | Restores the target DataFrame to its exact pre-execution state (.copy() for Pandas, .clone() for Polars). |
 | `--toggle` | **Auto-Pilot Toggle** | Convenience | Toggles cell interceptor on/off for plain-English notebook execution without magic prefixes. |
 | `-c`, `--continue` | **Continuation** | Workflow | Iterates on previous generated code using natural language refinement instructions. |
 | `--retries <n>` | **Retry Count** | Reliability | Sets the maximum number of automated runtime exception repair loops (default: 1). |
-| `--status` | **System Health** | Diagnostic | Checks `llama-server` connectivity, API keys, active snapshots, and interceptor state. |
+| `--status` | **System Health** | Diagnostic | Checks llama-server connectivity, DeepSeek API keys, active snapshots, cell interceptor state, and Polars acceleration status. |
 
 ---
 
@@ -332,7 +333,23 @@ Train a Random Forest classifier to predict target:
 
 ---
 
-## 6. Troubleshooting & Operational FAQ
+
+### Benchmark 6: High-Speed Polars Wrangling & Safe Casting (`-f`, `-x`)
+
+```python
+import polars as pl
+
+sensor_pl = pl.DataFrame({
+    'sensor_id': ['SN-01', 'SN-02', 'SN-03', 'SN-04'],
+    'pressure_psi': [' 145.2 ', 'N/A', ' 180.0 ', ' 210.5 '],
+    'status': ['OK', 'ERROR', 'OK', 'OK']
+})
+
+%deepanalyze -x -f -d --target sensor_pl Clean pressure_psi into a numeric float filling nulls with 0.0 and filter where status is OK.
+
+---
+
+## 7. Troubleshooting & Operational FAQ
 
 * **Issue: `ValueError: No closing quotation` on multi-line cell prompts**
   * *Root Cause:* Standard `shlex.split` fails when a cell prompt contains apostrophes (e.g., `"item's description"`).
@@ -348,7 +365,7 @@ Train a Random Forest classifier to predict target:
 
 ---
 
-## 7. Attribution & Licensing
+## 8. Attribution & Licensing
 
 * **Base Architecture & Research:** [RUC-DataLab/DeepAnalyze-8B](https://huggingface.co/RUC-DataLab/DeepAnalyze-8B)
 * **Training Corpus:** [RUC-DataLab/DataScience-Instruct-500K](https://huggingface.co/datasets/RUC-DataLab/DataScience-Instruct-500K)
