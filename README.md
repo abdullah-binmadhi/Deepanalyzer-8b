@@ -1,6 +1,6 @@
 # DeepAnalyze: Agentic In-Memory Data Execution Engine
 
-DeepAnalyze is an autonomous, privacy-first data execution environment for Jupyter and IPython, powered by a fine-tuned 8B large language model. Designed for complex enterprise data operations, it translates natural language into deterministic state-machine logic to parse hierarchical spreadsheets, execute zero-copy DuckDB SQL queries, train guarded ML pipelines, and perform defensive feature engineering.
+DeepAnalyze is an autonomous, privacy-first data execution environment for Jupyter and IPython, powered by a fine-tuned 8B large language model. Designed for complex enterprise data operations, it translates natural language into deterministic state-machine logic to parse hierarchical spreadsheets, execute zero-copy DuckDB SQL queries, train guarded ML pipelines, and perform defensive feature engineering seamlessly across both **Pandas and Polars**.
 
 Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loop agent: it executes code directly in your local memory space, catches runtime exceptions via an AST sandbox, sanitizes data through an in-memory privacy gatekeeper, and autonomously patches its own code before returning the final output.
 
@@ -8,16 +8,17 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ## Key Capabilities
 
+* **Universal Polymorphic Adapter:** Seamlessly detects and handles both Pandas and Polars DataFrames at runtime. Automatically dispatches high-speed, parallelized Rust expressions for large datasets while maintaining 100% backward compatibility for legacy Pandas text-parsing workflows.
 * **Zero-Data-Leakage Privacy Gatekeeper (`privacy_knife`):** Intercepts data before any cloud transmission. Generates reversible PII tokenizations, statistical schema profiles, or structural geometry masks (`ERP_STRUCTURAL_MASK`), ensuring sensitive row records never leave local RAM.
 * **Pre-Flight Privacy Auditing (`--audit-only`):** Inspects the exact sanitized JSON schema payload scheduled for transmission before dispatching API requests.
 * **Dual-Brain Model Routing:** Runs entirely locally via `llama-server` by default, with on-demand escalation to cloud reasoning models (DeepSeek-V3/R1 via `--pro`, `--flash`, `--think`) for mathematically dense or structurally complex operations.
 * **Interactive Auto-Escalator & Self-Repair:** Traps runtime exceptions and syntax crashes in an isolated sandbox, opening a human-in-the-loop menu to retry locally with DeepAnalyze-8B, escalate tracebacks to DeepSeek Reasoner, or abort without mutating session state.
 * **Egress AST Security Sandbox:** Audits generated code before execution, blocking unauthorized network sockets (`requests`, `urllib`, `socket`), disk writes, or shell exploits.
 * **Hierarchical Unravelling Engine (`-u`, `--unravel`):** Deterministic state machines that parse ragged, multi-line, non-rectangular ERP ledger exports (SAP, Navision, Oracle) into normalized 2D DataFrames.
-* **Zero-Copy DuckDB SQL Engine (`-s`, `--sql`):** High-speed analytical SQL execution directly on in-memory pandas DataFrames with automated schema registration.
+* **Zero-Copy DuckDB SQL Engine (`-s`, `--sql`):** High-speed analytical SQL execution directly on in-memory Pandas and Polars DataFrames via Apache Arrow memory pointers, featuring automated schema registration.
 * **Enterprise ML Guardrails (`--validate`, `--tune`, `--explain`):** Enforces strict scikit-learn `Pipeline` encapsulation, leak-free `GridSearchCV`, metric assertions, and feature importance extractions.
 * **Insight Synthesis (`-i`, `--insight`):** Automatically captures execution stdout and runs a secondary analytical pass to generate actionable business takeaways.
-* **Transactional State Rollback (`--undo`):** Automated deepcopy snapshotting prior to execution for instant rollback and safe experimentation.
+* **Transactional State Rollback (`--undo`):** Automated deepcopy (Pandas) or instant zero-copy clone (Polars) prior to execution, enabling instant state rollback and safe experimentation with zero RAM overhead.
 * **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
 
 ---
@@ -165,12 +166,12 @@ llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
 ---
 
 
+
 ## Installation & Setup
 
 ### 1. Prerequisites
 
 Ensure you have a local instance of `llama-server` or an OpenAI-compatible server running the quantized DeepAnalyze GGUF model:
-
 
 # Example: Running llama-server locally
 ```bash
@@ -180,6 +181,7 @@ llama-server \
   -c 16384 \
   --host 127.0.0.1
 ```
+
 # High-Efficiency Startup with KV-Cache Quantization & GBNF Enforcement
 ```bash
 llama-server \
@@ -254,29 +256,31 @@ start-deepanalyze -m /path/to/another-model.gguf
 
 ### 2. Python Dependencies
 
-Install the scientific computing stack:
+Install the core engine alongside the modern scientific computing stack:
 
 ```bash
-pip install pandas numpy duckdb matplotlib seaborn openai
+pip install pandas polars pyarrow numpy duckdb matplotlib seaborn openai httpx
 ```
 
-### 3. Deploy the IPython Magic Extension
+### 3. Install the DeepAnalyze Package
+Clone this repository and install it as an editable Python package using pip. This automatically registers the core engine and privacy modules into your environment.
 
-Clone this repository and link the startup script into your default IPython profile:
-
-```bash
+```
 # Clone the repository
 git clone [https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git](https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git) ~/Desktop/deepanalyze
 cd ~/Desktop/deepanalyze
+```
+# Install the package (Editable mode recommended)
+```
+pip install -e .
+```
+Launch ipython or start a Jupyter notebook. Load the extension by running the following command in your first cell:
 
-# Create IPython startup directory if it doesn't exist
-mkdir -p ~/.ipython/profile_default/startup/
-
-# Copy the startup magic script
-cp startup/00_deepanalyze_magic.py ~/.ipython/profile_default/startup/00_deepanalyze_magic.py
+```
+%load_ext deepanalyze
 ```
 
-Launch `ipython` or start a Jupyter notebook. The `%deepanalyze` magic will load automatically into your session.
+
 ---
 
 ## Usage Guide
@@ -285,11 +289,15 @@ DeepAnalyze operates directly on the variables currently loaded in your session.
 
 ```python
 import pandas as pd
+import polars as pl
 
-# Load an unstructured, multi-level Excel report
+# 1. Load the extension
+%load_ext deepanalyze
+
+# 2. Load an unstructured, multi-level Excel report (or a Polars DataFrame)
 df = pd.read_excel("raw_hierarchical_invoice.xlsx", header=None)
 
-# Autonomous flattening and type-casting
+# 3. Autonomous flattening and type-casting
 %deepanalyze -x -u Restructure the raw invoice dataframe into normalized tabular records.
 ```
 
@@ -310,7 +318,7 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Insight Synthesis** | `-i`, `--insight` | Captures execution stdout and triggers a secondary LLM pass to explain the metrics. | Translating raw numbers into actionable business insights. |
 | **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
 | **Feature** | `-f`, `--feat` | Constrains the model to vectorized operations, safe casting, and in-place transformations. | Defensive feature engineering, missing value imputation, and schema cleaning. |
-| **SQL Engine** | `-s`, `--sql` | Routes transformations through DuckDB for zero-copy memory execution. | High-performance SQL queries and complex relational joins directly on DataFrames. |
+| **SQL Engine** | `-s`, `--sql` | Routes transformations through DuckDB for zero-copy memory execution across Pandas and Polars DataFrames. | High-performance SQL queries and complex relational joins directly on active in-memory tables. |
 | **Visualize** | `-v`, `--viz` | Instructs the model to generate styled Matplotlib/Seaborn rendering scripts. | Automated exploratory data analysis (EDA) and publication-quality distributions. |
 | **Statistical Test** | `-t`, `--stat` | Automatically selects and runs parametric/non-parametric tests. | Hypothesis testing (ANOVA, t-test, Chi-square). |
 | **Machine Learning** | `-m`, `--ml` | Bundles scikit-learn preprocessing and estimators via Pipeline. | Rapid baseline model training and classification reports. |
@@ -319,7 +327,7 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable, exact syntax. | Strict ETL pipelines and reproducible transformations. |
 | **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
 | **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to 1). | Fault-tolerant execution handling transient syntax or execution exceptions. |
-| **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
+| **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy (Pandas) or zero-copy clone (Polars) snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
 | **Validate** | `--validate` | Forces strict cross-validation, explicit metric reporting, and shape/type assertions. | Ensuring model integrity and preventing evaluation on training data. |
 | **Tune** | `--tune` | Encapsulates all estimators/scalers in `Pipeline` and `GridSearchCV`. | Zero-leakage hyperparameter optimization. |
 | **Explain** | `--explain` | Extracts and ranks feature importances/coefficients with mathematical invariants. | Model interpretability and auditing. |
@@ -477,6 +485,22 @@ Print the shape and column types of telemetry_df
 %deepanalyze -x --tune --validate --pro --target retail_df Train and evaluate Logistic Regression, Random Forest, and Gradient Boosting to predict is_returned. Use GridSearchCV with 5-fold StratifiedKFold. Calculate out-of-fold Mean CV Accuracy, CV Std Dev, and F1-score, displaying results in a consolidated DataFrame.
 ```
 ---
+
+### 9. High-Speed Polars Analytics (Universal Adapter)
+
+```python
+import polars as pl
+
+# Create large Polars DataFrame
+sensor_pl = pl.DataFrame({
+    'sensor_id': ['S1', 'S2', 'S1', 'S3', 'S2'],
+    'reading': [' 12.5 ', 'N/A', ' 45.2 ', ' 0.0 ', ' 18.9 '],
+    'flag': ['ok', 'error', 'ok', 'ok', 'error']
+})
+
+# Polars-native transformation
+%deepanalyze -x -f --target sensor_pl Clean reading column into numeric float filling nulls with 0 and filter for flag == 'ok'.
+```
 
 ## Attribution & Licensing
 
