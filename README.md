@@ -1,66 +1,90 @@
 # DeepAnalyze: Agentic In-Memory Data Execution Engine
 
-DeepAnalyze is an autonomous execution environment for Jupyter and IPython, powered by a fine-tuned 8B large language model. Designed for complex data operations, it translates natural language into deterministic state-machine logic to parse hierarchical spreadsheets, execute zero-copy DuckDB SQL queries, and perform feature engineering. 
+DeepAnalyze is an autonomous, privacy-first data execution environment for Jupyter and IPython, powered by a fine-tuned 8B large language model. Designed for complex enterprise data operations, it translates natural language into deterministic state-machine logic to parse hierarchical spreadsheets, execute zero-copy DuckDB SQL queries, train guarded ML pipelines, and perform defensive feature engineering.
 
-Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loop agent: it executes code directly in your memory space, catches runtime errors via an AST linter, and autonomously patches its own code before returning the final output.
+Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loop agent: it executes code directly in your local memory space, catches runtime exceptions via an AST sandbox, sanitizes data through an in-memory privacy gatekeeper, and autonomously patches its own code before returning the final output.
 
 ---
 
 ## Key Capabilities
 
-* **Dual-Brain Cloud Routing:** Runs entirely locally via `llama-server` by default, but allows on-demand routing to DeepSeek-V3/R1 cloud models (`--pro`, `--think`) to handle complex, high-reasoning workloads seamlessly.
-* **Interactive Auto-Escalator:** When generated code throws a runtime error, the engine pauses and provides a human-in-the-loop CLI interface. You can manually choose to retry the repair locally, abort the operation, or escalate the traceback to a cloud reasoning model for an advanced root-cause fix.
-* **BYOK (Bring Your Own Key) Security:** Eliminates hardcoded secrets by pulling API credentials dynamically from OS-level environment variables (e.g., `DEEPSEEK_API_KEY`). This ensures zero security liability and keeps the codebase 100% safe for public version control.
-* **Zero-Friction In-Memory Analytics:** Directly inspects variable schemas, dtypes, and unique cardinality counts from active kernel memory to eliminate hallucinated column names and type coercion errors.
-* **Auto-Pilot Interceptor:** Intercepts plain-English instructions in standard notebook cells without requiring explicit `%deepanalyze` magic prefixes.
-* **DuckDB SQL Engine:** Zero-copy querying over in-memory pandas DataFrames. Automatically registers all active session DataFrames for seamless cross-table joins.
-* **Insight Synthesis (`-i`, `--insight`):** Captures execution stdout/metrics and triggers a secondary reasoning pass to translate raw numbers into concise, actionable business takeaways.
-* **Structured Error Reflection:** Traps syntax errors and runtime exceptions, forcing the model to perform a root cause analysis and identify defensive strategies before generating patched code.
-* **Hierarchical Unravelling (`-u`, `--unravel`):** Deterministic state machines and regex heuristics that parse and forward-fill ragged, non-rectangular tabular text reports into clean 2D tables.
-* **State Snapshot & Rollback (`--undo`):** Automated deepcopy snapshotting prior to execution, enabling instant state rollback and safe experimentation.
-* **Defensive Feature Engineering (`-f`, `--feat`):** Enforces safe numeric coercion, zero-division guards, and in-place vectorization invariants.
+* **Zero-Data-Leakage Privacy Gatekeeper (`privacy_knife`):** Intercepts data before any cloud transmission. Generates reversible PII tokenizations, statistical schema profiles, or structural geometry masks (`ERP_STRUCTURAL_MASK`), ensuring sensitive row records never leave local RAM.
+* **Pre-Flight Privacy Auditing (`--audit-only`):** Inspects the exact sanitized JSON schema payload scheduled for transmission before dispatching API requests.
+* **Dual-Brain Model Routing:** Runs entirely locally via `llama-server` by default, with on-demand escalation to cloud reasoning models (DeepSeek-V3/R1 via `--pro`, `--flash`, `--think`) for mathematically dense or structurally complex operations.
+* **Interactive Auto-Escalator & Self-Repair:** Traps runtime exceptions and syntax crashes in an isolated sandbox, opening a human-in-the-loop menu to retry locally with DeepAnalyze-8B, escalate tracebacks to DeepSeek Reasoner, or abort without mutating session state.
+* **Egress AST Security Sandbox:** Audits generated code before execution, blocking unauthorized network sockets (`requests`, `urllib`, `socket`), disk writes, or shell exploits.
+* **Hierarchical Unravelling Engine (`-u`, `--unravel`):** Deterministic state machines that parse ragged, multi-line, non-rectangular ERP ledger exports (SAP, Navision, Oracle) into normalized 2D DataFrames.
+* **Zero-Copy DuckDB SQL Engine (`-s`, `--sql`):** High-speed analytical SQL execution directly on in-memory pandas DataFrames with automated schema registration.
+* **Enterprise ML Guardrails (`--validate`, `--tune`, `--explain`):** Enforces strict scikit-learn `Pipeline` encapsulation, leak-free `GridSearchCV`, metric assertions, and feature importance extractions.
+* **Insight Synthesis (`-i`, `--insight`):** Automatically captures execution stdout and runs a secondary analytical pass to generate actionable business takeaways.
+* **Transactional State Rollback (`--undo`):** Automated deepcopy snapshotting prior to execution for instant rollback and safe experimentation.
+* **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
+
 ---
+
 ## System Architecture
 
-The core of DeepAnalyze is its ability to extract context directly from the host environment, formulate a solution, and validate it before applying changes.
+DeepAnalyze enforces a strict separation between raw session memory and external inference engines through its 7-tier architecture:
 
-text
+```text
+ ┌──────────────────────────────────────────────┐
+ │      1. INPUT: In-Memory Raw DataFrame       │
+ │        (e.g., Healthcare CSV or ERP Excel)   │
+ └──────────────────────┬───────────────────────┘
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │   2. LOCAL GATEKEEPER & INSPECTOR (100% Local)│
+ │   • Heuristic Rule Engine (Shape/Headers)    │
+ │   • Regex & PII Scanner (Names/Emails/PHI)   │
+ │   • Local DeepAnalyze-8B (Ambiguity Check)   │
+ └──────────────────────┬───────────────────────┘
+                        │
+          Decision: Route Required Stack
+                        │
+      ┌─────────────────┼─────────────────┐
+      ▼                 ▼                 ▼
+ [Unstructured ERP]  [Sensitive PHI/PII]   [Standard Dirty Table]
+ • Structural Mask   • Reversible Tokenizer • Statistical Profiler
+ • Geometry Preserved• Synthetic 5-Row Mock • Missing Value Ratios
+ • Cell Type Masks   • Local Token Mapping  • Dtypes & Quantiles
+      │                 │                 │
+      └─────────────────┼─────────────────┘
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │     3. INGRESS: Safe JSON / Code Payload     │
+ │   (Zero sensitive row data transmitted)      │
+ └──────────────────────┬───────────────────────┘
+                        │ HTTPS POST (Encrypted Transit)
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │           4. CLOUD / LOCAL INFERENCE         │
+ │  (DeepAnalyze-8B Local / DeepSeek Cloud)     │
+ │  • Synthesizes cleaning & parsing logic      │
+ └──────────────────────┬───────────────────────┘
+                        │ Python Code Payload
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │     5. EGRESS: Local AST Safety Sandbox      │
+ │  • Blocks unauthorized imports (os, socket)  │
+ │  • Strips exfiltration attempts & file writes│
+ └──────────────────────┬───────────────────────┘
+                        │ Pass AST Audit
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │     6. LOCAL EXECUTION & RECONCILIATION      │
+ │  • Executes script on raw data in local RAM  │
+ │  • Restores tokenized PII from local map     │
+ │  • Interactive Auto-Repair on Runtime Errors │
+ └──────────────────────┬───────────────────────┘
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │         7. OUTPUT: Cleaned DataFrame         │
+ │         (Ready in active IPython memory)     │
+ └──────────────────────────────────────────────┘
 ```
-┌──────────────────────────────────────────────────────────┐
-│                 IPython / Jupyter Kernel                 │
-│                                                          │
-│    Plain English Prompt / %deepanalyze Directive         │
-│                           │                              │
-│                           ▼                              │
-│        Input Interceptor / Magic Flag Parser             │
-│                           │                              │
-│                           ▼                              │
-│         Runtime Schema & Dtype Inspection                │
-└───────────────────────────┬──────────────────────────────┘
-                            │
-                            ▼
-┌──────────────────────────────────────────────────────────┐
-│                 Dual-Brain Model Router                  │
-│          (--pro / --flash / --think / Local)             │
-└─────────────┬──────────────────────────────┬─────────────┘
-              │ (Local Default)              │ (Cloud Flags)
-              ▼                              ▼
-┌───────────────────────────┐  ┌───────────────────────────┐
-│ Local Inference Server    │  │ DeepSeek Cloud API        │
-│ (llama-server / 8B Core)  │  │ (Pro / Flash / Reasoner)  │
-└─────────────┬─────────────┘  └─────────────┬─────────────┘
-              │                              │
-              └──────────────┬───────────────┘
-                             ▼
-┌──────────────────────────────────────────────────────────┐
-│                     Execution Engine                     │
-│                                                          │
-│ AST Validation ──► [Interactive Auto-Escalator (1-3x)]   │
-│ DuckDB Engine  ──► Zero-Copy In-Memory SQL Execution     │
-│ State Manager  ──► Deepcopy Snapshots & `--undo`         │
-└──────────────────────────────────────────────────────────┘
-```
-
 ### The Interactive Auto-Escalator & Self-Repair Cycle
 
 When the model generates a block of code, it does not immediately overwrite user variables. Instead, it enters a sandbox verification loop. If the generated logic throws a runtime exception, the engine pauses execution, **sanitizes the traceback to prevent token-overflow from repetitive warnings**, and opens an interactive human-in-the-loop prompt in your notebook:
@@ -92,7 +116,7 @@ Select [1/2/3] (default: 1):
 ```
 
 ---
-## 🔬 Enterprise Machine Learning Guardrails
+##  Enterprise Machine Learning Guardrails
 
 DeepAnalyze enforces strict data science best practices through targeted skill flags, bridging the gap between raw code generation and production-ready ML:
 
@@ -100,7 +124,18 @@ DeepAnalyze enforces strict data science best practices through targeted skill f
 *   **`--tune` (Leak-Free Pipelines):** Prevents data leakage by encapsulating all imputers, scalers, and estimators inside strict scikit-learn `Pipeline` or `ColumnTransformer` objects, combined with `GridSearchCV` for isolated out-of-fold hyperparameter tuning.
 *   **`--explain` (Model Interpretability):** Extracts feature importances (or coefficients), ranks them to provide transparent insights into model decision-making, and validates weight distributions.
 
-  
+---
+
+##  Hardware & Syntax Optimizations
+
+DeepAnalyze integrates low-level runtime optimizations for efficient local inference on Apple Silicon (Unified Memory):
+
+* **8-bit KV-Cache Quantization (`--cache-type-k q8_0 --cache-type-v q8_0`):** Compresses the key-value context memory footprint by ~50%, allowing seamless 16K to 32K context windows without risking unified memory exhaustion or OS SSD swap lag.
+* **Flash Attention (`--fa on`):** Accelerates memory-bandwidth operations on Metal GPUs during multi-turn notebook sessions.
+* **Grammar-Constrained Inference (`grammars/deepanalyze.gbnf`):** Applies formal context-free grammar constraints at the token logit level, mathematically guaranteeing that generated output strictly adheres to `<Execute>` syntax blocks without formatting degradation or parser crashes.
+
+---
+
 ## Model Serving
 
 DeepAnalyze requires a local inference server to host the quantized 8B model. The base weights are hosted on Hugging Face: **[aboOod3d/deepanalyze-8b](https://huggingface.co/aboOod3d/deepanalyze-8b)**.
@@ -136,13 +171,85 @@ llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
 
 Ensure you have a local instance of `llama-server` or an OpenAI-compatible server running the quantized DeepAnalyze GGUF model:
 
-```bash
+
 # Example: Running llama-server locally
+```bash
 llama-server \
   -m models/deepanalyze-8b-q4_k_m.gguf \
   --port 8080 \
   -c 16384 \
   --host 127.0.0.1
+```
+# High-Efficiency Startup with KV-Cache Quantization & GBNF Enforcement
+```bash
+llama-server \
+  -m models/deepanalyze-8b-q4_k_m.gguf \
+  --port 8080 \
+  -c 16384 \
+  -fa on \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0 \
+  --grammar-file grammars/deepanalyze.gbnf
+```
+
+### `llama-server` Configuration Reference
+
+| Parameter / Flag | Recommended Value | Purpose & Description |
+| :--- | :--- | :--- |
+| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Specifies the path to the quantized model weights file. |
+| `--port` | `8080` | Sets the HTTP port for the local OpenAI-compatible API expected by DeepAnalyze. |
+| `--host` | `127.0.0.1` | Binds the server to localhost, restricting network access strictly to your local machine. |
+| `-c`, `--ctx-size` | `16384` | Context window size in tokens. Use `16384` (16K) for standard data science workflows or `32768` (32K) for large matrices. |
+| `-ngl`, `--n-gpu-layers` | `99` | Offloads all transformer layers to GPU/Metal unified memory for hardware acceleration. |
+| `--cache-type-k` | `q8_0` | Quantizes Key-cache to 8-bit precision, cutting context memory usage in half with no degradation. |
+| `--cache-type-v` | `q8_0` | Quantizes Value-cache to 8-bit precision to maintain low RAM overhead during multi-step runs. |
+| `-fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
+| `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
+
+### Quick-Launch Shell Configuration (`start-deepanalyze`)
+
+To avoid manually typing long startup commands while maintaining the ability to override flags on the fly, add a dedicated launcher function to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+# Add to ~/.zshrc
+start-deepanalyze() {
+  llama-server \
+    -m ~/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf \
+    --port 8080 \
+    -c 16384 \
+    -fa on \
+    --cache-type-k q8_0 \
+    --cache-type-v q8_0 \
+    --grammar-file ~/Desktop/deepanalyze/grammars/deepanalyze.gbnf \
+    "$@"
+}
+```
+Apply the updated configuration:
+```
+source ~/.zshrc
+```
+
+Default Launch (16K Context + 8-bit KV Quantization + GBNF):
+```
+start-deepanalyze
+```
+
+Dynamic Context Expansion (e.g., Scaling to 32K Context):
+
+```
+start-deepanalyze -c 32768
+```
+
+Port Reassignment:
+
+```
+start-deepanalyze --port 8000
+```
+
+Custom Model Path Override:
+
+```
+start-deepanalyze -m /path/to/another-model.gguf
 ```
 
 ### 2. Python Dependencies
@@ -193,6 +300,7 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | Directive | Flag | Behavior | Primary Use Case |
 | :--- | :--- | :--- | :--- |
 | **Engine Status** | `--status` | Probes `llama-server` health endpoints, context window size, active model parameters, and current interceptor state. | Engine monitoring, health checks, and runtime environment inspection. |
+| **Privacy Mode** | `--privacy <mode>` | Enforces privacy strategy: auto, mask (ERP), profile (Stats), mock (PII), or none. | Controlling data sanitization levels prior to model ingestion. |
 | **Auto-Pilot Toggle** | `--toggle` | Dynamically flips the global cell interceptor on or off for plain-English auto-pilot execution. | Toggling between explicit magic calls and natural language auto-interception without restarting Jupyter. |
 | **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
 | **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
