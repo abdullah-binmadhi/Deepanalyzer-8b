@@ -1,3 +1,4 @@
+import argparse
 import ast
 import builtins
 import datetime
@@ -5,19 +6,27 @@ import difflib
 import json
 import os
 import re
-import sys
-import httpx
 import shlex
-import argparse
-import urllib.request
-import urllib.error
-import pandas as pd
-import numpy as np
+import sys
 import traceback
+import urllib.error
+import urllib.request
+import httpx
+import numpy as np
+import pandas as pd
 from IPython.core.magic import register_line_cell_magic
 from IPython import get_ipython
 from IPython.utils import io as ipy_io
 from openai import OpenAI
+
+# --- UNIVERSAL POLYMORPHIC ADAPTER ---
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
+# Ensure startup directory is in sys.path for privacy module imports
+from .privacy_knife import DeepAnalyzePrivacyKnife, LocalGatekeeper
 
 try:
     import duckdb
@@ -33,13 +42,11 @@ _LAST_USER_PROMPT = ""
 DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
 
 # --- DEEPSEEK CLOUD CONFIGURATION ---
-# Set your API key here or export it in your terminal via: export DEEPSEEK_API_KEY="sk.."
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 def _get_client(is_deepseek=False):
     """Dynamic Client Router: Local Server vs DeepSeek Cloud"""
     if is_deepseek:
-        # Pulls live from Python's environment dictionary every time
         api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("Missing DEEPSEEK_API_KEY! Run `import os; os.environ['DEEPSEEK_API_KEY'] = 'sk-...'` in your session.")
@@ -55,7 +62,7 @@ def _get_client(is_deepseek=False):
     )
 
 KNOWN_GLOBAL_SYMBOLS = {
-    "pd", "np", "plt", "sns", "duckdb", "scipy", "stats", "sklearn",
+    "pd", "np", "pl", "plt", "sns", "duckdb", "scipy", "stats", "sklearn",
     "math", "os", "sys", "re", "json", "datetime", "warnings", "difflib",
     "con", "_DUCKDB_CON", "True", "False", "None"
 } | set(dir(builtins))
@@ -70,39 +77,42 @@ TRANSIENT_VARS = {
 SKILL_RULEBOOKS = {
     "general": (
         "[GENERAL CODING RULES]:\n"
-        "1. For clean tabular data, modify `df` in-place. For unflattened/hierarchical reports, assign `df = pd.DataFrame(records)`.\n"
-        "2. NEVER use deprecated pandas methods (.append(), .applymap()). Use pd.concat() and .map().\n"
-        "3. Output executable Python code inside <Answer>```python ... ```</Answer>.\n"
+        "1. Check the active environment context to determine if the target DataFrame is Pandas or Polars.\n"
+        "2. If Pandas: modify `df` in-place. For unflattened/hierarchical reports, assign `df = pd.DataFrame(records)`.\n"
+        "3. If Polars: use strict Polars expressions and assign back to the target variable (e.g., `df = df.with_columns(pl.col(...))`).\n"
+        "4. NEVER use deprecated pandas methods (.append(), .applymap()). Use pd.concat() and .map().\n"
+        "5. Output executable Python code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "unravel": (
         "[HIERARCHICAL ERP REPORT FLATTENING RULEBOOK]:\n"
         "You parse messy, unstructured multi-row ERP accounting exports into clean 2D tabular DataFrames.\n"
         "Layout & Defensive Parsing Directives:\n"
-        "1. Positional Access: Access raw cells with `row.iloc[col_index]`.\n"
-        "2. TYPE-SAFETY INVARIANT: Sub-header rows contain string text (e.g. 'Quantity', 'Unit Price'). NEVER convert float(row.iloc[col]) at the loop header. Cast to float ONLY inside line-item conditions (`if    c0.isdigit():`) using safe conversion:\n"
-        "   `qty = float(row.iloc[10]) if pd.notna(row.iloc[10]) and str(row.iloc[10]).replace('.', '', 1).isdigit() else 0.0`\n"
-        "3. Output Variable Invariant: Assign the parsed records directly to `df = pd.DataFrame(records)`. DO NOT use `df_flat` or `clean_df`.\n"
-        "4. Parsing Pattern:\n"
-        "   - Identify invoice headers (e.g. `c0.startswith('IV-')`) and update active invoice state.\n"
-        "   - Identify detail rows (e.g. `c0.isdigit()` and `c1 != ''`) and append records.\n"
-        "   - Identify wrapped multiline text (e.g. `not c0 and c3 and last_item is not None`) and append to `last_item['description']`.\n"
-        "   - Stop processing when reaching summary sections ('grand total', 'account summary', 'item code summary').\n"
-        "5. Output ONLY executable code inside <Answer>```python ... ```</Answer>.\n"
+        "1. POSITIONAL ACCESS & STRING CASTER: Inside `for _, row in df.iterrows():`, define `c` strictly on `row`: `c = lambda idx: str(row.iloc[idx]).strip() if pd.notna(row.iloc[idx]) else ''`. NEVER use `df.iloc[idx]` inside `c()`.\n"
+        "2. HORIZONTAL HEADER PARSING: Header rows contain multiple key-value pairs horizontally across columns:\n"
+        "   `if c(0) == 'Doc. No': active_doc = {'doc_no': c(2), 'doc_date': c(4), 'customer': c(6)}`\n"
+        "3. DETAIL LINE ITEMS: Detect line items with `if c(0).isdigit() and c(1):`. Append item dictionary to `records` and set `last_item = item`.\n"
+        "4. NUMERIC CASTING: Use `float(c(idx).replace(',', '')) if c(idx).replace('.', '', 1).isdigit() else 0.0`\n"
+        "5. WRAPPED TRAILING TEXT: If `not c(0) and c(2) and last_item is not None and c(2).startswith('-')`, append cleanly to the PRECEDING item:\n"
+        "   `last_item['description'] += ' ' + c(2).lstrip('- ').strip()`\n"
+        "6. VARIABLE NAME INVARIANT: Pass the exact target variable name to helper functions (e.g., `df_erp = clean_erp_data(df_erp)`).\n"
+        "7. TERMINATION & OUTPUT: Stop at summary rows (`if c(0) == 'Grand Total': break`). Assign final output to the target DataFrame variable.\n"
+        "8. Output ONLY executable code inside <Answer>```python\n...\n```</Answer>.\n"
     ),
     "feature": (
         "[FEATURE ENGINEERING & WRANGLING RULEBOOK]:\n"
-        "1. Transform target DataFrame directly (e.g. `sales_data['col'] = ...`). DO NOT create `df_clean` or copy variables unless requested.\n"
-        "2. SAFE NUMERIC CASTING: ALWAYS use `pd.to_numeric(df['col'].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0)` instead of `.astype(float)`.\n"
-        "3. Protect against division by zero: `np.where(denom == 0, np.nan, num / denom)`.\n"
-        "4. Assertions: assert len(df) > 0, 'DataFrame is empty'\n"
+        "1. Check if the engine is Polars or Pandas from the context and transform directly.\n"
+        "2. PANDAS SAFE NUMERIC CASTING: ALWAYS use `pd.to_numeric(df['col'].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0)` instead of `.astype(float)`.\n"
+        "3. POLARS SAFE NUMERIC CASTING: Use `pl.col('col').str.replace_all(r'[^0-9.-]', '').cast(pl.Float64, strict=False).fill_null(0)`.\n"
+        "4. Protect against division by zero: Pandas (`np.where(denom == 0, np.nan, num / denom)`), Polars (`pl.when(denom == 0).then(None).otherwise(num / denom)`).\n"
         "5. Output executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "sql": (
         "[DUCKDB SQL RULEBOOK]:\n"
-        "1. Query the target DataFrame directly using DuckDB in-memory session (e.g. `duckdb.query('SELECT ... FROM df').df()`).\n"
-        "2. Keep SQL clean and standard. Reference columns directly without quotes or string slicing (e.g. `AVG(temperature_c)`).\n"
+        "1. Query Pandas and Polars DataFrames directly using DuckDB without opening new connections (e.g., `df_erp = duckdb.sql('SELECT customer, SUM(total) AS total_revenue FROM df_erp GROUP BY customer').df()`).\n"
+        "2. Keep SQL clean and standard. Reference columns directly by their exact names (e.g., `customer`, `total`).\n"
         "3. Column names must NEVER be enclosed in single quotes (single quotes are string literals in SQL).\n"
-        "4. Output executable code inside <Answer>```python ... ```</Answer>.\n"
+        "4. Always assign the resulting DataFrame back to the target variable (e.g., `df_erp = ...`).\n"
+        "5. Output executable code inside <Answer>```python ... ```</Answer>.\n"
     ),
     "viz": (
         "[SEABORN / MATPLOTLIB VISUALIZATION RULEBOOK]:\n"
@@ -158,8 +168,10 @@ SKILL_RULEBOOKS = {
 
 INVARIANT_CHECKLIST = (
     "\n[STRICT INVARIANT DIRECTIVE]:\n"
-    "1. DO NOT output conversational preamble or explanations outside code tags.\n"
-    "2. Enclose code strictly inside <Answer>```python ... ```</Answer>.\n"
+    "1. NEVER redefine, instantiate, or hardcode sample data (e.g. NEVER write `data = [...]` or `df = pd.DataFrame(...)` for existing tables).\n"
+    "2. Assume the target dataframe is already loaded in runtime. Transform it directly.\n"
+    "3. DO NOT output conversational preamble or explanations outside code tags.\n"
+    "4. Enclose code strictly inside <Answer>```python ... ```</Answer>.\n"
 )
 
 def check_engine_status(server_url=DEFAULT_SERVER_URL):
@@ -184,6 +196,7 @@ def check_engine_status(server_url=DEFAULT_SERVER_URL):
     
     interceptor_status = "🟢 Enabled (Auto-pilot on plain English cells)" if _INTERCEPTOR_ACTIVE else "⚪ Disabled (Explicit %deepanalyze calls only)"
     print(f"📡 Cell Interceptor   : {interceptor_status}")
+    print(f"⚡ Polars Acceleration : {'✅ Active' if pl is not None else '⚪ Not Installed'}")
 
     ip = get_ipython()
     tracked_dfs = list(_DF_SNAPSHOTS.keys())
@@ -199,36 +212,48 @@ def check_engine_status(server_url=DEFAULT_SERVER_URL):
 
 def _take_snapshot(ip, target="df"):
     global _DF_SNAPSHOTS
-    if ip and target in ip.user_ns and isinstance(ip.user_ns[target], pd.DataFrame):
-        _DF_SNAPSHOTS[target] = ip.user_ns[target].copy(deep=True)
+    if ip and target in ip.user_ns:
+        obj = ip.user_ns[target]
+        if isinstance(obj, pd.DataFrame):
+            _DF_SNAPSHOTS[target] = obj.copy(deep=True)
+        elif pl is not None and isinstance(obj, pl.DataFrame):
+            _DF_SNAPSHOTS[target] = obj.clone()
 
 def _restore_snapshot(ip, target="df") -> bool:
     global _DF_SNAPSHOTS
     if ip and target in _DF_SNAPSHOTS and _DF_SNAPSHOTS[target] is not None:
-        ip.user_ns[target] = _DF_SNAPSHOTS[target].copy(deep=True)
+        snap = _DF_SNAPSHOTS[target]
+        if isinstance(snap, pd.DataFrame):
+            ip.user_ns[target] = snap.copy(deep=True)
+        elif pl is not None and isinstance(snap, pl.DataFrame):
+            ip.user_ns[target] = snap.clone()
         return True
     return False
 
 def _sync_duckdb(ip):
-    # --- SNIPPET 1: AUTOMATIC DUCKDB BRIDGE ---
-    # Registers DataFrames directly to duckdb's global connection
     if duckdb is None or not ip:
         return
     for k, v in ip.user_ns.items():
-        if isinstance(v, pd.DataFrame) and not k.startswith("_") and k not in TRANSIENT_VARS:
-            try:
-                duckdb.register(k, v)
-            except Exception:
-                pass
+        if not k.startswith("_") and k not in TRANSIENT_VARS:
+            if isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, pl.DataFrame)):
+                try:
+                    duckdb.register(k, v)
+                except Exception:
+                    pass
 
 def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
     if not ip or target not in ip.user_ns:
         return ""
-    df = ip.user_ns[target]
-    if not isinstance(df, pd.DataFrame):
+    
+    obj = ip.user_ns[target]
+    cols = []
+    if isinstance(obj, pd.DataFrame):
+        cols = [str(c) for c in obj.columns]
+    elif pl is not None and isinstance(obj, pl.DataFrame):
+        cols = obj.columns
+    else:
         return ""
 
-    cols = [str(c) for c in df.columns]
     tokens = re.findall(r"\b[a-zA-Z0-9_]+\b", prompt)
     
     matches = []
@@ -246,59 +271,104 @@ def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
         return "\n--- PRE-FLIGHT COLUMN RESOLUTION ALIASES ---\n" + "\n".join(set(matches)) + "\n---------------------------------------------\n"
     return ""
 
-def _get_deep_workspace_context(ip) -> tuple[str, set]:
+def _get_deep_workspace_context(ip, target="df", is_cloud=False, privacy_mode="auto") -> tuple[str, set, object]:
     if not ip:
-        return "", set(KNOWN_GLOBAL_SYMBOLS)
+        return "", set(KNOWN_GLOBAL_SYMBOLS), None
 
     available_vars = set(KNOWN_GLOBAL_SYMBOLS)
     context_lines = []
+    knife_instance = None
 
     for name, obj in ip.user_ns.items():
         if name.startswith("_") or name in ("In", "Out", "exit", "quit", "get_ipython"):
             continue
 
         available_vars.add(name)
-
         if name in TRANSIENT_VARS:
             continue
 
-        if isinstance(obj, pd.DataFrame):
-            is_unnamed = any("unnamed" in str(c).lower() or isinstance(c, (int, np.integer)) for c in obj.columns)
-            
-            if is_unnamed or obj.shape[0] < 20:
-                grid_sample = obj.iloc[:18, :12].to_string()
+        is_pandas = isinstance(obj, pd.DataFrame)
+        is_polars = pl is not None and isinstance(obj, pl.DataFrame)
+
+        if is_pandas or is_polars:
+            engine_name = "Polars" if is_polars else "Pandas"
+
+            # APPLY PRIVACY MASKS IF ROUTED TO CLOUD OR FORCED VIA FLAG
+            if is_cloud or privacy_mode != "none":
+                strategy_override = None
+                if privacy_mode == "mask": strategy_override = "ERP_STRUCTURAL_MASK"
+                elif privacy_mode == "mock": strategy_override = "PII_DEIDENTIFIED_MOCK"
+                elif privacy_mode == "profile": strategy_override = "STANDARD_STATISTICAL_PROFILE"
+
+                safe_payload, knife_instance = LocalGatekeeper.generate_safe_payload(obj, custom_strategy=strategy_override)
                 context_lines.append(
-                    f"DataFrame `{name}` (Raw Grid Matrix, Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
-                    f"Top 18 Rows Matrix Preview:\n{grid_sample}"
+                    f"DataFrame `{name}` (Engine: {engine_name}) [PRIVACY-PRESERVED CONTEXT - NO RAW DATA]:\n"
+                    f"{json.dumps(safe_payload, indent=2)}"
                 )
             else:
-                col_profiles = []
-                for col in obj.columns:
-                    col_str = str(col)
-                    dtype = str(obj[col].dtype)
-                    null_pct = round(obj[col].isna().mean() * 100, 1)
-                    unique_count = obj[col].nunique()
-                    sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
-                    col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
+                # LOCAL RAW PREVIEW - Universal Adapter Logic
+                if is_polars:
+                    shape_0, shape_1 = obj.shape
+                    if shape_0 < 20:
+                        grid_sample = str(obj.head(18))
+                        context_lines.append(
+                            f"DataFrame `{name}` (Engine: Polars | Raw Grid Matrix, Shape: {shape_0} rows, {shape_1} cols):\n"
+                            f"Top 18 Rows Matrix Preview:\n{grid_sample}"
+                        )
+                    else:
+                        col_profiles = []
+                        null_counts = obj.null_count().row(0)
+                        for idx, col in enumerate(obj.columns):
+                            dtype = str(obj.schema[col])
+                            null_pct = round((null_counts[idx] / shape_0) * 100, 1) if shape_0 > 0 else 0.0
+                            unique_count = obj[col].n_unique()
+                            sample = str(obj[col].drop_nulls()[0]) if obj[col].drop_nulls().len() > 0 else "None"
+                            col_profiles.append(f"    - '{col}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
 
-                context_lines.append(
-                    f"DataFrame `{name}` (Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
-                    f"  Exact Column Names (CASE-SENSITIVE):\n" + "\n".join(col_profiles)
-                )
+                        context_lines.append(
+                            f"DataFrame `{name}` (Engine: Polars | Shape: {shape_0} rows, {shape_1} cols):\n"
+                            f"  Exact Column Names (CASE-SENSITIVE):\n" + "\n".join(col_profiles)
+                        )
+                elif is_pandas:
+                    is_unnamed = any("unnamed" in str(c).lower() or isinstance(c, (int, np.integer)) for c in obj.columns)
+                    if is_unnamed or obj.shape[0] < 20:
+                        grid_sample = obj.iloc[:18, :12].to_string()
+                        context_lines.append(
+                            f"DataFrame `{name}` (Engine: Pandas | Raw Grid Matrix, Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
+                            f"Top 18 Rows Matrix Preview:\n{grid_sample}"
+                        )
+                    else:
+                        col_profiles = []
+                        for col in obj.columns:
+                            col_str = str(col)
+                            dtype = str(obj[col].dtype)
+                            null_pct = round(obj[col].isna().mean() * 100, 1)
+                            unique_count = obj[col].nunique()
+                            sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
+                            col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
+
+                        context_lines.append(
+                            f"DataFrame `{name}` (Engine: Pandas | Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
+                            f"  Exact Column Names (CASE-SENSITIVE):\n" + "\n".join(col_profiles)
+                        )
 
     context_str = (
         "\n--- ACTIVE RUNTIME ENVIRONMENT CONTEXT ---\n"
         + ("\n\n".join(context_lines) if context_lines else "No custom DataFrames loaded.")
         + "\n-------------------------------------------\n"
     )
-    return context_str, available_vars
+    return context_str, available_vars, knife_instance
 
 def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str, str]:
     if not code_str.strip():
         return False, "", "Empty code block"
     try:
+        # 🛡️ AST SECURE SANDBOX ENFORCEMENT
+        DeepAnalyzePrivacyKnife.audit_generated_code(code_str)
         tree = ast.parse(code_str)
         normalized_code = ast.unparse(tree)
+    except PermissionError as pe:
+        return False, code_str, str(pe)
     except (SyntaxError, IndentationError) as e:
         return False, code_str, f"Syntax Error on line {e.lineno}: {e.msg}"
     except Exception as e:
@@ -311,6 +381,13 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
                 defined_in_code.add(alias.asname or alias.name)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             defined_in_code.add(node.name)
+            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
+                defined_in_code.add(arg.arg)
+            if node.args.vararg:
+                defined_in_code.add(node.args.vararg.arg)
+            if node.args.kwarg:
+                defined_in_code.add(node.args.kwarg.arg)
+        elif isinstance(node, ast.Lambda):
             for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
                 defined_in_code.add(arg.arg)
             if node.args.vararg:
@@ -333,30 +410,24 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
     return True, normalized_code, ""
 
 def _sanitize_traceback(tb_str: str, max_lines: int = 25) -> str:
-    """Filter out repetitive warnings and keep only the core traceback."""
     lines = [line for line in tb_str.splitlines() if not ("FutureWarning:" in line or "UserWarning:" in line)]
-    # Keep the final lines (where the actual crash occurred)
     return "\n".join(lines[-max_lines:])
 
 def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
     cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
-
-    # 1. Search for markdown fences ```python ... ```
     raw_blocks = re.findall(r"```(?:python|py)?\s*\n?(.*?)(?:```|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
     code = raw_blocks[0].strip() if raw_blocks else ""
 
-    # 2. Search for <Answer> tags
     if not code:
         answer_match = re.search(r"<Answer>(.*?)(?:</Answer>|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
         if answer_match:
             code = answer_match.group(1).strip()
             code = re.sub(r"```(?:python|py)?", "", code).replace("```", "").strip()
 
-    # 3. Fallback: If no tags or fences, extract code lines (for 8B repair outputs)
     if not code:
         lines = [l for l in cleaned_text.splitlines() if not l.startswith(('Root Cause:', 'Safe Strategy:', '1.', '2.', '3.'))]
         potential_code = "\n".join(lines).strip()
-        if any(keyword in potential_code for keyword in ('import ', 'def ', '=', 'pd.', 'plt.', 'Pipeline', 'GridSearchCV')):
+        if any(keyword in potential_code for keyword in ('import ', 'def ', '=', 'pd.', 'pl.', 'plt.', 'Pipeline', 'GridSearchCV')):
             code = potential_code
 
     narrative = re.sub(r"<Analyze>.*?(?:</Analyze>|$)", "", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
@@ -369,7 +440,7 @@ def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: in
     is_ds = target_model.startswith("deepseek")
     engine_name = "☁️ DeepSeek Cloud" if is_ds else "💻 Local Engine"
     
-    sys.stdout.write(f"\r[{engine_name} ({target_model})]: Analyzing request invariants...")
+    sys.stdout.write(f"\r[{engine_name} ({target_model})]: Processing request...")
     sys.stdout.flush()
 
     client = _get_client(is_deepseek=is_ds)
@@ -407,7 +478,7 @@ def deepanalyze(line, cell=None):
 
     parser = argparse.ArgumentParser(prog="%deepanalyze", description="Agentic LLM Execution Engine", add_help=False)
     parser.add_argument("--toggle", action="store_true", help="Toggle global cell interceptor on/off")
-    parser.add_argument("--status", action="store_true", help="Display server health, context size, and interceptor status")
+    parser.add_argument("--status", action="store_true", help="Display server health and security status")
     parser.add_argument("-x", "--exec", "--execute", dest="execute_code", action="store_true")
     parser.add_argument("-c", "--continue", dest="is_continuation", action="store_true")
     parser.add_argument("--save", action="store_true")
@@ -415,17 +486,20 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--deep", action="store_true")
     parser.add_argument("--ultra", action="store_true")
     
-    # NEW ON-DEMAND CLOUD FLAGS
+    # CLOUD ROUTING FLAGS
     parser.add_argument("--pro", action="store_true", help="Route prompt to DeepSeek-V4-Pro (deepseek-chat)")
     parser.add_argument("--flash", action="store_true", help="Route prompt to DeepSeek-V4-Flash (deepseek-chat)")
     parser.add_argument("--think", action="store_true", help="Route prompt to DeepSeek-Reasoner (deepseek-reasoner)")
     
-    #ADVANCED DATA SCIENCE FLAGS
-    parser.add_argument("--validate", action="store_true", help="Enable rigorous ML and statistical validation mode")
+    # NEW PRIVACY ENGINE FLAGS
+    parser.add_argument("--privacy", type=str, default="auto", choices=["auto", "mask", "profile", "mock", "none"], help="Privacy mode")
+    parser.add_argument("--audit-only", action="store_true", help="Display privacy payload without executing LLM")
+
+    # DATA SCIENCE SKILL FLAGS
+    parser.add_argument("--validate", action="store_true", help="Enable rigorous ML validation mode")
     parser.add_argument("--tune", action="store_true", help="Enable leak-free hyperparameter tuning mode")
-    parser.add_argument("--explain", action="store_true", help="Enable model interpretability and feature importance mode")
-    
-    parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from execution output")
+    parser.add_argument("--explain", action="store_true", help="Enable model interpretability mode")
+    parser.add_argument("-i", "--insight", action="store_true", help="Generate business insights from output")
     parser.add_argument("-u", "--unravel", action="store_true")
     parser.add_argument("-p", "--profile", action="store_true")
     parser.add_argument("-v", "--viz", action="store_true")
@@ -442,19 +516,28 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--undo", action="store_true")
 
     try:
-        parsed_args, remaining_words = parser.parse_known_args(shlex.split(raw_input))
-        prompt = " ".join(remaining_words).strip()
+        if cell is not None:
+            try:
+                parsed_args, remaining_words = parser.parse_known_args(shlex.split(line))
+            except Exception:
+                parsed_args, remaining_words = parser.parse_known_args(line.split())
+            prompt = ((" ".join(remaining_words) + "\n") if remaining_words else "") + cell.strip()
+        else:
+            try:
+                tokens = shlex.split(line)
+            except Exception:
+                tokens = line.split()
+            parsed_args, remaining_words = parser.parse_known_args(tokens)
+            prompt = " ".join(remaining_words).strip()
     except SystemExit:
         return
 
-    # Handle Toggle Flag
     if parsed_args.toggle:
         _INTERCEPTOR_ACTIVE = not _INTERCEPTOR_ACTIVE
         state_str = "🟢 ENABLED (Auto-pilot active)" if _INTERCEPTOR_ACTIVE else "⚪ DISABLED (Explicit mode)"
         print(f"🔄 DeepAnalyze Interceptor toggled: {state_str}")
         return
 
-    # Handle Status Flag
     if parsed_args.status:
         check_engine_status()
         return
@@ -467,12 +550,14 @@ def deepanalyze(line, cell=None):
             print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
         return
 
-    # ON-DEMAND MODEL ROUTING
     active_model = "deepanalyze-8b"
+    is_cloud_call = False
     if parsed_args.pro or parsed_args.flash:
         active_model = "deepseek-chat"
+        is_cloud_call = True
     elif parsed_args.think:
         active_model = "deepseek-reasoner"
+        is_cloud_call = True
 
     primary_skill = "general"
     if parsed_args.unravel: primary_skill = "unravel"
@@ -488,7 +573,7 @@ def deepanalyze(line, cell=None):
     elif parsed_args.explain: primary_skill = "explain"
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation:
-        print("Usage: %deepanalyze [-x] [--target df] [--think|--pro] [-u|-p|-v|-s|-f|-i] <task description>")
+        print("Usage: %deepanalyze [-x] [--target df] [--think|--pro] [--privacy auto|mask|profile] <task description>")
         return
 
     _sync_duckdb(ip)
@@ -497,7 +582,15 @@ def deepanalyze(line, cell=None):
     if parsed_args.fast: temp, max_tokens = 0.0, 1000
     elif parsed_args.ultra: temp, max_tokens = 0.05, 4096
 
-    env_context, available_vars = _get_deep_workspace_context(ip)
+    env_context, available_vars, knife = _get_deep_workspace_context(
+        ip, target=parsed_args.target, is_cloud=is_cloud_call, privacy_mode=parsed_args.privacy
+    )
+    
+    if parsed_args.audit_only:
+        print("🛡️ [DeepAnalyze Privacy Audit - Safe Payload to be Transmitted]:")
+        print(env_context)
+        return
+
     fuzzy_aliases = _fuzzy_match_columns(prompt, ip, target=parsed_args.target)
     rulebook = SKILL_RULEBOOKS.get(primary_skill, SKILL_RULEBOOKS["general"])
 
@@ -539,7 +632,6 @@ def deepanalyze(line, cell=None):
         if code:
             is_valid, clean_code, lint_error = _lint_and_format_code(code, available_vars)
 
-            # Pre-flight Auto Repair
             if not is_valid and clean_code:
                 print(f"[DeepAnalyze Pre-Flight Catch]: {lint_error}. Auto-repairing...")
                 repair_prompt = (
@@ -560,7 +652,6 @@ def deepanalyze(line, cell=None):
 
                 if parsed_args.execute_code and is_valid:
                     _take_snapshot(ip, target=parsed_args.target)
-                    
                     original_row_count = ip.user_ns[parsed_args.target].shape[0] if parsed_args.target in ip.user_ns else None
 
                     print(f"[{active_model} Executing]:\n" + clean_code + "\n" + "-" * 40)
@@ -576,24 +667,26 @@ def deepanalyze(line, cell=None):
                         result = ip.run_cell(clean_code)
 
                     for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
-                        if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
-                            if original_row_count and parsed_args.target in ip.user_ns and ip.user_ns[parsed_args.target].shape[0] == original_row_count:
-                                ip.user_ns[parsed_args.target] = ip.user_ns[alias]
-                            break
+                        if alias in ip.user_ns:
+                            val = ip.user_ns[alias]
+                            if isinstance(val, pd.DataFrame) or (pl is not None and isinstance(val, pl.DataFrame)):
+                                if original_row_count and parsed_args.target in ip.user_ns:
+                                    ip.user_ns[parsed_args.target] = val
+                                break
 
-                    # --- 3. INTERACTIVE AUTO-REPAIR & ESCALATOR ROUTER ---
                     if result.error_in_exec and parsed_args.retries > 0:
                         err = result.error_in_exec
                         for attempt in range(1, parsed_args.retries + 1):
                             print(f"\n⚠️ [Runtime Crash]: Caught {type(err).__name__}: {err}")
                             
-                            # Interactive User Prompt inside Notebook / Terminal
                             try:
-                                user_choice = input("How would you like to resolve this error?\n"
-                                                    "  [1] Retry locally with DeepAnalyze-8B (Free / Local)\n"
-                                                    "  [2] Escalate to DeepSeek Cloud (High-Reasoning Fix)\n"
-                                                    "  [3] Abort & Cancel Repair\n"
-                                                    "Select [1/2/3] (default: 1): ").strip()
+                                user_choice = input(
+                                    "How would you like to resolve this error?\n"
+                                    "  [1] Retry locally with DeepAnalyze-8B (Free / Local)\n"
+                                    "  [2] Escalate to DeepSeek Cloud (High-Reasoning Fix)\n"
+                                    "  [3] Abort & Cancel Repair\n"
+                                    "Select [1/2/3] (default: 1): "
+                                ).strip()
                             except (KeyboardInterrupt, EOFError):
                                 user_choice = "3"
 
@@ -601,14 +694,12 @@ def deepanalyze(line, cell=None):
                                 repair_model = "deepseek-reasoner"
                                 print(f"\n🚀 Escalating repair traceback to Cloud [{repair_model}]...")
                             elif user_choice == "3":
-                                print("\n🛑 Auto-repair aborted by user. Restore previous state with `%deepanalyze --undo` if needed.")
+                                print("\n🛑 Auto-repair aborted. Restore state with `%deepanalyze --undo` if needed.")
                                 break
                             else:
                                 repair_model = "deepanalyze-8b"
                                 print(f"\n🔄 Retrying repair locally with [{repair_model}]...")
 
-                            # ---> NEW TRACEBACK EXTRACTION & SANITIZATION <---
-                            import traceback
                             if hasattr(err, '__traceback__') and err.__traceback__ is not None:
                                 raw_tb = "".join(traceback.format_exception(type(err), err, err.__traceback__))
                             else:
@@ -616,7 +707,6 @@ def deepanalyze(line, cell=None):
                             
                             clean_tb = _sanitize_traceback(raw_tb)
 
-                            # Structured Root-Cause Reflection Prompt
                             repair_prompt = (
                                 f"[EXECUTION FAILURE REFLECTION]\n"
                                 f"The code you generated failed with the following traceback:\n"
@@ -647,8 +737,10 @@ def deepanalyze(line, cell=None):
                                 
                                 if not result.error_in_exec:
                                     for alias in ("df_flat", "clean_df", "df_clean", "records_df"):
-                                        if alias in ip.user_ns and isinstance(ip.user_ns[alias], pd.DataFrame):
-                                            ip.user_ns[parsed_args.target] = ip.user_ns[alias]
+                                        if alias in ip.user_ns:
+                                            val = ip.user_ns[alias]
+                                            if isinstance(val, pd.DataFrame) or (pl is not None and isinstance(val, pl.DataFrame)):
+                                                ip.user_ns[parsed_args.target] = val
                                             break
                                     print("✅ Auto-repair succeeded!")
                                     break
@@ -657,18 +749,12 @@ def deepanalyze(line, cell=None):
                                 print(f"❌ Failed to parse valid python code during repair.")
                                 break
 
-                   
-                    # INSIGHT SYNTHESIS POST-EXECUTION
                     if parsed_args.insight and not result.error_in_exec:
                         out_str = captured_output.stdout.strip() if (captured_output and captured_output.stdout) else "Execution succeeded but produced no console output."
                         print(f"\n🔍 [{active_model} Insights Synthesis]:")
                         insight_sys = "You are a senior data analyst. Provide 2-3 concise, actionable business bullet points based on this data output."
                         insight_prompt = f"User Request: {prompt}\n\nExecution Output:\n{out_str}\n\nProvide the insights."
-                        
-                        # Capture the output this time!
                         raw_insights = _call_llm(insight_prompt, insight_sys, temp=0.3, max_tokens=1000, target_model=active_model)
-                        
-                        # Clean out any <think> tags before printing
                         clean_insights = re.sub(r'<think>.*?</think>', '', raw_insights, flags=re.DOTALL | re.IGNORECASE).strip()
                         print(clean_insights)
                         print("\n" + "-" * 40)
@@ -676,7 +762,7 @@ def deepanalyze(line, cell=None):
                 else:
                     ip.set_next_input(clean_code)
                     if not is_valid:
-                        print(f"[DeepAnalyze Warning]: Static validation could not auto-resolve: {lint_error}. Code placed below.")
+                        print(f"[DeepAnalyze Warning]: Static validation issue: {lint_error}. Code placed below.")
                     else:
                         print("[DeepAnalyze]: Verified code placed below. Press Enter to run.")
 
@@ -685,7 +771,6 @@ def deepanalyze(line, cell=None):
         print(f"[DeepAnalyze Error]: Request failed. ({e})")
 
 def deepanalyze_interceptor(lines):
-    """Intercepts plain-text lines when auto-pilot is enabled."""
     global _INTERCEPTOR_ACTIVE
     if not lines:
         return lines
@@ -701,11 +786,7 @@ def deepanalyze_interceptor(lines):
             return lines
         
         full_cell = "".join(lines).strip()
-        # Use triple quotes (''' ... ''') so any quotes inside the prompt are fully safe
         return [f"""get_ipython().run_line_magic('deepanalyze', '-x {full_cell}')\n"""]
 
     return lines
 
-ip = get_ipython()
-if ip and deepanalyze_interceptor not in ip.input_transformers_cleanup:
-    ip.input_transformers_cleanup.append(deepanalyze_interceptor)
