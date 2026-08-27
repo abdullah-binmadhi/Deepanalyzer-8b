@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deepanalyze"
-version = "2.0.0"
+version = "2.1.0"
 description = "Agentic In-Memory Data Execution Engine for Jupyter/IPython"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,16 +19,21 @@ classifiers = [
 ]
 dependencies = [
     "pandas>=1.5.0",
+    "polars>=0.20.0",
+    "pyarrow>=14.0.0",
     "numpy>=1.20.0",
     "duckdb>=0.9.0",
     "matplotlib>=3.5.0",
     "seaborn>=0.12.0",
     "openai>=1.0.0",
     "httpx>=0.24.0",
-    "polars>=0.20.0",
-    "pyarrow>=14.0.0"
+    "rich>=13.0.0"
 ]
 
-# Add this section to tell it exactly which folder is the package
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0"
+]
+
 [tool.setuptools]
 packages = ["deepanalyze"]
