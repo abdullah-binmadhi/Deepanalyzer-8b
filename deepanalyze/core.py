@@ -1373,21 +1373,51 @@ def _handle_import(ip, args):
             elif ext in (".xlsx", ".xls", ".xlsb"):
                 if use_lazy:
                     print("[DeepAnalyze Warning]: --lazy is not supported for Excel files. Loading eagerly.")
-                sheet_arg = sheet if sheet is not None else 1
+                
+                # 1. Normalize Sheet Argument for Polars
+                sheet_kwargs = {}
+                if sheet is not None:
+                    raw_sheet = str(sheet).strip()
+                    if raw_sheet.isdigit():
+                        # Polars calamine/fastexcel engine uses 1-indexed sheet_id for integer indices
+                        sheet_kwargs["sheet_id"] = int(raw_sheet)
+                    else:
+                        # String sheet names go to sheet_name
+                        sheet_kwargs["sheet_name"] = raw_sheet
+                else:
+                    # Default to first sheet (sheet_id=1 for Polars)
+                    sheet_kwargs["sheet_id"] = 1
+
+                # 2. Resilient Parsing with Fallbacks
                 try:
-                    df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="calamine")
+                    # Primary: Fast Rust engine via fastexcel / calamine
+                    df = pl.read_excel(resolved_path, engine="calamine", **sheet_kwargs)
                 except ImportError:
-                    console.print("[yellow]⚠ calamine engine not installed. Falling back to openpyxl.[/yellow]")
                     try:
-                        df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="openpyxl")
-                    except ImportError:
-                        print("[DeepAnalyze Error]: Neither calamine nor openpyxl installed. Run `pip install python-calamine` or `pip install openpyxl`.")
-                        return
-                except Exception as e_cal:
+                        # Fallback 1: openpyxl engine
+                        # openpyxl expects sheet_name (either string name or 0-indexed integer)
+                        op_kwargs = {}
+                        if "sheet_id" in sheet_kwargs:
+                            op_kwargs["sheet_name"] = sheet_kwargs["sheet_id"] - 1
+                        else:
+                            op_kwargs["sheet_name"] = sheet_kwargs["sheet_name"]
+                            
+                        df = pl.read_excel(resolved_path, engine="openpyxl", **op_kwargs)
+                    except Exception:
+                        # Fallback 2: Pandas conversion bridge
+                        import pandas as pd
+                        pd_sheet = sheet_kwargs.get("sheet_name", sheet_kwargs.get("sheet_id", 1) - 1)
+                        pdf = pd.read_excel(resolved_path, sheet_name=pd_sheet)
+                        df = pl.from_pandas(pdf)
+                except Exception as e:
+                    # Final safety fallback via Pandas
                     try:
-                        df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="openpyxl")
-                    except Exception as e_opx:
-                        print(f"[DeepAnalyze Import Error]: Excel read failed.\n  calamine: {e_cal}\n  openpyxl: {e_opx}")
+                        import pandas as pd
+                        pd_sheet = sheet_kwargs.get("sheet_name", sheet_kwargs.get("sheet_id", 1) - 1)
+                        pdf = pd.read_excel(resolved_path, sheet_name=pd_sheet)
+                        df = pl.from_pandas(pdf)
+                    except Exception as e_pd:
+                        print(f"[DeepAnalyze Import Error]: Excel read failed: {e_pd}")
                         return
 
             # --- Delimited Text (CSV / TSV / TXT) ---

@@ -1,3 +1,5 @@
+import os
+import argparse
 import pytest
 import pandas as pd
 import numpy as np
@@ -1012,9 +1014,92 @@ def test_import_lazy_csv(tmp_path):
     assert "lazy_test_df" in mock_ip.user_ns
     assert isinstance(mock_ip.user_ns["lazy_test_df"], pl.LazyFrame)
 
+def test_import_excel_basic(tmp_path):
+    """Tests Excel import with default sheet and session/roadmap state binding."""
+    try:
+        import polars as pl
+        import openpyxl
+    except ImportError:
+        pytest.skip("Polars or openpyxl not installed")
 
-import os
+    excel_path = tmp_path / "inv_listing_31082025.xlsx"
+    pd_df = pd.DataFrame({"item_id": [101, 102], "price": [45.0, 99.5]})
+    pd_df.to_excel(str(excel_path), index=False, engine="openpyxl")
+
+    from deepanalyze import core
+    core._ACTIVE_ROADMAP = {"phase": 1, "goal": None, "hypotheses": []}
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(excel_path),
+        target="df",
+        sheet=None,
+        lazy=False
+    )
+
+    core._handle_import(mock_ip, args)
+
+    # 1. Target variable check
+    assert "inv_listing_31082025_df" in mock_ip.user_ns
+    imported = mock_ip.user_ns["inv_listing_31082025_df"]
+    assert imported.shape == (2, 2)
+    assert "item_id" in imported.columns
+    assert "price" in imported.columns
+
+    # 2. Snapshot check
+    assert "0_import_inv_listing_31082025_df" in core._DF_SNAPSHOTS
+
+    # 3. Active Roadmap check
+    assert core._ACTIVE_ROADMAP.get("target_df") == "inv_listing_31082025_df"
 
 
+def test_import_excel_sheet_by_index_and_name(tmp_path):
+    """Tests Excel import specifying sheet by digit string and by string name."""
+    try:
+        import polars as pl
+        import openpyxl
+    except ImportError:
+        pytest.skip("Polars or openpyxl not installed")
+
+    excel_path = tmp_path / "multi_sheet.xlsx"
+    with pd.ExcelWriter(str(excel_path), engine="openpyxl") as writer:
+        pd.DataFrame({"s1_col": [1, 2]}).to_excel(writer, sheet_name="FirstSheet", index=False)
+        pd.DataFrame({"s2_col": [10, 20]}).to_excel(writer, sheet_name="SecondSheet", index=False)
+
+    from deepanalyze import core
+    class MockIP:
+        user_ns = {}
+
+    # Import by sheet index string "2"
+    mock_ip = MockIP()
+    args_idx = argparse.Namespace(
+        import_path=str(excel_path),
+        target="sheet2_df",
+        sheet="2",
+        lazy=False
+    )
+    core._handle_import(mock_ip, args_idx)
+    assert "sheet2_df" in mock_ip.user_ns
+    assert "s2_col" in mock_ip.user_ns["sheet2_df"].columns
+
+    # Import by sheet name string "FirstSheet"
+    mock_ip2 = MockIP()
+    args_name = argparse.Namespace(
+        import_path=str(excel_path),
+        target="sheet1_df",
+        sheet="FirstSheet",
+        lazy=False
+    )
+    core._handle_import(mock_ip2, args_name)
+    assert "sheet1_df" in mock_ip2.user_ns
+    assert "s1_col" in mock_ip2.user_ns["sheet1_df"].columns
 
 
+def test_sanitize_var_name_invoice_listing():
+    """Verify exact stem sanitization for inv_listing_31082025.xlsx."""
+    assert _sanitize_var_name("inv_listing_31082025.xlsx") == "inv_listing_31082025_df"
+    assert _sanitize_var_name("/path/to/inv_listing_31082025.xlsx") == "inv_listing_31082025_df"
