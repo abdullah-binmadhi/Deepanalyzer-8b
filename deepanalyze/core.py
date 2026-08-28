@@ -1874,6 +1874,24 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     if pii_cols:
         console.print(f"🔒 [dim]Tokenized sensitive columns in RAM vault: {pii_cols} (Zero row records sent to cloud)[/dim]")
 
+    # Autonomous Hierarchical ERP Report Unravelling
+    is_hierarchical_erp = (
+        any(str(c).startswith("__UNNAMED__") for c in df.columns) or 
+        (strategy == "ERP_STRUCTURAL_MASK") or 
+        any(k in str(user_prompt).lower() for k in ["unnamed", "unravel", "sequence", "doc_no", "invoice_total", "full_description"])
+    )
+    if is_hierarchical_erp:
+        try:
+            unravelled_df = cleaners.unravel_hierarchical_erp_report(df)
+            if hasattr(unravelled_df, "shape") and unravelled_df.shape[0] > 0 and len(unravelled_df.columns) >= 5:
+                df = unravelled_df
+                if ip:
+                    ip.user_ns[target_name] = df
+                console.print("📑 [bold green]Autonomous ERP Unraveller applied: Normalized hierarchical report into 2D table.[/bold green]")
+                safe_payload, knife = LocalGatekeeper.generate_safe_payload(df, dataset_id=target_name)
+        except Exception as e_unravel:
+            console.print(f"[yellow]⚠ ERP Unraveller skipped: {e_unravel}[/yellow]")
+
     # Autonomous Polars Cleaning Code Generation
     # Autonomous Polars Cleaning Code Generation
     clean_sys = (
@@ -2480,6 +2498,15 @@ def deepanalyze(line, cell=None):
             ip.user_ns[target_name] = df_clean
             _register_snapshot(target_name, df_clean, "auto_type_cast")
             print(f"🏷️ [DeepAnalyze --auto-type]: Data types and booleans asserted for `{target_name}`.")
+        return
+
+    if parsed_args.unravel:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.unravel_hierarchical_erp_report(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "unravel_erp_report")
+            print(f"📑 [DeepAnalyze --unravel]: Hierarchical ERP report unrolled into normalized 2D table for `{target_name}` ({df_clean.shape[0]} rows x {df_clean.shape[1]} cols).")
         return
 
     if parsed_args.stitch:

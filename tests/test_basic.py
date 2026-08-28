@@ -1416,5 +1416,79 @@ def test_eda_dashboard_standalone(tmp_path):
     assert "Strong linear revenue-margin alignment observed." in content
 
 
+def test_cleaners_unravel_hierarchical_erp_report():
+    """Verify autonomous unravelling of hierarchical multi-row ERP invoice listings."""
+    from deepanalyze import cleaners
+    excel_path = "/Users/abdullahbinmadhi/Desktop/deepanalyze/INV LISTING 31082025.xlsx"
+    if os.path.exists(excel_path):
+        res = cleaners.unravel_hierarchical_erp_report(excel_path)
+        assert res.shape[0] >= 1800
+        assert "Sequence" in res.columns
+        assert "GL-Code" in res.columns
+        assert "Quantity" in res.columns
+        assert "Unit Price" in res.columns
+        assert "Item Amount" in res.columns
+        assert "doc_no" in res.columns
+        assert "doc_date" in res.columns
+        assert "customer_code" in res.columns
+        assert "Full_Description" in res.columns
+        assert round(float(res["Item Amount"].sum()), 2) == 995261.44
+
+
+def test_cleaners_unravel_general_ledger():
+    """Verify universal unravelling of General Ledger reports with inline key-value pairs and wrapped notes."""
+    import pandas as pd
+    from deepanalyze import cleaners
+
+    gl_raw_data = pd.DataFrame([
+        ['Account No: 1000-00', 'Account Name: CASH IN HAND', None, None, None],
+        ['Date', 'Ref No', 'Particulars', 'Debit', 'Credit'],
+        ['2025-01-01', 'OB-001', 'Opening Balance', 5000.0, 0.0],
+        ['2025-01-05', 'PV-101', 'Office Supplies Expense', 0.0, 350.0],
+        [None, None, 'Paper and ink cartridge replenishment', None, None],
+        ['2025-01-10', 'REC-202', 'Cash Sales Received', 1200.0, 0.0],
+        ['Account No: 2000-00', 'Account Name: ACCOUNTS PAYABLE', None, None, None],
+        ['Date', 'Ref No', 'Particulars', 'Debit', 'Credit'],
+        ['2025-01-02', 'BILL-501', 'Supplier Inv ABC Corp', 0.0, 4500.0],
+        ['2025-01-15', 'PV-102', 'Payment to ABC Corp', 2000.0, 0.0]
+    ])
+
+    res = cleaners.unravel_hierarchical_erp_report(gl_raw_data)
+    assert res.shape[0] == 5
+    assert "account_no" in res.columns
+    assert "account_name" in res.columns
+    assert "doc_no" in res.columns
+    assert "Debit" in res.columns
+    assert "Credit" in res.columns
+    assert res["Debit"].sum() == 8200.0
+    assert res["Credit"].sum() == 4850.0
+
+
+def test_cleaners_unravel_purchase_orders():
+    """Verify universal unravelling of Purchase Orders with vendor headers and item totals."""
+    import pandas as pd
+    from deepanalyze import cleaners
+
+    po_raw_data = pd.DataFrame([
+        ['PO No: PO-99881', 'PO Date: 2025-03-01', 'Vendor: Global Tech Ltd', 'Currency: USD', None],
+        ['Line No', 'SKU Code', 'Item Description', 'Qty Ordered', 'Unit Rate', 'Total Cost'],
+        [1, 'TECH-001', 'Dell UltraSharp Monitor 27"', 10, 350.0, 3500.0],
+        [2, 'TECH-002', 'Logitech MX Master 3S Mouse', 25, 99.0, 2475.0],
+        ['PO No: PO-99882', 'PO Date: 2025-03-05', 'Vendor: Office Supplies Inc', 'Currency: USD', None],
+        ['Line No', 'SKU Code', 'Item Description', 'Qty Ordered', 'Unit Rate', 'Total Cost'],
+        [1, 'OFF-101', 'Ergonomic Mesh Chair', 5, 180.0, 900.0]
+    ])
+
+    res = cleaners.unravel_hierarchical_erp_report(po_raw_data)
+    assert res.shape[0] == 3
+    assert "doc_no" in res.columns
+    assert "customer_code" in res.columns  # Vendor mapped to entity
+    assert "Quantity" in res.columns
+    assert "Item Amount" in res.columns
+    assert res["Item Amount"].sum() == 6875.0
+
+
+
+
 
 
