@@ -7,8 +7,8 @@ Implements the 3 Decoupled Lifecycles:
 
 import atexit
 import hashlib
-import json
 import os
+from pathlib import Path
 import re
 import sys
 import time
@@ -16,12 +16,37 @@ from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 
 try:
+    import orjson
+    def _json_dumps(obj: Any) -> str:
+        return orjson.dumps(obj, option=orjson.OPT_INDENT_2 | orjson.OPT_NON_STR_KEYS | orjson.OPT_SERIALIZE_NUMPY, default=str).decode("utf-8")
+    def _json_loads(data: Any) -> Any:
+        return orjson.loads(data)
+except ImportError:
+    import json
+    def _json_dumps(obj: Any) -> str:
+        return json.dumps(obj, indent=2, default=str)
+    def _json_loads(data: Any) -> Any:
+        return json.loads(data)
+
+try:
     import polars as pl
 except ImportError:
     pl = None
 
 
-MEMORY_STORE_PATH = os.path.abspath("./.deepanalyze_memory.json")
+def _resolve_memory_store_path() -> str:
+    """Resolves cross-platform memory store path safely."""
+    try:
+        home_path = Path.home() / ".deepanalyze_memory.json"
+        # Test writability
+        if not home_path.exists():
+            home_path.touch(exist_ok=True)
+        return str(home_path)
+    except Exception:
+        return os.path.abspath("./.deepanalyze_memory.json")
+
+
+MEMORY_STORE_PATH = _resolve_memory_store_path()
 
 
 class BiomimeticBrain:
@@ -36,8 +61,13 @@ class BiomimeticBrain:
     def _load_memory(self) -> Dict[str, Any]:
         if os.path.exists(self.storage_path):
             try:
-                with open(self.storage_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                with open(self.storage_path, "rb") as f:
+                    content = f.read()
+                    if content:
+                        data = _json_loads(content)
+                        if "query_cache" not in data:
+                            data["query_cache"] = {}
+                        return data
             except Exception:
                 pass
         return {
@@ -46,15 +76,53 @@ class BiomimeticBrain:
             "delta_logs": [],
             "epistemic_facts": {},
             "verified_rules": [],
-            "hardware_profiles": []
+            "hardware_profiles": [],
+            "query_cache": {}
         }
 
     def _save_memory(self):
         try:
             with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(self.memory, f, indent=2)
+                f.write(_json_dumps(self.memory))
         except Exception:
             pass
+
+    # =========================================================================
+    # STRUCTURAL QUERY CACHE
+    # =========================================================================
+
+    def compute_query_hash(self, prompt: str, df: object) -> str:
+        """Computes deterministic hash from clean prompt and dataset geometry."""
+        geo_hash = self.compute_geometry_hash(df) if df is not None else "no_df"
+        clean_p = re.sub(r"\s+", " ", prompt.strip().lower())
+        sig = f"{clean_p}::{geo_hash}"
+        return hashlib.sha256(sig.encode("utf-8")).hexdigest()[:20]
+
+    def get_cached_query(self, prompt: str, df: object) -> Optional[str]:
+        """Retrieves cached verified AST code if present."""
+        q_hash = self.compute_query_hash(prompt, df)
+        cached = self.memory.get("query_cache", {}).get(q_hash)
+        if cached and isinstance(cached, dict) and "code" in cached:
+            return cached["code"]
+        return None
+
+    def cache_verified_query(self, prompt: str, df: object, code: str):
+        """Caches verified AST code mapped to prompt and dataset geometry."""
+        if not prompt or not code:
+            return
+        q_hash = self.compute_query_hash(prompt, df)
+        if "query_cache" not in self.memory:
+            self.memory["query_cache"] = {}
+        self.memory["query_cache"][q_hash] = {
+            "prompt": prompt.strip(),
+            "code": code.strip(),
+            "timestamp": time.time()
+        }
+        # Keep cache bounded to top 200 items
+        if len(self.memory["query_cache"]) > 200:
+            oldest_key = min(self.memory["query_cache"].keys(), key=lambda k: self.memory["query_cache"][k].get("timestamp", 0))
+            self.memory["query_cache"].pop(oldest_key, None)
+        self._save_memory()
 
     # =========================================================================
     # PHASE A: PASSIVE INGESTION (POST-EXECUTION)

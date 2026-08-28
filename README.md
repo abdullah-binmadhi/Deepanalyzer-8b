@@ -306,29 +306,32 @@ Custom Model Path Override:
 start-deepanalyze -m /path/to/another-model.gguf
 ```
 
-### 2. Python Dependencies
+### 2. Python Dependencies & Environment Setup
 
-Install the core engine alongside the modern scientific computing stack:
+Install dependencies using `uv` (recommended for 10x–100x faster installation) or standard `pip`:
 
 ```bash
-pip install pandas polars pyarrow numpy scipy scikit-learn statsmodels duckdb fastexcel openpyxl xlsxwriter matplotlib seaborn openai httpx rich ipython
-```
+# Option A: Ultra-fast installation with uv (Recommended)
+uv pip install -e .
 
-### 3. Install the DeepAnalyze Package
-Clone this repository and install it as an editable Python package using pip. This automatically registers the core engine and privacy modules into your environment.
-
-```
-# Clone the repository
-git clone [https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git](https://github.com/abdullah-binmadhi/Deepanalyzer-8b.git) ~/Desktop/deepanalyze
-cd ~/Desktop/deepanalyze
-```
-# Install the package (Editable mode recommended)
-```
+# Option B: Standard pip
 pip install -e .
 ```
-Launch ipython or start a Jupyter notebook. Load the extension by running the following command in your first cell:
 
+For dense ONNX neural semantic search, install the optional semantic extra:
+```bash
+uv pip install -e ".[semantic]"
 ```
+
+### 3. Start the Server & Load the Package
+Start the local inference server with automatic hardware acceleration detection:
+```bash
+deepanalyze server start
+```
+
+Launch IPython or start a Jupyter notebook. Load the extension by running the following command in your first cell:
+
+```python
 %load_ext deepanalyze
 ```
 

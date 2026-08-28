@@ -46,6 +46,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     --cache-type-k q8_0
     --cache-type-v q8_0
     --cache-reuse 256
+    --min-p 0.05
   )
 else
   # Linux / CUDA / CPU fallback
@@ -55,6 +56,8 @@ else
     -c 8192
     --cache-type-k q8_0
     --cache-type-v q8_0
+    --cache-reuse 256
+    --min-p 0.05
   )
 fi
 

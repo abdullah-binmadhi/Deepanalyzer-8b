@@ -34,13 +34,20 @@ dependencies = [
     "openai>=1.0.0",
     "httpx>=0.24.0",
     "rich>=13.0.0",
-    "ipython>=8.0.0"
+    "ipython>=8.0.0",
+    "orjson>=3.9.0"
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.0"
 ]
+semantic = [
+    "fastembed>=0.2.0"
+]
 
 [tool.setuptools]
 packages = ["deepanalyze"]
+
+[project.scripts]
+deepanalyze = "deepanalyze.server:cli_entrypoint"

@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 import sys
+from typing import List, Dict, Any, Optional, Tuple, Set
 
 # 🛡️ THREADPOOL & APPLE SILICON FORK CRASH SHIELD
 if "POLARS_MAX_THREADS" not in os.environ:
@@ -30,6 +31,19 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
+try:
+    import orjson
+    def _json_dumps(obj: Any) -> str:
+        return orjson.dumps(obj, option=orjson.OPT_INDENT_2 | orjson.OPT_NON_STR_KEYS | orjson.OPT_SERIALIZE_NUMPY, default=str).decode("utf-8")
+    def _json_loads(data: Any) -> Any:
+        return orjson.loads(data)
+except ImportError:
+    import json
+    def _json_dumps(obj: Any) -> str:
+        return json.dumps(obj, indent=2, default=str)
+    def _json_loads(data: Any) -> Any:
+        return json.loads(data)
 
 console = Console()
 
@@ -123,12 +137,33 @@ FLAGS = [
     "--weave",
     "--solve",
     "--evolve",
-    "--brain"
+    "--brain",
+    "--assert",
+    "--diff-stats",
+    "--sql"
 ]
 
 def deepanalyze_completer(self, event):
-    """Provides auto-complete suggestions for %deepanalyze flags."""
-    return [flag for flag in FLAGS if flag.startswith(event.symbol)]
+    """Provides auto-complete suggestions for %deepanalyze flags, target variables, and columns."""
+    symbol = event.symbol or ""
+    line_text = getattr(event, "line", "") or ""
+
+    # Context-aware completion: if typing after --target, suggest DataFrames in user namespace
+    if "--target" in line_text:
+        tokens = line_text.split()
+        if len(tokens) >= 2 and tokens[-2] in ("--target", "-t"):
+            ip = get_ipython()
+            if ip:
+                df_vars = [
+                    k for k, v in ip.user_ns.items()
+                    if not k.startswith("_") and (
+                        isinstance(v, pd.DataFrame) or
+                        (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame)))
+                    )
+                ]
+                return [v for v in df_vars if v.startswith(symbol)]
+
+    return [flag for flag in FLAGS if flag.startswith(symbol)]
 
 # --- UNIVERSAL POLYMORPHIC ADAPTER ---
 try:
@@ -156,6 +191,7 @@ from . import enricher
 from . import pipeline_compiler
 from . import optimizer
 from . import brain
+from . import server
 
 try:
     import duckdb
@@ -165,7 +201,8 @@ except ImportError:
     _DUCKDB_CON = None
 
 _DF_SNAPSHOTS = {}
-_DF_SNAPSHOT_METADATA = {}
+_DF_SNAPSHOT_STACK = {}  # {target: [state_0, state_1, state_2, ...]}
+_DF_SNAPSHOT_METADATA = {}  # {target: [meta_0, meta_1, meta_2, ...]}
 _ACTIVE_ROADMAP = {"phase": 1, "goal": None, "hypotheses": []}
 _INTERCEPTOR_ACTIVE = False
 _LAST_GENERATED_CODE = ""
@@ -476,28 +513,54 @@ def load_ipython_extension(ipython):
     ipython.set_hook('complete_command', deepanalyze_completer, str_key='%deepanalyze')
 
 def _take_snapshot(ip, target="df"):
-    global _DF_SNAPSHOTS, _DF_SNAPSHOT_METADATA
+    global _DF_SNAPSHOTS, _DF_SNAPSHOT_STACK, _DF_SNAPSHOT_METADATA
     if ip and target in ip.user_ns:
         obj = ip.user_ns[target]
+        col_list = list(obj.columns) if hasattr(obj, "columns") else (
+            obj.collect_schema().names() if hasattr(obj, "collect_schema") else []
+        )
         meta_entry = {
             "time": datetime.datetime.now().strftime("%H:%M:%S"),
             "shape": getattr(obj, "shape", (0, 0)),
-            "cols": list(obj.columns) if hasattr(obj, "columns") else []
+            "cols": col_list
         }
+        snap = None
         if isinstance(obj, pd.DataFrame):
-            _DF_SNAPSHOTS[target] = obj.copy(deep=True)
-            _DF_SNAPSHOT_METADATA.setdefault(target, []).append(meta_entry)
+            snap = obj.copy(deep=True)
+            _DF_SNAPSHOTS[target] = snap
         elif pl is not None and isinstance(obj, pl.DataFrame):
-            _DF_SNAPSHOTS[target] = obj.clone()
+            snap = obj.clone()
+            _DF_SNAPSHOTS[target] = snap
+        elif pl is not None and isinstance(obj, pl.LazyFrame):
+            snap = obj.clone()
+            _DF_SNAPSHOTS[target] = snap
+
+        if snap is not None:
+            _DF_SNAPSHOT_STACK.setdefault(target, []).append(snap)
             _DF_SNAPSHOT_METADATA.setdefault(target, []).append(meta_entry)
 
-        # 🧹 LRU Memory Snapshot Lineage Pruning (Cap at last 5 states to prevent memory bloat)
-        if len(_DF_SNAPSHOT_METADATA.get(target, [])) > 5:
-            _DF_SNAPSHOT_METADATA[target] = _DF_SNAPSHOT_METADATA[target][-5:]
+            # Cap stack at last 5 states to prevent memory bloat
+            if len(_DF_SNAPSHOT_STACK[target]) > 5:
+                _DF_SNAPSHOT_STACK[target] = _DF_SNAPSHOT_STACK[target][-5:]
+            if len(_DF_SNAPSHOT_METADATA[target]) > 5:
+                _DF_SNAPSHOT_METADATA[target] = _DF_SNAPSHOT_METADATA[target][-5:]
 
 def _restore_snapshot(ip, target="df") -> bool:
-    global _DF_SNAPSHOTS
-    if ip and target in _DF_SNAPSHOTS and _DF_SNAPSHOTS[target] is not None:
+    global _DF_SNAPSHOTS, _DF_SNAPSHOT_STACK, _DF_SNAPSHOT_METADATA
+    if ip and target in _DF_SNAPSHOT_STACK and _DF_SNAPSHOT_STACK[target]:
+        snap = _DF_SNAPSHOT_STACK[target].pop()
+        if _DF_SNAPSHOT_METADATA.get(target):
+            _DF_SNAPSHOT_METADATA[target].pop()
+
+        if isinstance(snap, pd.DataFrame):
+            ip.user_ns[target] = snap.copy(deep=True)
+        elif pl is not None and (isinstance(snap, pl.DataFrame) or isinstance(snap, pl.LazyFrame)):
+            ip.user_ns[target] = snap.clone()
+
+        # Update _DF_SNAPSHOTS top state for backward compatibility
+        _DF_SNAPSHOTS[target] = _DF_SNAPSHOT_STACK[target][-1] if _DF_SNAPSHOT_STACK[target] else None
+        return True
+    elif ip and target in _DF_SNAPSHOTS and _DF_SNAPSHOTS[target] is not None:
         snap = _DF_SNAPSHOTS[target]
         if isinstance(snap, pd.DataFrame):
             ip.user_ns[target] = snap.copy(deep=True)
@@ -592,6 +655,287 @@ def _sync_duckdb(ip):
                 except Exception:
                     pass
 
+# =============================================================================
+# 8B LOCAL LLM EFFICIENCY STACK: AST EXEMPLARS, SURGICAL TRACEBACKS & GBNF ENUMS
+# =============================================================================
+
+POLARS_AST_EXEMPLARS = {
+    "rolling": (
+        "# 7-day rolling mean calculation:\n"
+        "df = df.with_columns(rolling_avg=pl.col('metric').rolling_mean(window_size=7))"
+    ),
+    "when": (
+        "# Vectorized conditional logic:\n"
+        "df = df.with_columns(tier=pl.when(pl.col('score') >= 80).then(pl.lit('High')).otherwise(pl.lit('Low')))"
+    ),
+    "group_by": (
+        "# Group-by multi-column aggregation:\n"
+        "df = df.group_by(['category', 'region']).agg([\n"
+        "    pl.col('sales').sum().alias('total_sales'),\n"
+        "    pl.col('profit').mean().alias('avg_profit')\n"
+        "])"
+    ),
+    "string_clean": (
+        "# Text normalization and sanitization:\n"
+        "df = df.with_columns(clean_name=pl.col('raw_name').str.strip_chars().str.to_uppercase().str.replace_all(r'[^A-Z0-9 ]', ''))"
+    ),
+    "regex_extract": (
+        "# Regular expression sub-pattern extraction:\n"
+        "df = df.with_columns(code=pl.col('raw_id').str.extract(r'([A-Z]{2}-\\d{4})', 1))"
+    ),
+    "datetime": (
+        "# Robust datetime parsing and temporal feature extraction:\n"
+        "df = df.with_columns(dt=pl.col('date_str').str.to_datetime(strict=False))\n"
+        "df = df.with_columns(year=pl.col('dt').dt.year(), month=pl.col('dt').dt.month(), day_name=pl.col('dt').dt.weekday())"
+    ),
+    "currency_cast": (
+        "# Defensive accounting string cast ($1,234.50, (500.00) -> -500.0):\n"
+        "df = df.with_columns(amount=pl.col('raw_amt').cast(pl.Utf8, strict=False).str.replace_all(r'\\((.*?)\\)', r'-\\1').str.replace_all(r'[\\$,]', '').cast(pl.Float64, strict=False).fill_null(0.0))"
+    ),
+    "safe_division": (
+        "# Zero-division protected margin calculation:\n"
+        "df = df.with_columns(margin=pl.when(pl.col('revenue') == 0).then(0.0).otherwise((pl.col('revenue') - pl.col('cost')) / pl.col('revenue')))"
+    ),
+    "clip_outliers": (
+        "# Outlier bounding and winsorization:\n"
+        "df = df.with_columns(bounded=pl.col('metric').clip(lower_bound=0.0, upper_bound=10000.0))"
+    ),
+    "unpivot": (
+        "# Unpivot / Melt wide temporal columns into tidy rows:\n"
+        "df = df.unpivot(index=['id', 'date'], on=['q1', 'q2', 'q3', 'q4'], variable_name='quarter', value_name='revenue')"
+    ),
+    "pivot": (
+        "# Pivot tidy records into wide summary matrix:\n"
+        "df = df.pivot(index='date', on='category', values='sales', aggregate_function='sum')"
+    ),
+    "rank_window": (
+        "# Window function ranking / Top-K per partition:\n"
+        "df = df.filter(pl.col('rank').over('department') <= 3)"
+    ),
+    "lag_lead": (
+        "# Time-series lag and period-over-period delta:\n"
+        "df = df.with_columns(prev=pl.col('sales').shift(1).over('store_id'))\n"
+        "df = df.with_columns(growth=(pl.col('sales') - pl.col('prev')) / pl.when(pl.col('prev') == 0).then(1.0).otherwise(pl.col('prev')))"
+    ),
+    "cum_sum": (
+        "# Running cumulative sum over customer cohorts:\n"
+        "df = df.with_columns(cum_rev=pl.col('revenue').cum_sum().over('customer_id'))"
+    ),
+    "impute": (
+        "# Impute missing values with median or forward fill:\n"
+        "df = df.with_columns(pl.col('metric').fill_null(strategy='forward'), pl.col('score').fill_null(pl.col('score').median()))"
+    )
+}
+
+
+def _retrieve_ast_exemplar(prompt: str) -> str:
+    """Dynamically retrieves the top matching canonical Polars idiom to anchor 8B code generation."""
+    p_lower = prompt.lower()
+    matches = []
+    
+    if any(k in p_lower for k in ["roll", "moving avg", "moving average", "window"]):
+        matches.append(POLARS_AST_EXEMPLARS["rolling"])
+    elif any(k in p_lower for k in ["if", "condition", "when", "then", "otherwise", "case"]):
+        matches.append(POLARS_AST_EXEMPLARS["when"])
+    elif any(k in p_lower for k in ["group", "aggregate", "agg", "by region", "by category"]):
+        matches.append(POLARS_AST_EXEMPLARS["group_by"])
+    elif any(k in p_lower for k in ["clean string", "uppercase", "strip", "sanitize string"]):
+        matches.append(POLARS_AST_EXEMPLARS["string_clean"])
+    elif any(k in p_lower for k in ["extract", "regex", "pattern"]):
+        matches.append(POLARS_AST_EXEMPLARS["regex_extract"])
+    elif any(k in p_lower for k in ["date", "datetime", "temporal", "year", "month"]):
+        matches.append(POLARS_AST_EXEMPLARS["datetime"])
+    elif any(k in p_lower for k in ["currency", "dollar", "$", "price", "amount", "accounting"]):
+        matches.append(POLARS_AST_EXEMPLARS["currency_cast"])
+    elif any(k in p_lower for k in ["divide", "division", "ratio", "margin", "zero"]):
+        matches.append(POLARS_AST_EXEMPLARS["safe_division"])
+    elif any(k in p_lower for k in ["outlier", "clip", "winsorize", "bound"]):
+        matches.append(POLARS_AST_EXEMPLARS["clip_outliers"])
+    elif any(k in p_lower for k in ["unpivot", "melt", "wide to long"]):
+        matches.append(POLARS_AST_EXEMPLARS["unpivot"])
+    elif any(k in p_lower for k in ["pivot", "long to wide", "matrix"]):
+        matches.append(POLARS_AST_EXEMPLARS["pivot"])
+    elif any(k in p_lower for k in ["rank", "top 3", "top 5", "top k", "over("]):
+        matches.append(POLARS_AST_EXEMPLARS["rank_window"])
+    elif any(k in p_lower for k in ["lag", "lead", "shift", "mom", "yoy", "previous"]):
+        matches.append(POLARS_AST_EXEMPLARS["lag_lead"])
+    elif any(k in p_lower for k in ["cumsum", "cumulative", "running total"]):
+        matches.append(POLARS_AST_EXEMPLARS["cum_sum"])
+    elif any(k in p_lower for k in ["impute", "fill null", "missing", "nan"]):
+        matches.append(POLARS_AST_EXEMPLARS["impute"])
+
+    if matches:
+        return f"\n--- VERIFIED POLARS SYNTAX EXEMPLAR ---\n{matches[0]}\n--------------------------------------\n"
+    return ""
+
+
+def _distill_surgical_traceback(exc: Exception, broken_code: str, df: object = None) -> str:
+    """Extracts a high-signal, 2-line surgical error payload stripping internal engine stack frames."""
+    exc_type = type(exc).__name__
+    exc_msg = str(exc)
+    cols = list(df.columns) if hasattr(df, "columns") else []
+
+    # Check if error references an invalid/missing column name
+    missing_match = re.search(r"column ['\"]([^'\"]+)['\"]", exc_msg, re.IGNORECASE) or re.search(r"KeyError:\s*['\"]([^'\"]+)['\"]", exc_msg)
+    if missing_match and cols:
+        missing_col = missing_match.group(1)
+        close_matches = difflib.get_close_matches(missing_col, [str(c) for c in cols], n=3, cutoff=0.4)
+        suggestions = f"\nAVAILABLE MATCHES: {close_matches}" if close_matches else f"\nVALID COLUMNS: {[str(c) for c in cols[:8]]}"
+        return (
+            f"FAILED AT: `{missing_col}`\n"
+            f"ERROR: {exc_type}: {exc_msg}{suggestions}\n"
+            f"DIRECTIVE: Fix the column reference to match the exact schema contract without mutating unrelated logic."
+        )
+
+    # Extract failing line from broken code
+    failing_line = ""
+    if broken_code:
+        lines = [l.strip() for l in broken_code.splitlines() if l.strip() and not l.strip().startswith("#")]
+        failing_line = lines[-1] if lines else broken_code
+
+    return (
+        f"FAILED LINE: {failing_line}\n"
+        f"ERROR: {exc_type}: {exc_msg}\n"
+        f"DIRECTIVE: Correct this syntax error. Output ONLY executable code."
+    )
+
+
+def _build_dynamic_enum_grammar(df: object, target_cols: List[str] = None) -> str:
+    """Extracts categorical values for columns with <50 unique values to prevent value hallucinations."""
+    if df is None:
+        return ""
+    enums = {}
+    cols = target_cols or (list(df.columns) if hasattr(df, "columns") else [])
+    for col in cols:
+        try:
+            if hasattr(df, "schema") and col in df.schema:
+                dtype_str = str(df.schema[col]).lower()
+                if any(k in dtype_str for k in ["utf8", "str", "cat"]):
+                    n_uniq = df[col].n_unique()
+                    if 1 < n_uniq <= 50:
+                        vals = [str(v) for v in df[col].drop_nulls().unique().to_list()[:50] if v is not None]
+                        enums[col] = vals
+            elif hasattr(df, "dtypes") and col in df.dtypes:
+                if pd.api.types.is_string_dtype(df[col]) or isinstance(df[col].dtype, pd.CategoricalDtype):
+                    n_uniq = df[col].nunique()
+                    if 1 < n_uniq <= 50:
+                        vals = [str(v) for v in df[col].dropna().unique()[:50] if v is not None]
+                        enums[col] = vals
+        except Exception:
+            continue
+
+    if not enums:
+        return ""
+
+    lines = ["[STRICT CATEGORICAL VALUE ENUMS (Do not hallucinate alternative values)]:\n"]
+    for col, vals in enums.items():
+        sample_vals = ", ".join([f'"{v}"' for v in vals[:8]])
+        if len(vals) > 8:
+            sample_vals += f", ... ({len(vals)} valid enum values)"
+        lines.append(f"• pl.col('{col}'): Must match one of [{sample_vals}]")
+    return "\n".join(lines) + "\n"
+
+
+def _format_micro_schema(obj, name: str, is_polars: bool = True) -> str:
+    """Formats high-density single-line micro-schema contract saving >80% context tokens."""
+    # ⚡ Polars LazyFrame Zero-Scan Inspection (Zero-OOM, no .collect() trigger)
+    if pl is not None and isinstance(obj, pl.LazyFrame):
+        schema = obj.collect_schema()
+        col_names = schema.names()
+        col_profiles = []
+        for col in col_names:
+            dtype = str(schema[col])
+            col_profiles.append(f"  • '{col}' ({dtype}) | [LazyPlan]")
+
+        if len(col_profiles) > 30:
+            col_profiles = col_profiles[:25] + [f"  ... and {len(col_profiles) - 25} other continuous/categorical dimensions."]
+
+        return (
+            f"LazyFrame `{name}` (Engine: Polars LazyPlan | {len(col_names)} columns):\n"
+            f"[MICRO-SCHEMA CONTRACT (Case-Sensitive)]:\n" + "\n".join(col_profiles)
+        )
+
+    if is_polars:
+        shape_0, shape_1 = obj.shape
+        col_profiles = []
+        null_counts = obj.null_count().row(0) if shape_0 > 0 else [0] * len(obj.columns)
+        for idx, col in enumerate(obj.columns):
+            dtype = str(obj.schema[col])
+            null_pct = round((null_counts[idx] / shape_0) * 100, 1) if shape_0 > 0 else 0.0
+            n_uniq = obj[col].n_unique() if shape_0 > 0 else 0
+
+            # Numeric columns -> Range + Mean
+            if any(t in dtype.lower() for t in ["float", "int", "decimal"]):
+                non_null = obj[col].drop_nulls()
+                if non_null.len() > 0:
+                    min_val = round(float(non_null.min()), 2)
+                    max_val = round(float(non_null.max()), 2)
+                    mean_val = round(float(non_null.mean()), 2)
+                    col_profiles.append(f"  • '{col}' ({dtype}) | Nulls: {null_pct}% | Range: [{min_val} → {max_val}] | Mean: {mean_val}")
+                else:
+                    col_profiles.append(f"  • '{col}' ({dtype}) | Nulls: 100% | Empty")
+            elif any(t in dtype.lower() for t in ["date", "time"]):
+                non_null = obj[col].drop_nulls()
+                if non_null.len() > 0:
+                    col_profiles.append(f"  • '{col}' ({dtype}) | Nulls: {null_pct}% | Range: [{non_null.min()} → {non_null.max()}]")
+                else:
+                    col_profiles.append(f"  • '{col}' ({dtype}) | Nulls: 100% | Empty")
+            elif "bool" in dtype.lower():
+                col_profiles.append(f"  • '{col}' (bool) | Nulls: {null_pct}% | Unique: {n_uniq}")
+            else:
+                # String / Categorical -> Top sample unique values
+                non_null = obj[col].drop_nulls()
+                samples = [str(v) for v in non_null.unique().to_list()[:3] if v is not None]
+                sample_str = f"Sample: {samples}" if samples else "Empty"
+                col_profiles.append(f"  • '{col}' ({dtype}) | Nulls: {null_pct}% | Unique: {n_uniq} | {sample_str}")
+
+        if len(col_profiles) > 30:
+            col_profiles = col_profiles[:25] + [f"  ... and {len(col_profiles) - 25} other continuous/categorical dimensions."]
+
+        return (
+            f"DataFrame `{name}` (Engine: Polars | Shape: {shape_0} rows x {shape_1} cols):\n"
+            f"[MICRO-SCHEMA CONTRACT (Case-Sensitive)]:\n" + "\n".join(col_profiles)
+        )
+    else:
+        # Pandas
+        shape_0, shape_1 = obj.shape
+        col_profiles = []
+        for col in obj.columns:
+            col_str = str(col)
+            dtype = str(obj[col].dtype)
+            null_pct = round(obj[col].isna().mean() * 100, 1) if shape_0 > 0 else 0.0
+            n_uniq = obj[col].nunique() if shape_0 > 0 else 0
+
+            if pd.api.types.is_numeric_dtype(obj[col]):
+                non_null = obj[col].dropna()
+                if not non_null.empty:
+                    min_val = round(float(non_null.min()), 2)
+                    max_val = round(float(non_null.max()), 2)
+                    mean_val = round(float(non_null.mean()), 2)
+                    col_profiles.append(f"  • '{col_str}' ({dtype}) | Nulls: {null_pct}% | Range: [{min_val} → {max_val}] | Mean: {mean_val}")
+                else:
+                    col_profiles.append(f"  • '{col_str}' ({dtype}) | Nulls: 100% | Empty")
+            elif pd.api.types.is_datetime64_any_dtype(obj[col]):
+                non_null = obj[col].dropna()
+                if not non_null.empty:
+                    col_profiles.append(f"  • '{col_str}' ({dtype}) | Nulls: {null_pct}% | Range: [{non_null.min()} → {non_null.max()}]")
+                else:
+                    col_profiles.append(f"  • '{col_str}' ({dtype}) | Nulls: 100% | Empty")
+            else:
+                non_null = obj[col].dropna()
+                samples = [str(v) for v in non_null.unique()[:3] if v is not None]
+                sample_str = f"Sample: {samples}" if samples else "Empty"
+                col_profiles.append(f"  • '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {n_uniq} | {sample_str}")
+
+        if len(col_profiles) > 30:
+            col_profiles = col_profiles[:25] + [f"  ... and {len(col_profiles) - 25} other continuous/categorical dimensions."]
+
+        return (
+            f"DataFrame `{name}` (Engine: Pandas | Shape: {shape_0} rows x {shape_1} cols):\n"
+            f"[MICRO-SCHEMA CONTRACT (Case-Sensitive)]:\n" + "\n".join(col_profiles)
+        )
+
+
 def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
     if not ip or target not in ip.user_ns:
         return ""
@@ -678,62 +1022,12 @@ def _get_deep_workspace_context(ip, target="df", is_cloud=False, privacy_mode="a
 
                 context_lines.append(
                     f"DataFrame `{name}` (Engine: {engine_name}) [PRIVACY-PRESERVED CONTEXT - NO RAW DATA]:\n"
-                    f"{json.dumps(safe_payload, indent=2)}"
+                    f"{_json_dumps(safe_payload)}"
                 )
             else:
-                # LOCAL RAW PREVIEW - Universal Adapter Logic
-                if is_polars:
-                    shape_0, shape_1 = obj.shape
-                    if shape_0 < 20:
-                        grid_sample = str(obj.head(18))
-                        context_lines.append(
-                            f"DataFrame `{name}` (Engine: Polars | Raw Grid Matrix, Shape: {shape_0} rows, {shape_1} cols):\n"
-                            f"Top 18 Rows Matrix Preview:\n{grid_sample}"
-                        )
-                    else:
-                        col_profiles = []
-                        null_counts = obj.null_count().row(0)
-                        for idx, col in enumerate(obj.columns):
-                            dtype = str(obj.schema[col])
-                            null_pct = round((null_counts[idx] / shape_0) * 100, 1) if shape_0 > 0 else 0.0
-                            unique_count = obj[col].n_unique()
-                            sample = str(obj[col].drop_nulls()[0]) if obj[col].drop_nulls().len() > 0 else "None"
-                            col_profiles.append(f"    - '{col}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
-
-                        # ✂️ WIDE-TABLE PRUNER: Cap prompt schema at top 25 columns
-                        if len(col_profiles) > 30:
-                            col_profiles = col_profiles[:25] + [f"    ... and {len(col_profiles) - 25} other continuous/categorical dimensions."]
-
-                        context_lines.append(
-                            f"DataFrame `{name}` (Engine: Polars | Shape: {shape_0} rows, {shape_1} cols):\n"
-                            f"  Exact Column Names (CASE-SENSITIVE):\n" + "\n".join(col_profiles)
-                        )
-                elif is_pandas:
-                    is_unnamed = any("unnamed" in str(c).lower() or isinstance(c, (int, np.integer)) for c in obj.columns)
-                    if is_unnamed or obj.shape[0] < 20:
-                        grid_sample = obj.iloc[:18, :12].to_string()
-                        context_lines.append(
-                            f"DataFrame `{name}` (Engine: Pandas | Raw Grid Matrix, Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
-                            f"Top 18 Rows Matrix Preview:\n{grid_sample}"
-                        )
-                    else:
-                        col_profiles = []
-                        for col in obj.columns:
-                            col_str = str(col)
-                            dtype = str(obj[col].dtype)
-                            null_pct = round(obj[col].isna().mean() * 100, 1)
-                            unique_count = obj[col].nunique()
-                            sample = obj[col].dropna().iloc[0] if not obj[col].dropna().empty else "None"
-                            col_profiles.append(f"    - '{col_str}' ({dtype}) | Nulls: {null_pct}% | Unique: {unique_count} | Sample: {sample}")
-
-                        # ✂️ WIDE-TABLE PRUNER: Cap prompt schema at top 25 columns
-                        if len(col_profiles) > 30:
-                            col_profiles = col_profiles[:25] + [f"    ... and {len(col_profiles) - 25} other continuous/categorical dimensions."]
-
-                        context_lines.append(
-                            f"DataFrame `{name}` (Engine: Pandas | Shape: {obj.shape[0]} rows, {obj.shape[1]} cols):\n"
-                            f"  Exact Column Names (CASE-SENSITIVE):\n" + "\n".join(col_profiles)
-                        )
+                # LOCAL RAW PREVIEW - High-Density Micro-Schema Contract
+                micro_schema = _format_micro_schema(obj, name=name, is_polars=is_polars)
+                context_lines.append(micro_schema)
 
     context_str = (
         "\n--- ACTIVE RUNTIME ENVIRONMENT CONTEXT ---\n"
@@ -812,6 +1106,16 @@ def _sanitize_traceback(tb_str: str, max_lines: int = 25) -> str:
 
 def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
     cleaned_text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # 1. Primary strict delimiter: <Execute>...</Execute>
+    exec_match = re.search(r"<Execute>(.*?)(?:</Execute>|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
+    if exec_match:
+        code = exec_match.group(1).strip()
+        code = re.sub(r"```(?:python|py)?", "", code).replace("```", "").strip()
+        narrative = re.sub(r"<Execute>.*?(?:</Execute>|$)", "", cleaned_text, flags=re.DOTALL | re.IGNORECASE).strip()
+        return code, narrative
+
+    # 2. Standard markdown blocks
     raw_blocks = re.findall(r"```(?:python|py)?\s*\n?(.*?)(?:```|$)", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
     code = raw_blocks[0].strip() if raw_blocks else ""
 
@@ -828,17 +1132,19 @@ def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
             code = potential_code
 
     narrative = re.sub(r"<Analyze>.*?(?:</Analyze>|$)", "", cleaned_text, flags=re.DOTALL | re.IGNORECASE)
-    narrative = re.sub(r"</?(?:Analyze|Answer|Code)>", "", narrative, flags=re.IGNORECASE)
+    narrative = re.sub(r"</?(?:Analyze|Answer|Code|Execute)>", "", narrative, flags=re.IGNORECASE)
     narrative = re.sub(r"```(?:python|py|sql)?\s*\n?.*?(?:```|$)", "", narrative, flags=re.DOTALL | re.IGNORECASE).strip()
 
     return code, narrative
 
-def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500, target_model: str = "deepanalyze-8b") -> str:
+def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500, target_model: str = "deepanalyze-8b", min_p: float = 0.05) -> str:
     is_ds = target_model.startswith("deepseek")
     engine_name = "☁️ DeepSeek Cloud" if is_ds else "💻 Local Engine"
-    
-    sys.stdout.write(f"\r[1/3] 🔍 Routing ➔ [2/3] ⚡ Generating Code [{engine_name} ({target_model})]...")
-    sys.stdout.flush()
+    start_t = time.time()
+
+    extra_body = {}
+    if not is_ds and min_p is not None:
+        extra_body["min_p"] = min_p
 
     client = _get_client(is_deepseek=is_ds)
     response = client.chat.completions.create(
@@ -850,21 +1156,52 @@ def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: in
         temperature=temp,
         max_tokens=max_tokens,
         stream=True,
+        extra_body=extra_body if extra_body else None
     )
 
     full_text = []
     token_count = 0
+
+    # Flicker-free in-notebook streaming display handle
+    display_handle = None
+    try:
+        from IPython.display import display, update_display
+        ip = get_ipython()
+        if ip and hasattr(ip, "kernel"):
+            display_id = f"da_stream_{int(time.time() * 1000)}"
+            display(f"⚡ [DeepAnalyze {engine_name} ({target_model})]: Connecting...", display_id=display_id)
+            display_handle = display_id
+    except Exception:
+        display_handle = None
+
     for chunk in response:
         delta = chunk.choices[0].delta.content if chunk.choices and chunk.choices[0].delta else None
         if delta:
             full_text.append(delta)
             token_count += 1
-            if token_count % 25 == 0:
-                sys.stdout.write(f"\r[1/3] 🔍 Routing ➔ [2/3] ⚡ Streaming ({token_count} tok) ➔ [3/3] 🛡️ Validating...")
-                sys.stdout.flush()
+            if token_count % 15 == 0:
+                elapsed = max(time.time() - start_t, 0.001)
+                tok_per_sec = round(token_count / elapsed, 1)
+                if display_handle:
+                    try:
+                        update_display(f"⚡ [DeepAnalyze {engine_name} ({target_model})]: Streaming {token_count} tok ({tok_per_sec} tok/s)...", display_id=display_handle)
+                    except Exception:
+                        pass
+                else:
+                    sys.stdout.write(f"\r[1/3] 🔍 Routing ➔ [2/3] ⚡ Streaming ({token_count} tok | {tok_per_sec} tok/s) ➔ [3/3] 🛡️ Validating...")
+                    sys.stdout.flush()
 
-    sys.stdout.write("\r" + " " * 85 + "\r")
-    sys.stdout.flush()
+    if display_handle:
+        try:
+            elapsed = max(time.time() - start_t, 0.001)
+            tok_per_sec = round(token_count / elapsed, 1)
+            update_display(f"✔ [DeepAnalyze {engine_name} ({target_model})]: Completed {token_count} tokens in {round(elapsed, 2)}s ({tok_per_sec} tok/s)", display_id=display_handle)
+        except Exception:
+            pass
+    else:
+        sys.stdout.write("\r" + " " * 85 + "\r")
+        sys.stdout.flush()
+
     return "".join(full_text)
 
 
@@ -962,7 +1299,7 @@ def _render_sparkline_minimap(df_obj, target_name: str = "df"):
         console.print(Panel(table, border_style="green", expand=False))
 
 
-def _render_state_diff_hud(orig_obj, new_obj, target_name: str = "df"):
+def _render_state_diff_hud(orig_obj, new_obj, target_name: str = "df", show_stats: bool = False):
     """Renders a Rich side-by-side delta HUD showing row/col changes, dtype mutations, and null drifts."""
     if orig_obj is None or new_obj is None:
         return
@@ -1027,6 +1364,30 @@ def _render_state_diff_hud(orig_obj, new_obj, target_name: str = "df"):
         if orig_dtype != new_dtype or null_delta != 0:
             null_delta_str = f"[red]+{null_delta} nulls[/red]" if null_delta > 0 else (f"[green]{null_delta} nulls[/green]" if null_delta < 0 else "0")
             table.add_row(f"Col `{col}`", f"{orig_dtype} ({orig_nulls} nulls)", f"{new_dtype} ({new_nulls} nulls)", f"{dtype_mut} | {null_delta_str}")
+
+    # 🔬 Kolmogorov-Smirnov Statistical Distribution Drift Analysis
+    if show_stats:
+        try:
+            from scipy import stats
+            for col in common_cols[:6]:
+                s1, s2 = None, None
+                if is_polars_orig and is_polars_new:
+                    if str(orig_obj.schema[col]).lower() in ("int8", "int16", "int32", "int64", "float32", "float64", "uint8", "uint16", "uint32", "uint64") and str(new_obj.schema[col]).lower() in ("int8", "int16", "int32", "int64", "float32", "float64", "uint8", "uint16", "uint32", "uint64"):
+                        s1 = orig_obj[col].drop_nulls().to_numpy()
+                        s2 = new_obj[col].drop_nulls().to_numpy()
+                elif is_pandas_orig and is_pandas_new:
+                    if pd.api.types.is_numeric_dtype(orig_obj[col]) and pd.api.types.is_numeric_dtype(new_obj[col]):
+                        s1 = orig_obj[col].dropna().to_numpy()
+                        s2 = new_obj[col].dropna().to_numpy()
+
+                if s1 is not None and s2 is not None and len(s1) > 5 and len(s2) > 5:
+                    ks_res = stats.ks_2samp(s1, s2)
+                    drift_badge = "[red]DRIFT (p<0.05)[/red]" if ks_res.pvalue < 0.05 else "[green]STABLE[/green]"
+                    mean1, mean2 = float(s1.mean()), float(s2.mean())
+                    shift_pct = ((mean2 - mean1) / (abs(mean1) + 1e-9)) * 100
+                    table.add_row(f"  ↳ KS Drift `{col}`", f"p={ks_res.pvalue:.2e}", drift_badge, f"Mean: {shift_pct:+.1f}%")
+        except Exception:
+            pass
 
     console.print(Panel(table, border_style="cyan", expand=False))
 
@@ -1382,11 +1743,16 @@ def _render_history_explorer():
         return
 
     for var_name, df_snap in _DF_SNAPSHOTS.items():
+        if df_snap is None:
+            continue
         meta_list = _DF_SNAPSHOT_METADATA.get(var_name, [])
         last_meta = meta_list[-1] if meta_list else {}
         ts = last_meta.get("time", "Current Session")
         shape_str = f"{df_snap.shape[0]:,} x {df_snap.shape[1]:,}" if hasattr(df_snap, "shape") else "Unknown"
-        cols_str = ", ".join(str(c) for c in list(df_snap.columns)[:4]) + ("..." if len(df_snap.columns) > 4 else "")
+        cols = list(df_snap.columns) if hasattr(df_snap, "columns") else (
+            df_snap.collect_schema().names() if hasattr(df_snap, "collect_schema") else []
+        )
+        cols_str = ", ".join(str(c) for c in cols[:4]) + ("..." if len(cols) > 4 else "")
         table.add_row(f"`{var_name}`", ts, shape_str, f"[dim]{cols_str}[/dim]", "💾 Active Snapshot")
 
     console.print(Panel(table, border_style="cyan", expand=False))
@@ -2052,7 +2418,7 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     )
     clean_prompt = (
         f"Target DataFrame Variable: `{target_name}`\n"
-        f"Safe Context & Schema:\n{json.dumps(safe_payload, indent=2)}\n\n"
+        f"Safe Context & Schema:\n{_json_dumps(safe_payload)}\n\n"
         f"Generate idiomatic Polars cleaning and normalization code for `{target_name}`."
     )
     
@@ -2490,6 +2856,8 @@ def deepanalyze(line, cell=None):
     # ADVANCED VALIDATION, SANDBOXING & UI FLAGS
     parser.add_argument("--preview", action="store_true", help="Ghost execution with state diff HUD and interactive commit")
     parser.add_argument("--diff", action="store_true", help="Render visual state diff HUD showing row/col and schema deltas")
+    parser.add_argument("--diff-stats", action="store_true", help="Render visual state diff HUD with Kolmogorov-Smirnov statistical distribution drift")
+    parser.add_argument("--assert", dest="assert_invariants", action="store_true", help="Auto-generate and verify runtime invariant assertions")
     parser.add_argument("--guard", type=str, default=None, help="Automated quality gate constraint expression")
     parser.add_argument("--stress", action="store_true", help="Adversarial edge-case fuzzer for NaN, empty string, zero-division")
     parser.add_argument("--meta", action="store_true", help="Metamorphic logic validator verifying 2x scaling invariance")
@@ -2616,10 +2984,42 @@ def deepanalyze(line, cell=None):
     if parsed_args.undo:
         if _restore_snapshot(ip, target=parsed_args.target):
             df_restored = ip.user_ns[parsed_args.target]
-            print(f"[DeepAnalyze Undo]: Restored `{parsed_args.target}` from snapshot. Shape: {df_restored.shape[0]} rows, {df_restored.shape[1]} columns.")
+            remaining_depth = len(_DF_SNAPSHOT_STACK.get(parsed_args.target, []))
+            shape_str = f"{df_restored.shape[0]} rows, {df_restored.shape[1]} columns" if hasattr(df_restored, "shape") else "LazyPlan"
+            print(f"[DeepAnalyze Undo]: Restored `{parsed_args.target}` from snapshot (Shape: {shape_str} | {remaining_depth} prior states in stack).")
         else:
             print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
         return
+
+    # Direct ANSI SQL ↔ Arrow execution bridge (--sql)
+    if parsed_args.sql and prompt and prompt.strip().upper().startswith(("SELECT", "WITH", "PRAGMA", "SHOW", "DESCRIBE", "CREATE")):
+        sql_query = prompt.strip()
+        if ip and duckdb is not None:
+            try:
+                con = duckdb.connect(database=":memory:")
+                for k, v in list(ip.user_ns.items()):
+                    if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame)))):
+                        if pl is not None and isinstance(v, pl.DataFrame):
+                            con.register(k, v.to_arrow())
+                        elif pl is not None and isinstance(v, pl.LazyFrame):
+                            con.register(k, v.collect().to_arrow())
+                        elif isinstance(v, pd.DataFrame):
+                            con.register(k, v)
+
+                res_arrow = con.execute(sql_query).arrow()
+                if pl is not None:
+                    res_df = pl.from_arrow(res_arrow)
+                else:
+                    res_df = res_arrow.to_pandas()
+
+                target_name = parsed_args.target or "df"
+                _take_snapshot(ip, target=target_name)
+                ip.user_ns[target_name] = res_df
+                print(f"⚡ [DeepAnalyze SQL Engine]: Executed SQL on Arrow buffers. Assigned result to `{target_name}` ({len(res_df)} rows).")
+                return
+            except Exception as sql_err:
+                print(f"❌ [SQL Execution Error]: {sql_err}")
+                return
 
     # --- 8-Engine Specialized Cleaning Suite Handlers ---
     if parsed_args.ftfy:
@@ -3078,7 +3478,22 @@ def deepanalyze(line, cell=None):
             "and print the saved filepath.\n"
         )
 
-    system_prompt = f"{rulebook}\n{INVARIANT_CHECKLIST}\n{save_directive}\n{env_context}\n{fuzzy_aliases}"
+    # 8B Dynamic Syntax Exemplar & Categorical Enum Injection
+    ast_exemplar = _retrieve_ast_exemplar(prompt) if prompt else ""
+    target_obj = ip.user_ns.get(parsed_args.target) if ip else None
+    dynamic_enums = _build_dynamic_enum_grammar(target_obj) if target_obj is not None else ""
+
+    assert_directive = ""
+    if getattr(parsed_args, "assert_invariants", False):
+        assert_directive = (
+            "\n[RUNTIME INVARIANT ASSERTIONS DIRECTIVE]:\n"
+            "At the end of your generated Python code, include 2-3 explicit runtime assertions testing that:\n"
+            "1. Output DataFrame is not empty (e.g. `assert len(df) > 0` or `assert df.height > 0`).\n"
+            "2. Expected columns exist and primary key / critical metrics have zero unexpected nulls.\n"
+            "3. Transformations did not introduce invalid negative/NaN values.\n"
+        )
+
+    system_prompt = f"{rulebook}\n{INVARIANT_CHECKLIST}\n{ast_exemplar}{dynamic_enums}{save_directive}{assert_directive}\n{env_context}\n{fuzzy_aliases}"
 
     if parsed_args.is_continuation and _LAST_GENERATED_CODE:
         full_prompt = (
@@ -3096,7 +3511,16 @@ def deepanalyze(line, cell=None):
         # Start timer for telemetry
         start_time = time.time()
         
-        if not parsed_args.auto_clean:
+        # ⚡ 0ms Structural Query Cache Lookup
+        b = brain.get_brain()
+        cached_ast = b.get_cached_query(prompt, target_obj) if (prompt and not parsed_args.is_continuation and not parsed_args.auto_clean) else None
+
+        if cached_ast:
+            code = cached_ast
+            narrative = ""
+            token_count = 0
+            console.print(Panel(f"Retrieved verified AST for query: [italic]{prompt}[/italic]", title="⚡ [bold green]DeepAnalyze 0ms Structural Cache Hit[/bold green]", border_style="green"))
+        elif not parsed_args.auto_clean:
             raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens, target_model=active_model)
             code, narrative = _extract_deepanalyze_content(raw_output)
             token_count = len(raw_output) // 4
@@ -3280,6 +3704,7 @@ def deepanalyze(line, cell=None):
                                 if normally_committed and ip:
                                     ip.user_ns[parsed_args.target] = shadow_res
                                     _reconcile_target_dataframe(ip, clean_code, prompt, parsed_args.target)
+                                    b.cache_verified_query(prompt, shadow_res, clean_code)
                                     print(f"✅ Changes committed to `{parsed_args.target}` in session memory.")
                                 else:
                                     print("🛑 Changes discarded. Target DataFrame unaltered.")
@@ -3319,6 +3744,8 @@ def deepanalyze(line, cell=None):
                                     ip.user_ns[parsed_args.target] = pl.from_pandas(ip.user_ns[parsed_args.target])
 
                     _reconcile_target_dataframe(ip, clean_code, prompt, parsed_args.target)
+                    if not result.error_in_exec:
+                        b.cache_verified_query(prompt, ip.user_ns.get(parsed_args.target) if ip else None, clean_code)
 
                     # Automated Quality Gate verification
                     if parsed_args.guard and not result.error_in_exec:
@@ -3353,8 +3780,8 @@ def deepanalyze(line, cell=None):
                             print(f"🛡️ [Quality Gate]: PASSED (Constraint: `{parsed_args.guard}`)")
 
                     # State Diff HUD
-                    if parsed_args.diff and not result.error_in_exec:
-                        _render_state_diff_hud(_DF_SNAPSHOTS.get(parsed_args.target), ip.user_ns.get(parsed_args.target), target_name=parsed_args.target)
+                    if (parsed_args.diff or getattr(parsed_args, "diff_stats", False)) and not result.error_in_exec:
+                        _render_state_diff_hud(_DF_SNAPSHOTS.get(parsed_args.target), ip.user_ns.get(parsed_args.target), target_name=parsed_args.target, show_stats=getattr(parsed_args, "diff_stats", False))
 
                     # Sparklines minimap
                     if parsed_args.spark and not result.error_in_exec:

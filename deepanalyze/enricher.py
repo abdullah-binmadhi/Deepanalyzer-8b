@@ -20,8 +20,6 @@ except ImportError:
     httpx = None
 
 
-# --- 1. TF-IDF & Cosine Similarity Engine (Zero-dependency, high speed) ---
-
 def _compute_char_ngrams(text: str, n: int = 3) -> List[str]:
     """Extracts character n-grams from text string."""
     clean = re.sub(r"[^\w\s]", "", str(text).lower()).strip()
@@ -59,6 +57,39 @@ def _build_tfidf_vectors(corpus: List[str]) -> Tuple[np.ndarray, Dict[str, int]]
     return matrix, token_to_idx
 
 
+_FASTEMBED_MODEL = None
+
+
+def _get_fastembed_model():
+    """Lazily loads FastEmbed ONNX model if installed."""
+    global _FASTEMBED_MODEL
+    if _FASTEMBED_MODEL is None:
+        try:
+            from fastembed import TextEmbedding
+            _FASTEMBED_MODEL = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        except Exception:
+            _FASTEMBED_MODEL = False
+    return _FASTEMBED_MODEL if _FASTEMBED_MODEL is not False else None
+
+
+def _compute_semantic_vectors(texts: List[str]) -> np.ndarray:
+    """Computes vector embeddings using FastEmbed (ONNX) if installed, falling back to pure NumPy TF-IDF."""
+    embed_model = _get_fastembed_model()
+    if embed_model is not None:
+        try:
+            embeddings = list(embed_model.embed(texts))
+            matrix = np.array(embeddings, dtype=np.float32)
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            return matrix / norms
+        except Exception:
+            pass
+
+    # Zero-dependency, ultra-lightweight pure NumPy TF-IDF baseline
+    matrix, _ = _build_tfidf_vectors(texts)
+    return matrix
+
+
 def filter_by_semantic_meaning(df: object, query: str, text_col: str = None, top_k: int = 20) -> object:
     """Filters a DataFrame to rows semantically similar to the natural language query."""
     pdf = df.to_pandas() if hasattr(df, 'to_pandas') else df.copy()
@@ -71,10 +102,10 @@ def filter_by_semantic_meaning(df: object, query: str, text_col: str = None, top
     corpus = pdf[target_col].fillna("").astype(str).tolist()
     
     all_docs = corpus + [query]
-    tfidf_matrix, _ = _build_tfidf_vectors(all_docs)
+    vector_matrix = _compute_semantic_vectors(all_docs)
 
-    doc_vectors = tfidf_matrix[:-1]
-    query_vector = tfidf_matrix[-1:]
+    doc_vectors = vector_matrix[:-1]
+    query_vector = vector_matrix[-1:]
 
     # Cosine similarities
     similarities = np.dot(doc_vectors, query_vector.T).flatten()
@@ -89,7 +120,7 @@ def filter_by_semantic_meaning(df: object, query: str, text_col: str = None, top
 
 
 def cross_lingual_semantic_join(df_left: object, df_right: object, left_on: str = None, right_on: str = None, threshold: float = 0.25) -> object:
-    """Performs a fuzzy cross-lingual semantic join using TF-IDF cosine similarity."""
+    """Performs a fuzzy cross-lingual semantic join using vector cosine similarity."""
     pdf_l = df_left.to_pandas() if hasattr(df_left, 'to_pandas') else df_left.copy()
     pdf_r = df_right.to_pandas() if hasattr(df_right, 'to_pandas') else df_right.copy()
 
@@ -103,7 +134,7 @@ def cross_lingual_semantic_join(df_left: object, df_right: object, left_on: str 
     right_texts = pdf_r[r_key].fillna("").astype(str).tolist()
 
     all_texts = left_texts + right_texts
-    matrix, _ = _build_tfidf_vectors(all_texts)
+    matrix = _compute_semantic_vectors(all_texts)
 
     left_mat = matrix[:len(left_texts)]
     right_mat = matrix[len(left_texts):]

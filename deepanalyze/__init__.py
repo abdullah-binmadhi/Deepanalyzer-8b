@@ -22,6 +22,7 @@ from . import enricher
 from . import pipeline_compiler
 from . import optimizer
 from . import brain
+from . import server
 
 
 def load_ipython_extension(ipython):
