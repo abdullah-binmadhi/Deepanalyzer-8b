@@ -9,7 +9,7 @@ import numpy as np
 
 
 def infer_sql_schema(df, table_name: str = "analytics_table", dialect: str = "duckdb") -> str:
-    """Infers optimal SQL DDL with constraint discovery (Primary Keys, NOT NULL).
+    """Infers optimal SQL DDL with constraint discovery (Primary Keys, NOT NULL, Partitions, Indices).
     Supported Dialects: 'duckdb', 'postgres', 'snowflake', 'bigquery', 'sqlite'.
     """
     pdf = df.to_pandas() if hasattr(df, 'to_pandas') else df.copy()
@@ -25,12 +25,14 @@ def infer_sql_schema(df, table_name: str = "analytics_table", dialect: str = "du
     }
     mapping = type_map.get(dialect, type_map["duckdb"])
 
-    # 1. Discover Candidate Primary Key (Unique & Non-null)
+    # 1. Discover Candidate Primary Key and Partition Candidate
     pk_candidate = None
+    date_col = None
     for col in pdf.columns:
-        if pdf[col].is_unique and pdf[col].notna().all():
+        if pk_candidate is None and pdf[col].is_unique and pdf[col].notna().all():
             pk_candidate = col
-            break
+        if date_col is None and ("date" in col.lower() or "time" in col.lower()):
+            date_col = col
 
     # 2. Build Column Definitions
     col_defs = []
@@ -50,12 +52,23 @@ def infer_sql_schema(df, table_name: str = "analytics_table", dialect: str = "du
         const_str = (" " + " ".join(constraints)) if constraints else ""
         col_defs.append(f"    {col} {sql_type}{const_str}")
 
-    ddl = f"CREATE TABLE IF NOT EXISTS {table_name} (\n" + ",\n".join(col_defs) + "\n);"
+    ddl = f"CREATE TABLE IF NOT EXISTS {table_name} (\n" + ",\n".join(col_defs) + "\n)"
+
+    # 3. Dialect-Specific Partitioning & Cluster Clauses
+    if dialect == "bigquery" and date_col:
+        ddl += f"\nPARTITION BY DATE({date_col})"
+    elif dialect == "snowflake" and pk_candidate:
+        ddl += f"\nCLUSTER BY ({pk_candidate})"
+    elif dialect == "postgres" and pk_candidate:
+        ddl += f";\nCREATE INDEX IF NOT EXISTS idx_{table_name}_{pk_candidate} ON {table_name} ({pk_candidate});"
+        return ddl
+
+    ddl += ";"
     return ddl
 
 
 def generate_dbt_models(df, table_name: str = "analytics_table") -> str:
-    """Generates standard dbt schema.yml with automated documentation and test suites."""
+    """Generates standard dbt schema.yml with automated documentation and comprehensive test suites."""
     pdf = df.to_pandas() if hasattr(df, 'to_pandas') else df.copy()
 
     yml = f"""version: 2
@@ -71,13 +84,22 @@ models:
             tests.append("unique")
         if pdf[col].notna().all():
             tests.append("not_null")
+        
+        # Accepted values test for low-cardinality categorical columns
+        if not pd.api.types.is_numeric_dtype(pdf[col]) and 1 < pdf[col].nunique() <= 5:
+            vals = [str(v) for v in pdf[col].dropna().unique().tolist()]
+            vals_formatted = ", ".join([f"'{v}'" for v in vals])
+            tests.append(f"accepted_values:\n              values: [{vals_formatted}]")
 
         yml += f"      - name: {col}\n"
         yml += f"        description: \"Auto-inferred column: {col} ({str(pdf[col].dtype)})\"\n"
         if tests:
             yml += "        tests:\n"
             for t in tests:
-                yml += f"          - {t}\n"
+                if "\n" in t:
+                    yml += f"          - {t}\n"
+                else:
+                    yml += f"          - {t}\n"
 
     return yml
 
@@ -92,3 +114,4 @@ def generate_er_diagram(df, table_name: str = "AnalyticsTable") -> str:
         mermaid += f"        {dt} {col}{pk_marker}\n"
     mermaid += "    }\n"
     return mermaid
+

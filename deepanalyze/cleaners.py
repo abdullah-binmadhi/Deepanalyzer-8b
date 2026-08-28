@@ -317,51 +317,95 @@ def winsorize_numeric_outliers(df_obj, lower_p: float = 0.01, upper_p: float = 0
     return df_obj
 
 
+def sanitize_dirty_numeric_series(val) -> float:
+    """Robust sanitization of dirty currency, percentage, and accounting strings."""
+    if val is None or pd.isna(val):
+        return np.nan
+    if isinstance(val, (int, float, np.number)):
+        return float(val)
+    s = str(val).strip()
+    if not s or s.lower() in ("n/a", "none", "null", "missing", "nan", "-"):
+        return np.nan
+    # Check accounting negative in parentheses: (1,250.50) -> -1250.50
+    is_neg = s.startswith("(") and s.endswith(")")
+    if is_neg:
+        s = s[1:-1].strip()
+    # Strip currencies, percentages, and commas
+    s = re.sub(r'[\$€£¥₹%]|SAR|AED|USD|EUR|GBP|RM|\s+', '', s, flags=re.I).replace(',', '')
+    try:
+        f = float(s)
+        return -f if is_neg else f
+    except (ValueError, TypeError):
+        return np.nan
+
+
+def parse_mixed_datetime_series(s_series) -> pd.Series:
+    """Auto-coerces mixed date formats into uniform ISO-8601 datetimes."""
+    return pd.to_datetime(s_series, errors='coerce', dayfirst=True)
+
+
 # =============================================================================
 # 7. AUTOMATIC DATA TYPE & BOOLEAN ASSERTER (--auto-type)
 # =============================================================================
 def auto_cast_data_types(df_obj):
-    """Coerces string columns to booleans, floats, or integers where possible without losing data."""
+    """Coerces string columns to booleans, floats, integers, or datetimes without losing data."""
     bool_true = {"true", "t", "yes", "y", "1"}
     bool_false = {"false", "f", "no", "n", "0"}
 
     if pl is not None and isinstance(df_obj, pl.DataFrame):
-        df = df_obj.clone()
-        for col in df.columns:
-            if df.schema[col] in (pl.String, pl.Utf8):
-                clean_s = df[col].drop_nulls()
-                if clean_s.len() == 0:
+        pdf = df_obj.to_pandas()
+        for col in pdf.columns:
+            if not pd.api.types.is_numeric_dtype(pdf[col]) and not pd.api.types.is_datetime64_any_dtype(pdf[col]):
+                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist()]
+                if not sample_vals:
                     continue
-                vals_lower = set(str(v).strip().lower() for v in clean_s.head(100).to_list())
-                if vals_lower.issubset(bool_true | bool_false) and len(vals_lower) > 0:
-                    df = df.with_columns(
-                        pl.when(pl.col(col).str.to_lowercase().is_in(list(bool_true)))
-                          .then(True)
-                          .when(pl.col(col).str.to_lowercase().is_in(list(bool_false)))
-                          .then(False)
-                          .otherwise(None)
-                          .alias(col)
-                    )
-                elif all(re.match(r'^-?\d+(?:\.\d+)?$', str(v).strip().replace(',', '')) for v in clean_s.head(50).to_list()):
+                # 1. Check Boolean
+                if set(v.lower() for v in sample_vals).issubset(bool_true | bool_false):
+                    pdf[col] = pdf[col].astype(str).str.strip().str.lower().isin(bool_true)
+                # 2. Check Currency / Dirty Numeric
+                elif any(re.search(r'[\$€£¥₹%]|SAR|AED|USD|EUR|RM|\(\d+[\d,.]*\)', str(v), re.I) for v in sample_vals):
+                    coerced = pdf[col].map(sanitize_dirty_numeric_series)
+                    if coerced.notna().sum() >= len(pdf) * 0.5:
+                        pdf[col] = pd.to_numeric(coerced, errors='coerce')
+                # 3. Check Datetime
+                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}', str(v)) for v in sample_vals):
+                    parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
+                    if parsed_dt.notna().sum() >= len(pdf) * 0.5:
+                        pdf[col] = parsed_dt
+                # 4. Standard float/int cast
+                else:
                     try:
-                        df = df.with_columns(pl.col(col).str.replace_all(',', '').cast(pl.Float64, strict=False))
+                        numeric_s = pd.to_numeric(pdf[col].astype(str).str.replace(',', ''), errors='coerce')
+                        if numeric_s.notna().sum() >= len(pdf) * 0.6:
+                            pdf[col] = numeric_s
                     except Exception:
                         pass
-        return df
-
+        return pl.from_pandas(pdf)
     elif isinstance(df_obj, pd.DataFrame):
-        df = df_obj.copy()
-        for col in df.columns:
-            if df[col].dtype == object or df[col].dtype == "string":
-                clean_s = df[col].dropna()
-                if len(clean_s) == 0:
+        pdf = df_obj.copy()
+        for col in pdf.columns:
+            if not pd.api.types.is_numeric_dtype(pdf[col]) and not pd.api.types.is_datetime64_any_dtype(pdf[col]):
+                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist()]
+                if not sample_vals:
                     continue
-                vals_lower = set(str(v).strip().lower() for v in clean_s.head(100).tolist())
-                if vals_lower.issubset(bool_true | bool_false) and len(vals_lower) > 0:
-                    df[col] = df[col].map(lambda x: True if str(x).strip().lower() in bool_true else (False if str(x).strip().lower() in bool_false else np.nan))
-                elif all(re.match(r'^-?\d+(?:\.\d+)?$', str(v).strip().replace(',', '')) for v in clean_s.head(50).tolist()):
-                    df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        return df
+                if set(v.lower() for v in sample_vals).issubset(bool_true | bool_false):
+                    pdf[col] = pdf[col].astype(str).str.strip().str.lower().isin(bool_true)
+                elif any(re.search(r'[\$€£¥₹%]|SAR|AED|USD|EUR|RM|\(\d+[\d,.]*\)', str(v), re.I) for v in sample_vals):
+                    coerced = pdf[col].map(sanitize_dirty_numeric_series)
+                    if coerced.notna().sum() >= len(pdf) * 0.5:
+                        pdf[col] = pd.to_numeric(coerced, errors='coerce')
+                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}', str(v)) for v in sample_vals):
+                    parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
+                    if parsed_dt.notna().sum() >= len(pdf) * 0.5:
+                        pdf[col] = parsed_dt
+                else:
+                    try:
+                        numeric_s = pd.to_numeric(pdf[col].astype(str).str.replace(',', ''), errors='coerce')
+                        if numeric_s.notna().sum() >= len(pdf) * 0.6:
+                            pdf[col] = numeric_s
+                    except Exception:
+                        pass
+        return pdf
     return df_obj
 
 
@@ -487,14 +531,19 @@ def unravel_hierarchical_erp_report(df_or_path, target_columns: list = None) -> 
         first_val = non_empty[first_pos]
         first_str = str(first_val).strip()
 
-        # 1. Skip Report Parameters / Filter Block (e.g. 'Date : From 1/8/2025...', 'Company : All', etc.)
-        if (' : ' in row_str_lower and any(w in row_str_lower for w in ['from ', 'all', 'selected', 'sort by', 'date', 'company'])) or row_str_lower.startswith('from ') or 'selected' in row_str_lower:
+        # 1. Skip Report Parameters, Page Breaks, Print Timestamps, & Filter Blocks
+        is_page_break = any(p in row_str_lower for p in ['page ', 'page:', 'p. ']) and any(w in row_str_lower for w in [' of ', 'page', '1', '2', '3', '4', '5'])
+        is_print_meta = any(m in row_str_lower for m in ['printed on', 'run date', 'report id', 'user id', 'print date', 'system timestamp'])
+        is_filter_block = (' : ' in row_str_lower and any(w in row_str_lower for w in ['from ', 'all', 'selected', 'sort by', 'date', 'company'])) or row_str_lower.startswith('from ') or 'selected' in row_str_lower
+
+        if is_page_break or is_print_meta or is_filter_block:
             continue
         if len(non_empty) == 1 and any(comp in row_str_lower for comp in ['sdn bhd', 'ltd', 'inc.', 'corp', 'llc', 'gmbh', 'co.']) and not KV_HEADER_REGEX.match(first_str):
             continue
 
-        # 2. Summary / Divider Rows
-        if any(kw in row_str_lower for kw in SUMMARY_KEYWORDS) or re.match(r'^[=\-_]{3,}$', first_str):
+        # 2. Summary, Subtotal & Divider Rows (Reconcile & Drop to prevent double-counting)
+        is_subtotal = any(kw in row_str_lower for kw in ['subtotal', 'sub-total', 'total for', 'balance c/f', 'balance b/f', 'carried forward', 'brought forward'])
+        if is_subtotal or any(kw in row_str_lower for kw in SUMMARY_KEYWORDS) or re.match(r'^[=\-_]{3,}$', first_str):
             if current_record is not None:
                 records.append(current_record)
                 current_record = None
@@ -521,6 +570,8 @@ def unravel_hierarchical_erp_report(df_or_path, target_columns: list = None) -> 
             for c_idx, val in non_empty.items():
                 v_clean = str(val).strip()
                 parent_header_labels[c_idx] = v_clean
+            if any(kw in row_str_lower for kw in ['amount', 'price', 'qty', 'quantity', 'desc', 'total', 'debit', 'credit', 'rate', 'unit', 'customer', 'vendor']):
+                table_col_map = {c_idx: str(val).strip() for c_idx, val in non_empty.items()}
             continue
 
         # 5. Table Column Definition Row
@@ -537,11 +588,10 @@ def unravel_hierarchical_erp_report(df_or_path, target_columns: list = None) -> 
 
         # 6. Document / Section Header Instance Row
         is_parent_header = False
-        if parent_header_labels:
+        if parent_header_labels and not table_col_map:
             matched_header_cols = [c for c in non_empty.keys() if c in parent_header_labels]
             if len(matched_header_cols) >= 1:
-                if not (table_col_map and any(nk in table_col_map.get(first_pos, '').lower() for nk in ['seq', 'no.', 'item', 'line', 'sku']) and is_numeric_val(first_val)):
-                    is_parent_header = True
+                is_parent_header = True
         else:
             if (is_date_val(first_val) or re.match(r'^[A-Z]{1,5}[-_]?\d+', first_str)) and len(non_empty) <= 6 and not table_col_map:
                 is_parent_header = True

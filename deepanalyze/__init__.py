@@ -15,6 +15,13 @@ from . import forecaster
 from . import drift_sentinel
 from . import schema_synthesizer
 from . import synthetic_data
+from . import turbo_compiler
+from . import debate_router
+from . import causal_engine
+from . import enricher
+from . import pipeline_compiler
+from . import optimizer
+from . import brain
 
 
 def load_ipython_extension(ipython):

@@ -9,7 +9,7 @@ from deepanalyze.core import _extract_deepanalyze_content, _reconcile_target_dat
 
 def test_version():
     assert hasattr(deepanalyze, "__version__")
-    assert deepanalyze.__version__ == "2.1.0"
+    assert deepanalyze.__version__ == "3.0.0"
 
 def test_ast_sandbox_allowed_code():
     safe_code = """
@@ -1161,7 +1161,7 @@ def test_local_gatekeeper_inspect_folder(tmp_path):
 
 
 def test_eda_lifecycle_pipeline(monkeypatch, tmp_path):
-    """Verify end-to-end 6-stage --EDA lifecycle execution with Polars."""
+    """Verify end-to-end 10-stage --EDA lifecycle execution with Polars."""
     import polars as pl
     from deepanalyze import core
 
@@ -1185,7 +1185,7 @@ def test_eda_lifecycle_pipeline(monkeypatch, tmp_path):
     mock_ip = MockIP()
     monkeypatch.setattr(core, "get_ipython", lambda: mock_ip)
 
-    # Run --EDA lifecycle
+    # Run --EDA lifecycle (10 Stages)
     core.deepanalyze("--EDA --target test_df --goal 'Optimize Q3 Sales'")
 
     # Check snapshots
@@ -1196,7 +1196,13 @@ def test_eda_lifecycle_pipeline(monkeypatch, tmp_path):
     assert core._ACTIVE_ROADMAP["phase"] == 4
     assert core._ACTIVE_ROADMAP["goal"] == "Optimize Q3 Sales"
 
-    # Check that monitor script was generated
+    # Check multi-modal deliverables created
+    assert os.path.exists("./charts/eda_test_df_dashboard.html")
+    assert os.path.exists("./charts/eda_test_df_briefing.md")
+    assert os.path.exists("./charts/eda_test_df_slides.html")
+    assert os.path.exists("./charts/eda_test_df_slides.md")
+    assert os.path.exists("./charts/eda_test_df_schema.sql")
+    assert os.path.exists("./pipeline.py")
     assert os.path.exists("./eda_quality_monitor.py")
 
 
@@ -1642,6 +1648,490 @@ def test_synthetic_data_copula_and_fidelity_audit():
     audit = synthetic_data.audit_synthetic_fidelity(real_df, synth_df)
     assert "fidelity_score_pct" in audit
     assert audit["fidelity_score_pct"] >= 70.0
+
+
+# =============================================================================
+# V3.0 REVOLUTIONARY ANALYTICAL CAPABILITIES UNIT TESTS
+# =============================================================================
+
+def test_why_causal_debugger():
+    """Verify Causal Root-Cause Debugger decomposes variance across categorical factors."""
+    import pandas as pd
+    from deepanalyze import causal_engine
+
+    df = pd.DataFrame({
+        "revenue": [100, 200, -50, 400, -80, 500, 600, -120],
+        "category": ["A", "B", "C", "A", "C", "B", "A", "C"],
+        "region": ["East", "West", "East", "West", "East", "West", "East", "East"]
+    })
+
+    res = causal_engine.trace_root_cause_why(df, condition_or_col="revenue < 0")
+    assert res["triggered_count"] == 3
+    assert len(res["ranked_drivers"]) >= 1
+    assert "Root-Cause Analysis" in res["diagnostic_text"]
+
+
+def test_distill_rule_memory(tmp_path):
+    """Verify autonomous rule distillation and memory persistence."""
+    from deepanalyze import brain
+
+    b = brain.BiomimeticBrain(storage_path=str(tmp_path / "memory.json"))
+    prompts = [
+        "Please standardize date format.",
+        "Always filter out negative revenues and null customer_ids.",
+        "Must be non-null sequence id."
+    ]
+    rules = b.distill_rules_from_history(prompts)
+    assert len(rules) == 3
+    assert any("Always filter out negative revenues" in r for r in rules)
+
+
+def test_turbo_ast_vectorizer():
+    """Verify AST transpilation of row-wise lambdas to vectorized Polars SIMD expressions."""
+    from deepanalyze import turbo_compiler
+
+    code = "df = df.with_columns(pl.col('amount').map_elements(lambda x: 100 if x > 50 else 0))"
+    optimized_code, log = turbo_compiler.compile_to_turbo_simd(code)
+    assert log["optimized"] is True
+    assert "pl.when(pl.col('amount') > 50).then(100).otherwise(0)" in optimized_code
+
+
+def test_debate_dialectical_split():
+    """Verify Dialectical Persona Split generates Growth Bull and Risk Auditor perspectives."""
+    import pandas as pd
+    from deepanalyze import debate_router
+
+    df = pd.DataFrame({
+        "sales": [1000, 2500, 5000, 7500],
+        "margin": [0.35, 0.40, 0.20, -0.05]
+    })
+    res = debate_router.generate_debate_analysis(df, goal="Assess Quarterly Unit Economics")
+    assert "growth_bull" in res
+    assert "risk_auditor" in res
+    assert "synthesis" in res
+
+
+def test_falsify_skeptic_battery():
+    """Verify analytical skeptic counter-investigation detects outlier fragility."""
+    import pandas as pd
+    from deepanalyze import debate_router
+
+    # Highly concentrated dataset (>80% in single row)
+    fragile_df = pd.DataFrame({
+        "revenue": [10, 15, 20, 15, 1000]
+    })
+    fals_res = debate_router.run_falsification_battery(fragile_df, target_col="revenue")
+    assert fals_res["is_fragile"] is True
+    assert len(fals_res["warnings"]) >= 1
+
+
+def test_pipeline_etl_compiler(tmp_path):
+    """Verify compilation of session history into standalone production pipeline script."""
+    from deepanalyze import pipeline_compiler
+
+    out_script = str(tmp_path / "prod_pipeline.py")
+    res = pipeline_compiler.compile_production_pipeline_script(
+        history_metadata=[{"action": "clean_nulls"}, {"action": "unravel_erp"}],
+        target_name="sales_data",
+        output_path=out_script
+    )
+    assert os.path.exists(res)
+    with open(res, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "def run_pipeline" in content
+    assert "def main" in content
+
+
+def test_report_html_brief(tmp_path):
+    """Verify generation of self-contained dark-mode executive HTML report."""
+    import pandas as pd
+    from deepanalyze import pipeline_compiler
+
+    df = pd.DataFrame({
+        "revenue": [100, 250, 400, 600],
+        "profit": [20, 50, 80, 120]
+    })
+    out_html = str(tmp_path / "report.html")
+    res = pipeline_compiler.generate_self_contained_html_report(df, charts_dir=str(tmp_path), output_path=out_html)
+    assert os.path.exists(res)
+    with open(res, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "<!DOCTYPE html>" in content
+    assert "DeepAnalyze Executive Report" in content
+
+
+def test_enrich_async_fetcher():
+    """Verify autonomous data enrichment with standard taxonomy & SIC codes."""
+    import pandas as pd
+    from deepanalyze import enricher
+
+    df = pd.DataFrame({
+        "company": ["Apple Software", "Google Cloud Consulting", "Walmart Retail Store"],
+        "revenue": [5000, 4000, 3000]
+    })
+    en_df, log = enricher.enrich_dataset_async(df)
+    assert "enriched_sector" in en_df.columns
+    assert "enriched_sic_code" in en_df.columns
+    assert log["records_matched"] >= 2
+
+
+def test_semantic_vector_filter():
+    """Verify natural language semantic vector search without regex."""
+    import pandas as pd
+    from deepanalyze import enricher
+
+    df = pd.DataFrame({
+        "ticket_id": [1, 2, 3, 4],
+        "complaint": [
+            "The device battery is overheating and melting",
+            "I want to update my billing address and phone",
+            "Screen cracked and power supply unit exploded",
+            "Subscription renewal discount question"
+        ]
+    })
+    filtered = enricher.filter_by_semantic_meaning(df, query="hardware failure broken overheating defect", text_col="complaint", top_k=2)
+    assert len(filtered) == 2
+    assert 1 in filtered["ticket_id"].values or 3 in filtered["ticket_id"].values
+
+
+def test_causal_treatment_effect():
+    """Verify Treatment Effect Engine computes ATE with confidence intervals."""
+    import numpy as np
+    import pandas as pd
+    from deepanalyze import causal_engine
+
+    np.random.seed(42)
+    n = 100
+    discount = np.random.binomial(1, 0.5, size=n)
+    sales = 50 + 25 * discount + np.random.normal(0, 5, size=n)
+    df = pd.DataFrame({"discount": discount, "sales": sales})
+
+    ate_res = causal_engine.estimate_treatment_effect(df, treatment_col="discount", outcome_col="sales")
+    assert "average_treatment_effect_ate" in ate_res
+    assert ate_res["average_treatment_effect_ate"] > 15.0
+    assert ate_res["statistically_significant"] is True
+
+
+def test_auto_feat_ensemble():
+    """Verify feature discovery factory selects top-5 orthogonal predictive features."""
+    import pandas as pd
+    from deepanalyze import feature_forge
+
+    df = pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=15, freq="D"),
+        "spend": np.linspace(10, 100, 15),
+        "conversions": np.linspace(2, 20, 15) + np.random.normal(0, 0.5, 15),
+        "channel": ["Search", "Social", "Email"] * 5
+    })
+    ef_df, log = feature_forge.ensemble_feature_discovery(df, target_col="conversions", top_k=5)
+    assert log["engineered_features_created"] <= 5
+    assert len(ef_df.columns) <= len(df.columns) + 5
+
+
+def test_twin_adversarial():
+    """Verify Adversarial Digital Twin generates 20% shifted synthetic stress dataset."""
+    import pandas as pd
+    from deepanalyze import synthetic_data
+
+    real_df = pd.DataFrame({
+        "revenue": [100.0, 200.0, 300.0, 400.0, 500.0],
+        "units": [10, 20, 30, 40, 50]
+    })
+    twin_df = synthetic_data.generate_adversarial_digital_twin(real_df, shift_factor=0.20)
+    assert twin_df.shape[0] == real_df.shape[0]
+    assert twin_df["revenue"].mean() != real_df["revenue"].mean()
+
+
+def test_weave_cross_lingual_join():
+    """Verify cross-lingual fuzzy semantic joining."""
+    import pandas as pd
+    from deepanalyze import enricher
+
+    df_en = pd.DataFrame({
+        "product": ["Ultra Pro Laptop 15", "Wireless Gaming Mouse", "Mechanical Keyboard"],
+        "price_usd": [1200, 80, 150]
+    })
+    df_ar = pd.DataFrame({
+        "item_name": ["Laptop Ultra Pro 15 inch", "Gaming Mouse Wireless", "Keypad Mechanical"],
+        "stock": [50, 120, 40]
+    })
+    woven = enricher.cross_lingual_semantic_join(df_en, df_ar, left_on="product", right_on="item_name")
+    assert woven.shape[0] == 3
+    assert "right_stock" in woven.columns
+    assert woven["_weave_similarity"].mean() > 0.3
+
+
+def test_solve_prescriptive_optimizer():
+    """Verify LP Prescriptive Optimization solver for resource allocation."""
+    import pandas as pd
+    from deepanalyze import optimizer
+
+    df = pd.DataFrame({
+        "project": ["Project A", "Project B", "Project C", "Project D"],
+        "expected_roi": [50000, 80000, 30000, 120000],
+        "cost": [10000, 25000, 5000, 40000]
+    })
+    opt_df, opt_log = optimizer.solve_resource_allocation_lp(df, value_col="expected_roi", cost_col="cost", max_budget=40000)
+    assert "optimal_allocation_weight" in opt_df.columns
+    assert opt_log["total_budget_utilized"] <= 40000
+    assert opt_log["objective_max_value"] > 0
+
+
+def test_evolve_schema_healing():
+    """Verify adaptive schema healing rewrites Polars AST when columns drift."""
+    from deepanalyze import optimizer
+
+    old_schema = {"invoice_id": "Int64", "doc_amount": "Float64"}
+    new_schema = {"inv_id": "Int64", "document_amount": "Float64"}
+    code = "df = df.filter(pl.col('doc_amount') > 100)"
+
+    healed_code, log = optimizer.heal_schema_drift(old_schema, new_schema, code)
+    assert log["healed"] is True
+    assert "rename" in healed_code
+
+
+def test_brain_biomimetic_memory(tmp_path):
+    """Verify Biomimetic RAG Brain 3 lifecycles: Phase A hash, Phase B context, Phase C prune."""
+    import pandas as pd
+    from deepanalyze import brain
+
+    b = brain.BiomimeticBrain(storage_path=str(tmp_path / "brain_memory.json"))
+    df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+
+    # Phase A: Passive Ingestion
+    geo_hash = b.compute_geometry_hash(df)
+    assert len(geo_hash) == 16
+    b.log_execution_delta(df, "df = df.select(['a'])", success=True, duration_ms=25.0)
+
+    # Phase B: Context Injection
+    ctx = b.get_context_injection(df)
+    assert ctx["geometry_hash"] == geo_hash
+
+    # Phase C: Pruning & Consolidation
+    b.consolidate_and_prune()
+    assert os.path.exists(str(tmp_path / "brain_memory.json"))
+
+
+def test_storyteller_interactive_html_and_marp_presentation(tmp_path):
+    """Verify interactive HTML presentation and Marp markdown generation."""
+    import pandas as pd
+    from deepanalyze import storyteller
+
+    df = pd.DataFrame({
+        "revenue": [1000, 2000, 3000, 4000],
+        "profit": [200, 400, 600, 800]
+    })
+    memo = storyteller.generate_executive_memo(df)
+
+    # 1. Interactive HTML slide deck
+    html_out = str(tmp_path / "deck.html")
+    html_res = storyteller.generate_interactive_slide_deck_html(memo, output_path=html_out)
+    assert os.path.exists(html_out)
+    assert "class=\"slide active\"" in html_res
+    assert "Executive Strategic Presentation" in html_res
+
+    # 2. Marp presentation
+    marp_out = str(tmp_path / "deck.marp.md")
+    marp_res = storyteller.generate_marp_presentation_md(memo, output_path=marp_out)
+    assert os.path.exists(marp_out)
+    assert "marp: true" in marp_res
+    assert "Pillar 1:" in marp_res
+
+
+def test_schema_synthesizer_multi_dialect_ddl_and_partitions():
+    """Verify Snowflake cluster keys, BigQuery date partitions, and dbt tests."""
+    import pandas as pd
+    from deepanalyze import schema_synthesizer
+
+    df = pd.DataFrame({
+        "order_id": [1, 2, 3, 4],
+        "order_date": pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]),
+        "status": ["PAID", "PENDING", "PAID", "REFUNDED"],
+        "amount": [150.0, 250.0, 350.0, 450.0]
+    })
+
+    # BigQuery Partitioning
+    bq_ddl = schema_synthesizer.infer_sql_schema(df, table_name="orders", dialect="bigquery")
+    assert "PARTITION BY DATE(order_date)" in bq_ddl
+    assert "INT64" in bq_ddl
+
+    # Snowflake Cluster
+    sf_ddl = schema_synthesizer.infer_sql_schema(df, table_name="orders", dialect="snowflake")
+    assert "CLUSTER BY (order_id)" in sf_ddl
+    assert "NUMBER(38,0)" in sf_ddl
+
+    # Postgres Index
+    pg_ddl = schema_synthesizer.infer_sql_schema(df, table_name="orders", dialect="postgres")
+    assert "CREATE INDEX" in pg_ddl
+
+    # dbt Accepted Values Test
+    dbt_yml = schema_synthesizer.generate_dbt_models(df, table_name="orders")
+    assert "accepted_values" in dbt_yml
+    assert "'PAID'" in dbt_yml
+
+
+def test_cleaners_unravel_with_page_breaks_and_subtotals():
+    """Verify ERP unravelling strips repetitive page breaks and subtotals without double-counting."""
+    import pandas as pd
+    from deepanalyze import cleaners
+
+    messy_report = pd.DataFrame([
+        ["Page 1 of 3", None, None, "Printed On: 2026-08-28"],
+        ["Customer : All", "Date : From 01/01/2026", None, None],
+        ["Invoice No", "Date", "Customer", "Amount"],
+        ["INV-001", "2026-01-10", "Acme Corp", "1500.00"],
+        ["Page 2 of 3", None, None, "Printed On: 2026-08-28"],
+        ["INV-002", "2026-01-12", "Beta LLC", "2500.00"],
+        ["Subtotal for North Region", None, None, "4000.00"],
+        ["Grand Total", None, None, "4000.00"]
+    ])
+
+    unravelled = cleaners.unravel_hierarchical_erp_report(messy_report)
+    pdf = unravelled.to_pandas() if hasattr(unravelled, "to_pandas") else unravelled
+    # Should only contain 2 clean transaction line items (INV-001 and INV-002)
+    assert len(pdf) == 2
+    assert "Acme Corp" in pdf.to_string()
+    assert "Beta LLC" in pdf.to_string()
+
+
+def test_core_grammar_constrained_ast_linter():
+    """Verify grammar auto-patching of invalid LLM method calls."""
+    from deepanalyze.core import _lint_and_format_code
+
+    # Simulated 8B LLM syntax slip: .str_slice(0, 5) and .groupby('id')
+    hallucinated_code = """
+import pandas as pd
+import polars as pl
+df = df.with_columns(pl.col('name').str_slice(0, 3))
+"""
+    is_valid, clean_code, err = _lint_and_format_code(hallucinated_code, {"df", "pl", "pd"})
+    assert is_valid is True
+    assert ".str.slice(0, 3)" in clean_code
+
+
+def test_feature_forge_safe_div_and_inf_clamping():
+    """Verify universal safe_div prevents zero-division and inf crashes."""
+    import numpy as np
+    import pandas as pd
+    from deepanalyze.feature_forge import safe_div, auto_engineer_features
+
+    # Scalar
+    assert safe_div(100, 0) == 0.0
+    assert safe_div(100, np.nan) == 0.0
+
+    # Vector
+    s1 = pd.Series([10.0, 20.0, 30.0])
+    s2 = pd.Series([0.0, 5.0, 0.0])
+    res = safe_div(s1, s2)
+    assert res[0] == 0.0
+    assert res[1] == 4.0
+    assert res[2] == 0.0
+    assert not np.isinf(res).any()
+
+    # Feature Engineering Pipeline on 0-denominator matrix
+    df = pd.DataFrame({"rev": [0, 0, 100, 200], "units": [0, 0, 0, 10]})
+    fe_df, log = auto_engineer_features(df)
+    pdf = fe_df.to_pandas() if hasattr(fe_df, "to_pandas") else fe_df
+    assert not np.isinf(pdf.select_dtypes(include=[np.number]).values).any()
+
+
+def test_cleaners_dirty_currency_and_mixed_datetime_sanitizers():
+    """Verify sanitization of dirty currencies, percentages, and mixed datetimes."""
+    import pandas as pd
+    from deepanalyze.cleaners import sanitize_dirty_numeric_series, auto_cast_data_types
+
+    assert sanitize_dirty_numeric_series("$1,250.50") == 1250.50
+    assert sanitize_dirty_numeric_series("(500.00)") == -500.00
+    assert sanitize_dirty_numeric_series("15.5%") == 15.5
+    assert sanitize_dirty_numeric_series("SAR 3,400.00") == 3400.00
+
+    dirty_df = pd.DataFrame({
+        "revenue": ["$1,000.00", "$2,500.50", "(100.00)", "N/A"],
+        "rate": ["5%", "10%", "15%", "20%"],
+        "date": ["2026-01-15", "16/01/2026", "2026-02-01", "2026-02-15"]
+    })
+    cleaned_df = auto_cast_data_types(dirty_df)
+    pdf = cleaned_df.to_pandas() if hasattr(cleaned_df, "to_pandas") else cleaned_df
+    assert pd.api.types.is_numeric_dtype(pdf["revenue"])
+    assert pd.api.types.is_numeric_dtype(pdf["rate"])
+    assert pd.api.types.is_datetime64_any_dtype(pdf["date"])
+
+
+def test_core_atomic_execution_gate_rollback():
+    """Verify _AtomicExecutionGate preserves state on runtime exceptions."""
+    import pandas as pd
+    from deepanalyze.core import _AtomicExecutionGate
+
+    class MockIPython:
+        def __init__(self):
+            self.user_ns = {"target_df": pd.DataFrame({"a": [1, 2, 3]})}
+
+    mock_ip = MockIPython()
+    try:
+        with _AtomicExecutionGate(mock_ip, "target_df"):
+            mock_ip.user_ns["target_df"] = pd.DataFrame({"a": [999]})
+            raise RuntimeError("Simulated crash")
+    except RuntimeError:
+        pass
+
+    # Target DF must have been rolled back to original [1, 2, 3]
+    assert mock_ip.user_ns["target_df"]["a"].tolist() == [1, 2, 3]
+
+
+def test_core_threadpool_clamp_environment():
+    """Verify Apple Silicon threadpool affinity clamps are configured."""
+    assert "POLARS_MAX_THREADS" in os.environ
+    assert "OMP_NUM_THREADS" in os.environ
+    assert int(os.environ["POLARS_MAX_THREADS"]) >= 1
+
+
+def test_core_wide_table_schema_pruning():
+    """Verify schema RAG context on >30 column tables is cleanly capped at top 25."""
+    import pandas as pd
+    from deepanalyze.core import _get_deep_workspace_context
+
+    class MockIP:
+        def __init__(self):
+            data = {f"col_{i}": list(range(30)) for i in range(50)}
+            self.user_ns = {"wide_df": pd.DataFrame(data)}
+
+    mock_ip = MockIP()
+    # 1. Raw Preview
+    ctx_raw, _, _ = _get_deep_workspace_context(mock_ip, is_cloud=False, privacy_mode="none")
+    assert "wide_df" in ctx_raw
+    assert "... and 25 other continuous/categorical dimensions" in ctx_raw
+
+    # 2. Privacy Mode
+    ctx_priv, _, _ = _get_deep_workspace_context(mock_ip, is_cloud=False, privacy_mode="profile")
+    assert "wide_df" in ctx_priv
+    assert "... and 25 other continuous/categorical dimensions" in ctx_priv
+
+
+def test_core_atomic_export_swap(tmp_path):
+    """Verify atomic file export swap writes clean output and leaves no tmp files."""
+    import argparse
+    import pandas as pd
+    from deepanalyze.core import _handle_export
+
+    out_file = str(tmp_path / "clean_output.parquet")
+    df = pd.DataFrame({"a": [10, 20, 30], "b": ["x", "y", "z"]})
+
+    class MockIP:
+        def __init__(self):
+            self.user_ns = {"my_df": df}
+
+    mock_ip = MockIP()
+    args = argparse.Namespace(export="my_df", to=out_file)
+    _handle_export(mock_ip, args)
+
+    assert os.path.exists(out_file)
+    # Ensure no lingering .tmp files
+    tmp_files = [f for f in os.listdir(str(tmp_path)) if ".tmp" in f]
+    assert len(tmp_files) == 0
+
+
+
+
 
 
 

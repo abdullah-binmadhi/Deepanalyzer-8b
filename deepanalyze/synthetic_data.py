@@ -104,3 +104,29 @@ def audit_synthetic_fidelity(real_df, synthetic_df) -> dict:
         "synthetic_rows": len(s_pdf),
         "status": "EXCELLENT FIDELITY" if fidelity_score >= 85 else "ACCEPTABLE"
     }
+
+
+def generate_adversarial_digital_twin(df, shift_factor: float = 0.20, num_rows: int = None) -> object:
+    """Generates an Adversarial Digital Twin DataFrame that shifts continuous distributions
+    by ±20% and introduces boundary edge cases (outliers, zero boundaries) to stress-test
+    pipelines while ensuring 0% real PII exposure.
+    """
+    synth = generate_synthetic_clone(df, num_rows=num_rows, privacy_epsilon=0.5)
+    s_pdf = synth.to_pandas() if hasattr(synth, 'to_pandas') else synth.copy()
+
+    numeric_cols = [c for c in s_pdf.columns if pd.api.types.is_numeric_dtype(s_pdf[c])]
+
+    for col in numeric_cols:
+        # Apply 20% distribution shift
+        shift_direction = np.random.choice([-1.0, 1.0])
+        s_pdf[col] = s_pdf[col] * (1.0 + shift_direction * shift_factor)
+
+        # Inject 5% extreme boundary stress cases
+        if len(s_pdf) >= 10:
+            stress_indices = np.random.choice(len(s_pdf), size=max(1, int(len(s_pdf) * 0.05)), replace=False)
+            s_pdf.loc[stress_indices, col] = s_pdf[col].max() * 3.5
+
+    if pl is not None:
+        return pl.from_pandas(s_pdf)
+    return s_pdf
+

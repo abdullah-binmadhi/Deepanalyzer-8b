@@ -6,6 +6,14 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ---
 
+## 📚 Essential Documentation & Guides
+
+* 📖 **[Comprehensive Q&A and Knowledge Guide (FAQ)](DEEPANALYZE_FAQ_AND_QA.md):** In-depth, college-level explanations of privacy isolation, zero-hallucination math engines, Apple Silicon hardware optimizations, and ERP unravelling.
+* ⚡ **[Master Command Cheat Sheet](DEEPANALYZE_COMMAND_CHEAT_SHEET.md):** Complete practical matrix of all CLI flags, workflows, code examples, and pro tips.
+* 🛡️ **[System Architecture & In-Memory Privacy Engine](System%20Architecture%20&%20In-Memory%20Privacy%20Engine.md):** Technical deep-dive into the token vault, AST sandbox, and zero-copy Arrow memory engine.
+
+---
+
 ## Key Capabilities
 
 ### Core Engine
@@ -48,7 +56,7 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Inline Data Minimaps (`--spark`):** Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) for numeric columns alongside Min, Median, Max, and Null % summaries.
 
 ### Workflow Orchestration
-* **Autonomous 6-Stage Lifecycle (`--EDA`):** Executes the full data analysis lifecycle (Ask → Prepare → Process → Analyze → Share → Act) in a single autonomous Polars-powered run, with local privacy tokenization, publication charts in `./charts/`, and an automated monitoring script.
+* **Autonomous 10-Stage Intelligence Lifecycle (`--EDA`):** Executes the full data analysis lifecycle (Ask → Prepare → Process → Profile → Engineer → Reason → Falsify → Project → Publish → Deploy) in a single autonomous Polars-powered run, with local privacy tokenization, causal root-cause backtracing, SVD VIF multicollinearity screening, 14-day conformal forecasting, dialectical debate, interactive HTML dashboards, Marp slide decks, SQL DDL, production `pipeline.py`, and automated continuous monitoring sentinel.
 * **Global State Orchestrator (`--roadmap`):** Tracks project progress across 4 phases (Profiling & Cleaning → Goal Interview → Execution & Radar → Synthesis) in a persistent global state dictionary, rendering the next recommended `%deepanalyze` command.
 * **Zero-Prompt Kickstart (`--kickstart`):** Sends workspace context to the LLM to autonomously infer business domain, identify target KPIs, and output a prioritized 3-step action plan.
 * **Reverse-Prompting Interview (`--interview`):** The LLM generates 3 targeted multiple-choice analytical constraint questions. User choices are recorded as the project goal for downstream hypothesis generation.
@@ -432,6 +440,28 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Drift Sentinel** | `--drift`, `-dr` | Population Stability Index (PSI), Kolmogorov-Smirnov & schema evolution tracking. |
 | **Schema Synthesizer** | `--schema`, `-sc` | Synthesizes DuckDB/PostgreSQL/Snowflake SQL DDL, dbt `schema.yml`, & Mermaid ER diagrams. |
 | **Synthetic Data Generator** | `--synthetic`, `-sy` | Generates differentially private Gaussian Copula synthetic clone with zero PII leakage. |
+
+#### V3.0 Revolutionary Analytical Capabilities
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Root-Cause Debugger** | `--why <cond>` | Isolates anomaly rows and runs factor variance decomposition to identify top causal drivers. |
+| **Rule Distillation** | `--distill` | Distills invariant data rules from prompt history and persists to `.deepanalyze_memory.json`. |
+| **Turbo SIMD Compiler** | `--turbo` | Transpiles row-wise lambdas, applies, and loops to pure Polars SIMD expressions (8.5x–45x speedup). |
+| **Dialectical Debate** | `--debate` | Spawns concurrent Growth Bull vs Risk Auditor analysis in a split-screen Rich panel. |
+| **Analytical Skeptic** | `--falsify` | Runs a 3-point counter-investigation (outlier concentration, return lag, cohort shift) before finalizing. |
+| **Production ETL Compiler** | `--pipeline` | Distills session transformation lineage into a standalone, typed `pipeline.py` executable. |
+| **Self-Contained Report** | `--report` | Bundles Base64 charts, KPI metrics, and sortable tables into a dark-mode interactive HTML file. |
+| **Autonomous Data Fetcher** | `--enrich` | Vector-appends standard industry taxonomy, SEC SIC codes, and external dimensions. |
+| **Semantic Vector Filter** | `--semantic <query>` | Natural language conceptual semantic filtering on text columns without rigid regex. |
+| **Treatment Effect Engine**| `--causal` | Inverse Probability of Treatment Weighting (IPTW) estimating true Average Treatment Effect (ATE). |
+| **Ensemble Feature Factory**| `--auto-feat ensemble` | High-dimensional feature discovery with orthogonal GBDT importance pruning to top 5 features. |
+| **Adversarial Digital Twin**| `--twin adversarial` | Synthesizes 20% shifted adversarial stress-test datasets with zero real PII exposure. |
+| **Cross-Lingual Weave** | `--weave <target>` | Fuzzy semantic join across languages and varying naming conventions via cosine similarity. |
+| **Prescriptive Optimizer** | `--solve` | Formulates Linear/Quadratic programming optimization and outputs optimal allocation weights. |
+| **Adaptive Schema Healing**| `--evolve` | Intercepts schema drift and auto-maps drifted column names in Polars transformation pipelines. |
+| **Biomimetic RAG Brain** | `--brain` | Multi-phase institutional memory with geometric hashing, delta logging, and hardware OOM reflexes. |
+
 
 #### UI, Visuals & Notebook Automation
 

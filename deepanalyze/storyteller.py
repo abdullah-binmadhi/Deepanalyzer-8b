@@ -200,34 +200,232 @@ def export_briefing(memo_dict: dict, output_format: str = "html", output_path: s
 def generate_slide_deck_outline(df, insights_dict: dict = None) -> str:
     """Generates a 4-slide board presentation in Markdown format."""
     pdf = df.to_pandas() if hasattr(df, 'to_pandas') else df.copy()
-    return f"""---
+    memo = generate_executive_memo(pdf, insights_dict=insights_dict)
+    return generate_marp_presentation_md(memo)
+
+
+def generate_marp_presentation_md(memo_dict: dict, output_path: str = None) -> str:
+    """Generates a standardized Marp Markdown presentation ready for Marp CLI / PPTX export."""
+    marp_content = f"""---
 marp: true
-theme: default
+theme: uncover
+class: invert
 paginate: true
+header: 'DeepAnalyze Executive Briefing'
+footer: 'CONFIDENTIAL • FOR INTERNAL USE ONLY'
 ---
 
-# 📊 Executive Data Intelligence Report
-### Automated DeepAnalyze Strategic Briefing
-**Dataset Scope:** {len(pdf):,} records | {len(pdf.columns)} dimensions
-
----
-
-# 1. Operational Context & Baseline
-* Analyzed full historical transaction scope.
-* Zero data leakage and 100% relational normalization verified.
-* Key entity distributions confirmed within operational limits.
+# 📊 Executive Strategic Briefing
+### {memo_dict['headline']}
+**Scope:** {memo_dict.get('row_count', 0):,} records | {memo_dict.get('col_count', 0)} analytical dimensions
 
 ---
 
-# 2. Key Insights & Cohort Concentration
-* Volume is anchored around high-performing segments.
-* Cross-variable telemetry confirms stable variance.
-* Anomaly radar detected 0 critical non-stationarity risks.
+# 🏛️ Pillar 1: {memo_dict['pillars'][0]['title']}
+* **Finding:** {memo_dict['pillars'][0]['narrative']}
+* **Risk Rating:** `{memo_dict['pillars'][0]['risk_level']} Risk`
+* **Status:** Verified via Zero-Copy In-Memory Telemetry
 
 ---
 
-# 3. Strategic Action Plan
-* **Month 1:** Deploy continuous drift sentinel monitoring.
-* **Month 2:** Optimize segment margins and allocation strategies.
-* **Month 3:** Scale automated predictive forecasting pipelines.
+# 📈 Pillar 2: {memo_dict['pillars'][1]['title']}
+* **Finding:** {memo_dict['pillars'][1]['narrative']}
+* **Risk Rating:** `{memo_dict['pillars'][1]['risk_level']} Risk`
+* **Impact:** Core volume driver across primary cohorts
+
+---
+
+# 🎯 Pillar 3: {memo_dict['pillars'][2]['title']}
+* **Finding:** {memo_dict['pillars'][2]['narrative']}
+* **Risk Rating:** `{memo_dict['pillars'][2]['risk_level']} Risk`
+* **Recommendation:** Deploy automated quality monitoring
+
+---
+
+# 🚀 30 / 60 / 90-Day Execution Roadmap
+* **30 Days:** {memo_dict['action_plan'][0]['action']}
+* **60 Days:** {memo_dict['action_plan'][1]['action']}
+* **90 Days:** {memo_dict['action_plan'][2]['action']}
 """
+    if output_path:
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(marp_content)
+    return marp_content
+
+
+def generate_interactive_slide_deck_html(memo_dict: dict, output_path: str = None) -> str:
+    """Generates a standalone, keyboard-navigable interactive HTML slide deck with dark-mode styling."""
+    html_deck = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DeepAnalyze Boardroom Presentation</title>
+  <style>
+    :root {{
+      --bg: #090D16;
+      --card: rgba(18, 24, 38, 0.9);
+      --border: rgba(255, 255, 255, 0.1);
+      --accent: #6366F1;
+      --accent-grad: linear-gradient(135deg, #6366F1 0%, #A855F7 100%);
+      --text: #F8FAFC;
+      --muted: #94A3B8;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }}
+    .deck-container {{
+      width: 90vw;
+      max-width: 1000px;
+      height: 70vh;
+      position: relative;
+    }}
+    .slide {{
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      backdrop-filter: blur(12px);
+    }}
+    .slide.active {{ display: flex; }}
+    .slide h1 {{
+      font-size: 36px;
+      font-weight: 800;
+      background: var(--accent-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }}
+    .slide h2 {{ font-size: 24px; color: var(--text); margin-bottom: 24px; }}
+    .slide p {{ font-size: 18px; color: var(--muted); line-height: 1.6; margin-bottom: 16px; }}
+    .badge {{
+      display: inline-block;
+      padding: 6px 16px;
+      border-radius: 20px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid var(--accent);
+      color: #A5B4FC;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      align-self: flex-start;
+    }}
+    .controls {{
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }}
+    .btn {{
+      background: #1E293B;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }}
+    .btn:hover {{ background: var(--accent); }}
+    .progress {{ font-size: 14px; color: var(--muted); font-weight: 600; }}
+  </style>
+</head>
+<body>
+  <div class="deck-container">
+    <!-- Slide 1: Title -->
+    <div class="slide active" id="slide-0">
+      <span class="badge">DEEPANALYZE C-SUITE BRIEFING</span>
+      <h1>Executive Strategic Presentation</h1>
+      <h2>{memo_dict['headline']}</h2>
+      <p>Automated deep-structure intelligence synthesized from <strong>{memo_dict.get('row_count', 0):,} verified records</strong>.</p>
+    </div>
+
+    <!-- Slide 2: Pillar 1 -->
+    <div class="slide" id="slide-1">
+      <span class="badge">STRATEGIC PILLAR 1</span>
+      <h1>{memo_dict['pillars'][0]['title']}</h1>
+      <p>{memo_dict['pillars'][0]['narrative']}</p>
+      <p style="color: #10B981; font-weight: 600;">Risk Assessment: {memo_dict['pillars'][0]['risk_level']} Risk</p>
+    </div>
+
+    <!-- Slide 3: Pillar 2 -->
+    <div class="slide" id="slide-2">
+      <span class="badge">STRATEGIC PILLAR 2</span>
+      <h1>{memo_dict['pillars'][1]['title']}</h1>
+      <p>{memo_dict['pillars'][1]['narrative']}</p>
+      <p style="color: #F59E0B; font-weight: 600;">Risk Assessment: {memo_dict['pillars'][1]['risk_level']} Risk</p>
+    </div>
+
+    <!-- Slide 4: Pillar 3 -->
+    <div class="slide" id="slide-3">
+      <span class="badge">STRATEGIC PILLAR 3</span>
+      <h1>{memo_dict['pillars'][2]['title']}</h1>
+      <p>{memo_dict['pillars'][2]['narrative']}</p>
+      <p style="color: #10B981; font-weight: 600;">Risk Assessment: {memo_dict['pillars'][2]['risk_level']} Risk</p>
+    </div>
+
+    <!-- Slide 5: Action Roadmap -->
+    <div class="slide" id="slide-4">
+      <span class="badge">STRATEGIC EXECUTION</span>
+      <h1>30 / 60 / 90-Day Operational Roadmap</h1>
+      <p><strong>[30 Days]:</strong> {memo_dict['action_plan'][0]['action']}</p>
+      <p><strong>[60 Days]:</strong> {memo_dict['action_plan'][1]['action']}</p>
+      <p><strong>[90 Days]:</strong> {memo_dict['action_plan'][2]['action']}</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" onclick="prevSlide()">← Previous</button>
+    <span class="progress" id="slide-num">Slide 1 / 5</span>
+    <button class="btn" onclick="nextSlide()">Next →</button>
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const totalSlides = 5;
+
+    function showSlide(idx) {{
+      document.querySelectorAll('.slide').forEach((s, i) => {{
+        s.classList.toggle('active', i === idx);
+      }});
+      document.getElementById('slide-num').innerText = `Slide ${{idx + 1}} / ${{totalSlides}}`;
+    }}
+
+    function nextSlide() {{
+      currentSlide = (currentSlide + 1) % totalSlides;
+      showSlide(currentSlide);
+    }}
+
+    function prevSlide() {{
+      currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+      showSlide(currentSlide);
+    }}
+
+    document.addEventListener('keydown', (e) => {{
+      if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+      if (e.key === 'ArrowLeft') prevSlide();
+    }});
+  </script>
+</body>
+</html>"""
+    if output_path:
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html_deck)
+    return html_deck
+
