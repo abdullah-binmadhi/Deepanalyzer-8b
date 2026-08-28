@@ -52,6 +52,11 @@ FLAGS = [
     "--next",
     "--auto-clean",
     "--spawn",
+    "--import",
+    "--export",
+    "--to",
+    "--sheet",
+    "--lazy",
     "-u", "--unravel",
     "-s", "--sql",
     "-f", "--feat",
@@ -1294,6 +1299,327 @@ def _display_metrics(duration_sec: float, token_count: int, engine_type: str, mo
     console.print(Panel(table, title="[bold magenta]DeepAnalyze Telemetry[/bold magenta]", border_style="magenta", expand=False))
 
 
+def _sanitize_var_name(raw_name):
+    """Convert a raw filename stem into a valid Python identifier with _df suffix."""
+    name = os.path.splitext(os.path.basename(raw_name))[0]
+    name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    name = re.sub(r'_+', '_', name).strip('_').lower()
+    if not name or name[0].isdigit():
+        name = f"df_{name}"
+    if not name.endswith('_df'):
+        name = f"{name}_df"
+    return name
+
+
+def _estimate_memory_mb(df_obj):
+    """Estimate DataFrame memory footprint in MB."""
+    try:
+        if pl is not None and isinstance(df_obj, (pl.DataFrame, pl.LazyFrame)):
+            if isinstance(df_obj, pl.LazyFrame):
+                return 0.0  # Cannot estimate LazyFrame
+            return df_obj.estimated_size('mb')
+        elif isinstance(df_obj, pd.DataFrame):
+            return df_obj.memory_usage(deep=True).sum() / (1024 * 1024)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _handle_import(ip, args):
+    """Resilient data ingestion engine using Polars with defensive path handling."""
+    global _DF_SNAPSHOTS, _ACTIVE_ROADMAP, _DF_SNAPSHOT_METADATA
+
+    if pl is None:
+        print("[DeepAnalyze Error]: Polars is not installed. Run `pip install polars` first.")
+        return
+
+    source = args.import_path.strip().strip('"').strip("'")
+    t_start = time.time()
+
+    # --- Clipboard Mode ---
+    if source.lower() == "clip":
+        try:
+            df = pl.read_clipboard()
+        except Exception as e:
+            print(f"[DeepAnalyze Import Error]: Clipboard read failed: {e}")
+            return
+        target_name = args.target if args.target != "df" else "clipboard_df"
+    else:
+        # --- Path / URL Resolution ---
+        if source.startswith(("http://", "https://", "ftp://")):
+            resolved_path = source
+        else:
+            resolved_path = os.path.abspath(os.path.expanduser(source))
+            if not os.path.exists(resolved_path):
+                print(f"[DeepAnalyze Import Error]: File not found: {resolved_path}")
+                return
+
+        ext = os.path.splitext(resolved_path.split('?')[0].split('#')[0])[-1].lower()
+        target_name = args.target if args.target != "df" else _sanitize_var_name(resolved_path)
+        sheet = args.sheet
+        use_lazy = args.lazy
+        df = None
+
+        try:
+            # --- Parquet ---
+            if ext == ".parquet":
+                df = pl.scan_parquet(resolved_path) if use_lazy else pl.read_parquet(resolved_path)
+
+            # --- IPC / Arrow / Feather ---
+            elif ext in (".ipc", ".arrow", ".feather"):
+                df = pl.scan_ipc(resolved_path) if use_lazy else pl.read_ipc(resolved_path)
+
+            # --- Excel ---
+            elif ext in (".xlsx", ".xls", ".xlsb"):
+                if use_lazy:
+                    print("[DeepAnalyze Warning]: --lazy is not supported for Excel files. Loading eagerly.")
+                sheet_arg = sheet if sheet is not None else 1
+                try:
+                    df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="calamine")
+                except ImportError:
+                    console.print("[yellow]⚠ calamine engine not installed. Falling back to openpyxl.[/yellow]")
+                    try:
+                        df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="openpyxl")
+                    except ImportError:
+                        print("[DeepAnalyze Error]: Neither calamine nor openpyxl installed. Run `pip install python-calamine` or `pip install openpyxl`.")
+                        return
+                except Exception as e_cal:
+                    try:
+                        df = pl.read_excel(resolved_path, sheet_name=sheet_arg, engine="openpyxl")
+                    except Exception as e_opx:
+                        print(f"[DeepAnalyze Import Error]: Excel read failed.\n  calamine: {e_cal}\n  openpyxl: {e_opx}")
+                        return
+
+            # --- Delimited Text (CSV / TSV / TXT) ---
+            elif ext in (".csv", ".tsv", ".txt"):
+                separator = "\t" if ext == ".tsv" else ","
+                null_values = ["", "NA", "N/A", "null", "NULL", "None", "-"]
+                try:
+                    if use_lazy:
+                        df = pl.scan_csv(
+                            resolved_path, separator=separator,
+                            null_values=null_values, truncate_ragged_lines=True,
+                            try_parse_dates=True
+                        )
+                    else:
+                        df = pl.read_csv(
+                            resolved_path, separator=separator,
+                            null_values=null_values, truncate_ragged_lines=True,
+                            try_parse_dates=True
+                        )
+                except Exception:
+                    # Retry with latin-1 encoding
+                    try:
+                        if use_lazy:
+                            df = pl.scan_csv(
+                                resolved_path, separator=separator,
+                                null_values=null_values, truncate_ragged_lines=True,
+                                try_parse_dates=True, encoding="latin-1"
+                            )
+                        else:
+                            df = pl.read_csv(
+                                resolved_path, separator=separator,
+                                null_values=null_values, truncate_ragged_lines=True,
+                                try_parse_dates=True, encoding="latin-1"
+                            )
+                    except Exception as e_enc:
+                        print(f"[DeepAnalyze Import Error]: CSV/TSV read failed (UTF-8 + latin-1): {e_enc}")
+                        return
+
+            # --- JSON / NDJSON ---
+            elif ext in (".json", ".ndjson", ".jsonl"):
+                if use_lazy:
+                    print("[DeepAnalyze Warning]: --lazy is not supported for JSON files. Loading eagerly.")
+                try:
+                    if ext in (".ndjson", ".jsonl"):
+                        df = pl.read_ndjson(resolved_path)
+                    else:
+                        df = pl.read_json(resolved_path)
+                except Exception as e_json:
+                    print(f"[DeepAnalyze Import Error]: JSON read failed: {e_json}")
+                    return
+
+            else:
+                print(f"[DeepAnalyze Import Error]: Unsupported file extension '{ext}'. "
+                      f"Supported: .csv, .tsv, .txt, .parquet, .ipc, .arrow, .feather, .xlsx, .xls, .xlsb, .json, .ndjson, .jsonl")
+                return
+
+        except Exception as e:
+            print(f"[DeepAnalyze Import Error]: {e}")
+            return
+
+    if df is None:
+        print("[DeepAnalyze Import Error]: Failed to produce a DataFrame from the source.")
+        return
+
+    elapsed = time.time() - t_start
+
+    # --- Bind to Session ---
+    ip.user_ns[target_name] = df
+
+    # --- Snapshot Registration ---
+    snapshot_key = f"0_import_{target_name}"
+    try:
+        if isinstance(df, pl.LazyFrame):
+            # Cannot clone a LazyFrame; store None sentinel
+            _DF_SNAPSHOTS[snapshot_key] = None
+        else:
+            _DF_SNAPSHOTS[snapshot_key] = df.clone()
+    except Exception:
+        pass
+    _DF_SNAPSHOT_METADATA[snapshot_key] = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "action": f"import ({source})"
+    }
+
+    # --- Roadmap Integration ---
+    if _ACTIVE_ROADMAP is not None:
+        _ACTIVE_ROADMAP["target_df"] = target_name
+
+    # --- Telemetry Panel ---
+    is_lazy = isinstance(df, pl.LazyFrame)
+    if is_lazy:
+        lazy_schema = df.collect_schema()
+        schema_info = "\n".join([f"  {name}: {dtype}" for name, dtype in lazy_schema.items()])
+        row_count = "Unknown (LazyFrame)"
+        col_count = str(len(lazy_schema))
+        mem_str = "N/A (LazyFrame)"
+    else:
+        schema_info = "\n".join([f"  {name}: {dtype}" for name, dtype in df.schema.items()])
+        row_count = f"{df.shape[0]:,}"
+        col_count = str(df.shape[1])
+        mem_mb = _estimate_memory_mb(df)
+        mem_str = f"{mem_mb:.2f} MB" if mem_mb >= 1.0 else f"{mem_mb * 1024:.1f} KB"
+
+    panel_body = (
+        f"[bold]Variable:[/bold] {target_name}\n"
+        f"[bold]Source:[/bold] {source}\n"
+        f"[bold]Rows:[/bold] {row_count}  |  [bold]Columns:[/bold] {col_count}\n"
+        f"[bold]Memory:[/bold] {mem_str}\n"
+        f"[bold]Type:[/bold] {'pl.LazyFrame' if is_lazy else 'pl.DataFrame'}\n"
+        f"[bold]Load Time:[/bold] {elapsed:.3f}s\n\n"
+        f"[bold]Schema:[/bold]\n{schema_info}"
+    )
+    console.print(Panel(panel_body, title="📥 [bold green]DeepAnalyze Import[/bold green]", border_style="green"))
+
+
+def _handle_export(ip, args):
+    """Defensive polyglot exporter with automatic directory creation."""
+    export_target = args.export
+    t_start = time.time()
+
+    # --- Target Resolution ---
+    if export_target not in ip.user_ns:
+        print(f"[DeepAnalyze Export Error]: Variable '{export_target}' not found in session namespace.")
+        return
+
+    df = ip.user_ns[export_target]
+
+    # Handle Polars LazyFrame
+    if pl is not None and isinstance(df, pl.LazyFrame):
+        console.print("[yellow]⚠ Collecting LazyFrame before export...[/yellow]")
+        try:
+            df = df.collect()
+        except Exception as e:
+            print(f"[DeepAnalyze Export Error]: LazyFrame.collect() failed: {e}")
+            return
+
+    # Validate type
+    valid_types = [pd.DataFrame]
+    if pl is not None:
+        valid_types.append(pl.DataFrame)
+    if not isinstance(df, tuple(valid_types)):
+        print(f"[DeepAnalyze Export Error]: Variable '{export_target}' is {type(df).__name__}, not a DataFrame.")
+        return
+
+    # Convert Pandas to Polars for uniform write API
+    is_pandas_source = isinstance(df, pd.DataFrame)
+    if is_pandas_source:
+        try:
+            df = pl.from_pandas(df)
+        except Exception as e:
+            print(f"[DeepAnalyze Export Error]: Pandas-to-Polars conversion failed: {e}")
+            return
+
+    # --- Destination Resolution ---
+    dest_raw = args.to if args.to else f"./{export_target}.parquet"
+    dest_raw = dest_raw.strip().strip('"').strip("'")
+
+    # DuckDB special syntax: path.duckdb:table_name
+    if ":" in dest_raw and dest_raw.split(":")[0].endswith(".duckdb"):
+        db_path, table_name = dest_raw.rsplit(":", 1)
+        db_path = os.path.abspath(os.path.expanduser(db_path))
+        os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+        if duckdb is None:
+            print("[DeepAnalyze Export Error]: DuckDB is not installed. Run `pip install duckdb` to enable .duckdb export.")
+            return
+        try:
+            export_con = duckdb.connect(database=db_path)
+            export_con.register("__export_df", df.to_arrow())
+            export_con.execute(f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM __export_df')
+            export_con.unregister("__export_df")
+            export_con.close()
+            elapsed = time.time() - t_start
+            file_size = os.path.getsize(db_path)
+            size_str = f"{file_size / (1024*1024):.2f} MB" if file_size >= 1024*1024 else f"{file_size / 1024:.1f} KB"
+            console.print(Panel(
+                f"[bold]Target:[/bold] {db_path} → table '{table_name}'\n"
+                f"[bold]Rows:[/bold] {df.shape[0]:,}  |  [bold]Size:[/bold] {size_str}\n"
+                f"[bold]Write Time:[/bold] {elapsed:.3f}s",
+                title="📤 [bold blue]DeepAnalyze DuckDB Export[/bold blue]", border_style="blue"
+            ))
+        except Exception as e:
+            print(f"[DeepAnalyze Export Error]: DuckDB write failed: {e}")
+        return
+
+    # Standard file export
+    dest = os.path.abspath(os.path.expanduser(dest_raw))
+    parent_dir = os.path.dirname(dest)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+
+    ext = os.path.splitext(dest)[-1].lower()
+
+    try:
+        if ext == ".parquet":
+            df.write_parquet(dest, compression="zstd", statistics=True)
+        elif ext == ".csv":
+            df.write_csv(dest, include_header=True)
+        elif ext in (".tsv", ".txt"):
+            df.write_csv(dest, separator="\t", include_header=True)
+        elif ext == ".xlsx":
+            try:
+                df.write_excel(dest)
+            except ImportError:
+                print("[DeepAnalyze Export Error]: xlsxwriter not installed. Run `pip install xlsxwriter`.")
+                return
+        elif ext == ".ndjson":
+            df.write_ndjson(dest)
+        elif ext == ".json":
+            df.write_json(dest)
+        elif ext in (".ipc", ".arrow", ".feather"):
+            df.write_ipc(dest)
+        else:
+            print(f"[DeepAnalyze Export Error]: Unsupported format '{ext}'. "
+                  f"Supported: .parquet, .csv, .tsv, .xlsx, .json, .ndjson, .ipc, .arrow, .feather, .duckdb")
+            return
+    except Exception as e:
+        print(f"[DeepAnalyze Export Error]: Write failed: {e}")
+        return
+
+    elapsed = time.time() - t_start
+    file_size = os.path.getsize(dest)
+    size_str = f"{file_size / (1024*1024):.2f} MB" if file_size >= 1024*1024 else f"{file_size / 1024:.1f} KB"
+    console.print(Panel(
+        f"[bold]Destination:[/bold] {dest}\n"
+        f"[bold]Format:[/bold] {ext.lstrip('.')}  |  [bold]Rows:[/bold] {df.shape[0]:,}\n"
+        f"[bold]File Size:[/bold] {size_str}\n"
+        f"[bold]Write Time:[/bold] {elapsed:.3f}s",
+        title="📤 [bold blue]DeepAnalyze Export[/bold blue]", border_style="blue"
+    ))
+
+
+
 def deepanalyze(line, cell=None):
     global _LAST_GENERATED_CODE, _LAST_USER_PROMPT, _INTERCEPTOR_ACTIVE
     raw_input = f"{line}\n{cell}" if cell else line
@@ -1360,6 +1686,13 @@ def deepanalyze(line, cell=None):
     parser.add_argument("-m", "--ml", action="store_true")
     parser.add_argument("-r", "--repair", action="store_true")
     
+    # DATA INGESTION & EXPORT FLAGS
+    parser.add_argument("--import", dest="import_path", type=str, default=None, help="Import data from path, URL, or 'clip' (clipboard)")
+    parser.add_argument("--export", type=str, default=None, help="Export a session variable to disk")
+    parser.add_argument("--to", type=str, default=None, help="Destination filepath for --export (defaults to ./<target>.parquet)")
+    parser.add_argument("--sheet", type=str, default=None, help="Sheet name or index for Excel imports")
+    parser.add_argument("--lazy", action="store_true", help="Create a Polars LazyFrame instead of eager DataFrame")
+
     parser.add_argument("-d", "--deterministic", action="store_true")
     parser.add_argument("--target", type=str, default="df")
     parser.add_argument("--retries", type=int, default=1)
@@ -1412,6 +1745,16 @@ def deepanalyze(line, cell=None):
             print(f"[DeepAnalyze Undo]: Restored `{parsed_args.target}` from snapshot. Shape: {df_restored.shape[0]} rows, {df_restored.shape[1]} columns.")
         else:
             print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
+        return
+
+    # Resilient Data Ingestion (--import)
+    if parsed_args.import_path:
+        _handle_import(ip, parsed_args)
+        return
+
+    # Defensive Polyglot Exporter (--export)
+    if parsed_args.export:
+        _handle_export(ip, parsed_args)
         return
 
     active_model = "deepanalyze-8b"

@@ -16,6 +16,8 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Interactive Auto-Escalator & Self-Repair:** Traps runtime exceptions and syntax crashes in an isolated sandbox, opening a human-in-the-loop menu to retry locally with DeepAnalyze-8B, escalate tracebacks to DeepSeek Reasoner, or abort without mutating session state.
 * **Egress AST Security Sandbox:** Audits generated code before execution, blocking unauthorized network sockets (`requests`, `urllib`, `socket`), disk writes, or shell exploits.
 * **Streaming Syntax HUD & Step Tracker:** Replaces static progress text with an animated step-by-step indicator (`[1/3] 🔍 Routing ➔ [2/3] ⚡ Streaming ➔ [3/3] 🛡️ Validating`) with real-time token count during LLM inference.
+* **Resilient Data Ingestion (`--import`):** High-speed Polars ingestion engine with automatic path resolution, quote sanitization, encoding fallback (UTF-8 ➔ latin-1), Excel calamine/openpyxl fallback, line-delimited NDJSON support, clipboard reading, and automatic target variable name binding.
+* **Defensive Polyglot Exporter (`--export`):** Universal export engine supporting `.parquet`, `.csv`, `.tsv`, `.xlsx`, `.json`, `.ndjson`, `.ipc`/`.arrow`, and DuckDB database tables (`db.duckdb:table_name`) with auto directory creation and LazyFrame auto-collection.
 * **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
 
 ### Data Science Skills
@@ -417,6 +419,16 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Auto-Clean** | `--auto-clean` | Autonomous data sanitizer routed through `--preview` ghost execution. |
 | **Spawn Cells** | `--spawn` | Injects Markdown narrative + Code cells into notebook below current cell. |
 
+#### Data Ingestion & Export
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Import Data** | `--import <path\|url\|clip>` | Ingest CSV, TSV, Parquet, IPC, Arrow, Excel, JSON/NDJSON, or clipboard into session DataFrame. |
+| **Export Data** | `--export <var>` | Export session DataFrame to file or DuckDB database table. |
+| **Export Destination** | `--to <path>` | Destination filepath for `--export` (defaults to `./<var>.parquet`). |
+| **Excel Sheet** | `--sheet <name\|idx>` | Specify sheet name or index for Excel workbooks. |
+| **Lazy Scan** | `--lazy` | Instantiate a Polars `pl.LazyFrame` instead of eager `pl.DataFrame` (CSV, Parquet, IPC). |
+
 #### State Management & Convenience
 
 | Directive | Flag | Behavior |
@@ -677,6 +689,30 @@ sensor_pl = pl.DataFrame({
 
 # Predictive next-action recommender
 %deepanalyze -x --next -f --target sales_data Strip whitespace from all string columns.
+```
+
+---
+
+### 15. Resilient Data Ingestion & Polyglot Exporter (`--import`, `--export`)
+
+```python
+# 1. Ingest CSV with auto-sanitized variable name (e.g. sales_2026_q1_df) and Rich telemetry
+%deepanalyze --import "data/Sales 2026-Q1.csv"
+
+# 2. Ingest specific sheet from Excel with target override
+%deepanalyze --import ~/Downloads/financial_report.xlsx --sheet "Q4 Ledger" --target ledger_df
+
+# 3. Ingest large Parquet file lazily as a Polars LazyFrame
+%deepanalyze --import "s3://bucket/huge_telemetry.parquet" --lazy --target telemetry_lazy
+
+# 4. Ingest raw tabular data directly from system clipboard
+%deepanalyze --import clip --target clipboard_data
+
+# 5. Export cleaned DataFrame to zstd-compressed Parquet with automatic directory creation
+%deepanalyze --export sales_2026_q1_df --to "exports/curated/sales_clean.parquet"
+
+# 6. Export directly to an embedded DuckDB database table
+%deepanalyze --export ledger_df --to "analytics.duckdb:quarterly_ledger"
 ```
 
 ## Attribution & Licensing

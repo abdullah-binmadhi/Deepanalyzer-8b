@@ -692,6 +692,328 @@ def test_artifact_spawner(monkeypatch):
     assert any("spawned" in c for c in injected_cells)
 
 
+# ==================== IMPORT / EXPORT ENGINE TESTS ====================
+
+from deepanalyze.core import _sanitize_var_name, _estimate_memory_mb, _handle_import, _handle_export
+
+def test_sanitize_var_name_basic():
+    """Tests that filenames are sanitized into valid Python identifiers with _df suffix."""
+    assert _sanitize_var_name("data/Sales 2026-Q1.csv") == "sales_2026_q1_df"
+    assert _sanitize_var_name("raw_export.parquet") == "raw_export_df"
+    assert _sanitize_var_name("123_file.csv") == "df_123_file_df"
+    assert _sanitize_var_name("my_data_df.csv") == "my_data_df"
+    assert _sanitize_var_name("hello world!.tsv") == "hello_world_df"
+
+
+def test_sanitize_var_name_edge_cases():
+    """Tests edge cases for the variable name sanitizer."""
+    assert _sanitize_var_name("!!!.csv") == "df__df"
+    assert _sanitize_var_name("a.csv") == "a_df"
+    assert _sanitize_var_name("already_df.xlsx") == "already_df"
+
+
+def test_estimate_memory_mb_pandas():
+    """Tests memory estimation for a Pandas DataFrame."""
+    df = pd.DataFrame({"a": range(1000), "b": [f"x{i}" for i in range(1000)]})
+    mem = _estimate_memory_mb(df)
+    assert mem > 0
+
+
+def test_estimate_memory_mb_polars():
+    """Tests memory estimation for a Polars DataFrame."""
+    try:
+        import polars as pl
+        df = pl.DataFrame({"a": range(1000), "b": [f"x{i}" for i in range(1000)]})
+        mem = _estimate_memory_mb(df)
+        assert mem > 0
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+
+def test_import_csv_roundtrip(tmp_path, monkeypatch):
+    """Tests full CSV import -> session binding -> export roundtrip."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    # Create a test CSV
+    csv_path = tmp_path / "test_import.csv"
+    test_df = pl.DataFrame({
+        "id": [1, 2, 3],
+        "name": ["Alice", "Bob", "Charlie"],
+        "value": [10.5, 20.3, None]
+    })
+    test_df.write_csv(str(csv_path))
+
+    # Mock IPython
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(csv_path),
+        target="df",
+        sheet=None,
+        lazy=False
+    )
+
+    _handle_import(mock_ip, args)
+
+    # Verify variable was bound
+    assert "test_import_df" in mock_ip.user_ns
+    imported_df = mock_ip.user_ns["test_import_df"]
+    assert isinstance(imported_df, pl.DataFrame)
+    assert imported_df.shape == (3, 3)
+    assert list(imported_df.columns) == ["id", "name", "value"]
+
+
+def test_import_with_target_override(tmp_path, monkeypatch):
+    """Tests that --target overrides the auto-generated variable name."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    csv_path = tmp_path / "data.csv"
+    pl.DataFrame({"x": [1, 2]}).write_csv(str(csv_path))
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(csv_path),
+        target="my_custom_name",
+        sheet=None,
+        lazy=False
+    )
+
+    _handle_import(mock_ip, args)
+    assert "my_custom_name" in mock_ip.user_ns
+
+
+def test_import_file_not_found(tmp_path, capsys):
+    """Tests that import handles missing files gracefully."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(tmp_path / "nonexistent.csv"),
+        target="df",
+        sheet=None,
+        lazy=False
+    )
+
+    _handle_import(mock_ip, args)
+    captured = capsys.readouterr()
+    assert "File not found" in captured.out
+
+
+def test_import_unsupported_extension(tmp_path, capsys):
+    """Tests that import rejects unsupported file extensions."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    weird_file = tmp_path / "data.weird"
+    weird_file.write_text("test")
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(weird_file),
+        target="df",
+        sheet=None,
+        lazy=False
+    )
+
+    _handle_import(mock_ip, args)
+    captured = capsys.readouterr()
+    assert "Unsupported file extension" in captured.out
+
+
+def test_export_csv(tmp_path):
+    """Tests exporting a Polars DataFrame to CSV."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    class MockIP:
+        user_ns = {"my_df": pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})}
+    mock_ip = MockIP()
+
+    dest = str(tmp_path / "output.csv")
+    import argparse
+    args = argparse.Namespace(
+        export="my_df",
+        to=dest
+    )
+
+    _handle_export(mock_ip, args)
+    assert os.path.exists(dest)
+    reloaded = pl.read_csv(dest)
+    assert reloaded.shape == (3, 2)
+
+
+def test_export_parquet_default_path(tmp_path, monkeypatch):
+    """Tests that export defaults to ./<target>.parquet when --to is omitted."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    monkeypatch.chdir(tmp_path)
+
+    class MockIP:
+        user_ns = {"sales": pl.DataFrame({"revenue": [100, 200]})}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        export="sales",
+        to=None
+    )
+
+    _handle_export(mock_ip, args)
+    expected_path = tmp_path / "sales.parquet"
+    assert expected_path.exists()
+
+
+def test_export_creates_directories(tmp_path):
+    """Tests that export auto-creates parent directories."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    class MockIP:
+        user_ns = {"df": pl.DataFrame({"x": [1]})}
+    mock_ip = MockIP()
+
+    dest = str(tmp_path / "deep" / "nested" / "dir" / "output.csv")
+    import argparse
+    args = argparse.Namespace(
+        export="df",
+        to=dest
+    )
+
+    _handle_export(mock_ip, args)
+    assert os.path.exists(dest)
+
+
+def test_export_variable_not_found(capsys):
+    """Tests that export handles missing variables gracefully."""
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        export="nonexistent_var",
+        to="/tmp/out.csv"
+    )
+
+    _handle_export(mock_ip, args)
+    captured = capsys.readouterr()
+    assert "not found in session namespace" in captured.out
+
+
+def test_export_pandas_to_parquet(tmp_path):
+    """Tests that Pandas DataFrames are auto-converted to Polars before export."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    class MockIP:
+        user_ns = {"pd_df": pd.DataFrame({"col1": [10, 20], "col2": ["a", "b"]})}
+    mock_ip = MockIP()
+
+    dest = str(tmp_path / "pandas_output.parquet")
+    import argparse
+    args = argparse.Namespace(
+        export="pd_df",
+        to=dest
+    )
+
+    _handle_export(mock_ip, args)
+    assert os.path.exists(dest)
+    reloaded = pl.read_parquet(dest)
+    assert reloaded.shape == (2, 2)
+
+
+def test_import_parquet_roundtrip(tmp_path):
+    """Tests import/export roundtrip via Parquet format."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    # Write a parquet file first
+    original = pl.DataFrame({"x": [1, 2, 3], "y": [4.0, 5.0, 6.0]})
+    pq_path = str(tmp_path / "data.parquet")
+    original.write_parquet(pq_path)
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=pq_path,
+        target="df",
+        sheet=None,
+        lazy=False
+    )
+
+    _handle_import(mock_ip, args)
+    assert "data_df" in mock_ip.user_ns
+    assert mock_ip.user_ns["data_df"].shape == (3, 2)
+
+
+def test_import_lazy_csv(tmp_path):
+    """Tests that --lazy creates a LazyFrame for CSV files."""
+    try:
+        import polars as pl
+    except ImportError:
+        pytest.skip("Polars not installed")
+
+    csv_path = tmp_path / "lazy_test.csv"
+    pl.DataFrame({"a": range(10)}).write_csv(str(csv_path))
+
+    class MockIP:
+        user_ns = {}
+    mock_ip = MockIP()
+
+    import argparse
+    args = argparse.Namespace(
+        import_path=str(csv_path),
+        target="df",
+        sheet=None,
+        lazy=True
+    )
+
+    _handle_import(mock_ip, args)
+    assert "lazy_test_df" in mock_ip.user_ns
+    assert isinstance(mock_ip.user_ns["lazy_test_df"], pl.LazyFrame)
+
+
+import os
 
 
 

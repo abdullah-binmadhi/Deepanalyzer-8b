@@ -263,6 +263,26 @@ Replaces static progress text with an animated step-by-step indicator during LLM
 
 ---
 
+## 2e. Resilient Data Ingestion & Polyglot Exporter
+
+DeepAnalyze v2.1.0 integrates a high-performance, Polars-backed ingestion and export subsystem designed for seamless zero-copy and lazy evaluations:
+
+### Resilient Data Ingestion (`--import`)
+* **Polymorphic Format Detection:** Handles CSV, TSV, TXT, Parquet, IPC/Arrow/Feather, Excel (`.xlsx`, `.xls`, `.xlsb`), and JSON/NDJSON.
+* **Defensive Path & Quote Normalization:** Automatically strips surrounding single/double quotes, resolves user tildes (`~`) and relative paths via `os.path.abspath(os.path.expanduser(path))`.
+* **Encoding & Parser Fallbacks:** Tries standard UTF-8 parsing with date inference and ragged-line truncation; automatically falls back to `latin-1` if decoding errors occur. Excel reading attempts `calamine` first for high speed and gracefully falls back to `openpyxl`.
+* **Clipboard Ingestion (`--import clip`):** Ingests raw tabular data copied from spreadsheets or web pages directly into an in-memory DataFrame.
+* **Lazy Scanning (`--lazy`):** Instantiates a `pl.LazyFrame` (supported for Parquet, IPC, and CSV) for delayed, out-of-core evaluation on massive datasets.
+* **Identifier Sanitization & State Integration:** Automatically converts dirty file stems (e.g., `"Sales 2026-Q1.csv"`) into valid Python identifiers (`sales_2026_q1_df`), registers initial snapshots in `_DF_SNAPSHOTS`, and links with `_ACTIVE_ROADMAP`.
+
+### Defensive Polyglot Exporter (`--export`)
+* **LazyFrame Auto-Collection:** Detects `pl.LazyFrame` targets and executes `.collect()` before writing.
+* **Automatic Directory Creation:** Recursively creates destination parent directories with `os.makedirs(..., exist_ok=True)`.
+* **Multi-Format Serialization:** Supports zstd-compressed Parquet with statistics, CSV, TSV, Excel, JSON, NDJSON, and Arrow IPC.
+* **Embedded DuckDB Table Registration:** Supports `path.duckdb:table_name` syntax to create or replace database tables directly from session DataFrames.
+
+---
+
 ## 3. Practical Usage & Prompt Cheatsheet
 
 ### 1. Pre-Flight Privacy Audit (`--audit-only`)
@@ -369,6 +389,11 @@ If a transformation produces unexpected results, roll back your DataFrame to its
 | `--next` | **Next Actions** | Automation | Predictive 3-action recommender with executable commands. |
 | `--auto-clean` | **Auto-Clean** | Automation | Autonomous data sanitizer routed through `--preview` ghost execution. |
 | `--spawn` | **Spawn Cells** | Automation | Injects Markdown narrative + Code cells into notebook below current cell. |
+| `--import <src>` | **Data Ingestion** | Ingestion | Ingest CSV, Parquet, Excel, JSON, NDJSON, or clipboard into session DataFrame. |
+| `--export <var>` | **Polyglot Export** | Export | Export session DataFrame to Parquet, CSV, Excel, JSON, IPC, or DuckDB. |
+| `--to <dest>` | **Export Path** | Export | Destination filepath for `--export` (defaults to `./<target>.parquet`). |
+| `--sheet <name>` | **Excel Sheet** | Ingestion | Sheet name or index for multi-sheet Excel workbooks. |
+| `--lazy` | **Lazy Evaluation** | Ingestion | Instantiate a Polars `pl.LazyFrame` instead of eager `pl.DataFrame`. |
 | `--pro` | **Cloud Pro** | Routing | Routes prompt to `deepseek-chat` (DeepSeek-V3) for complex workloads. |
 | `--flash` | **Cloud Flash** | Routing | Routes prompt to lighter, high-speed cloud reasoning models. |
 | `--think` | **Cloud Reasoner** | Routing | Routes prompt to `deepseek-reasoner` (R1) for deep Chain-of-Thought processing. |
