@@ -303,7 +303,7 @@ start-deepanalyze -m /path/to/another-model.gguf
 Install the core engine alongside the modern scientific computing stack:
 
 ```bash
-pip install pandas polars pyarrow numpy duckdb matplotlib seaborn openai httpx
+pip install pandas polars pyarrow numpy scipy scikit-learn statsmodels duckdb fastexcel openpyxl xlsxwriter matplotlib seaborn openai httpx rich ipython
 ```
 
 ### 3. Install the DeepAnalyze Package
@@ -420,6 +420,18 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Interview** | `--interview` | Stakeholder goal & constraint alignment via multiple-choice questions. |
 | **Brainstorm** | `--brainstorm` | Autonomous hypothesis generator with executable `%deepanalyze` commands. |
 | **Anomaly Radar** | `--radar` | Proactive anomaly scanning for null surges, metric shifts, and sign flips. |
+
+#### Specialized Intelligence Engines
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Statistical Battery** | `--stats`, `-st` | Adaptive hypothesis testing battery, SVD-regularized VIF & non-linear driver ranking. |
+| **Executive Storyteller** | `--story`, `-sm` | Synthesizes McKinsey Pyramid Principle executive briefing memo (`.html`/`.md`). |
+| **Feature Forge** | `--engineer`, `-fe` | Autonomous leak-free feature engineering, cyclical temporal lags & interaction pruning. |
+| **Autonomous Forecaster** | `--forecast`, `-fc` | Automatic cadence detection, STL decomposition & 80%/95% conformal prediction bands. |
+| **Drift Sentinel** | `--drift`, `-dr` | Population Stability Index (PSI), Kolmogorov-Smirnov & schema evolution tracking. |
+| **Schema Synthesizer** | `--schema`, `-sc` | Synthesizes DuckDB/PostgreSQL/Snowflake SQL DDL, dbt `schema.yml`, & Mermaid ER diagrams. |
+| **Synthetic Data Generator** | `--synthetic`, `-sy` | Generates differentially private Gaussian Copula synthetic clone with zero PII leakage. |
 
 #### UI, Visuals & Notebook Automation
 
@@ -728,8 +740,50 @@ sensor_pl = pl.DataFrame({
 %deepanalyze --export ledger_df --to "analytics.duckdb:quarterly_ledger"
 ```
 
+---
+
+### 16. Universal Hierarchical Report & ERP Unraveller (`--unravel`, `-u`)
+
+Transforms multi-level hierarchical accounting and ERP reports (Invoice Listings, General Ledgers, Purchase Orders, AR/AP Aging) into clean, flat 2D normalized datasets:
+
+```python
+# Autonomous unravelling of messy multi-row ERP report
+%deepanalyze --unravel --target inv_listing_df
+
+# Or end-to-end autonomous import, unravel, and 6-stage EDA
+%deepanalyze --import "INV LISTING 31082025.xlsx" --EDA --goal "Find sequence, doc_no, item_amount and compute invoice totals"
+```
+
+---
+
+### 17. Specialized Intelligence Engines
+
+```python
+# 1. Statistical Hypothesis Testing Battery & SVD VIF
+%deepanalyze --stats --target sales_data
+
+# 2. Executive Storyteller Memo (McKinsey Pyramid Principle HTML/MD briefing)
+%deepanalyze --story --target sales_data
+
+# 3. Autonomous Leak-Free Feature Engineering & Lags
+%deepanalyze --engineer --target sales_data
+
+# 4. Autonomous 14-Day Time-Series Forecast with Conformal Bounds
+%deepanalyze --forecast --target sales_data
+
+# 5. Data Drift Sentinel & Population Stability Index (PSI)
+%deepanalyze --drift --target sales_data
+
+# 6. SQL Schema DDL Synthesizer (DuckDB / PostgreSQL / Snowflake) & dbt Models
+%deepanalyze --schema --target sales_data
+
+# 7. Differentially Private Synthetic Data Generator (Gaussian Copula)
+%deepanalyze --synthetic --target sales_data
+```
+
 ## Attribution & Licensing
 
 * **Base Architecture & Research:** [RUC-DataLab/DeepAnalyze-8B](https://huggingface.co/RUC-DataLab/DeepAnalyze-8B)
 * **Training Corpus:** [RUC-DataLab/DataScience-Instruct-500K](https://huggingface.co/datasets/RUC-DataLab/DataScience-Instruct-500K)
 * **License:** [MIT License](LICENSE)
+

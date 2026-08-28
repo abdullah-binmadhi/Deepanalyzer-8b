@@ -5,6 +5,17 @@ from .core import (
     _apply_polars_compat_shim,
     __version__
 )
+from . import cleaners
+from . import privacy_knife
+from . import dashboard
+from . import statistical_engine
+from . import storyteller
+from . import feature_forge
+from . import forecaster
+from . import drift_sentinel
+from . import schema_synthesizer
+from . import synthetic_data
+
 
 def load_ipython_extension(ipython):
     """Called automatically by IPython when running %load_ext deepanalyze"""

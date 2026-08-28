@@ -93,7 +93,14 @@ FLAGS = [
     "--toggle",
     "-c", "--continue",
     "--retries",
-    "--status"
+    "--status",
+    "--stats", "-st",
+    "--story", "-sm",
+    "--engineer", "-fe",
+    "--forecast", "-fc",
+    "--drift", "-dr",
+    "--schema", "-sc",
+    "--synthetic", "-sy"
 ]
 
 def deepanalyze_completer(self, event):
@@ -112,6 +119,13 @@ except ImportError:
 from .privacy_knife import DeepAnalyzePrivacyKnife, LocalGatekeeper
 from . import cleaners
 from . import dashboard
+from . import statistical_engine
+from . import storyteller
+from . import feature_forge
+from . import forecaster
+from . import drift_sentinel
+from . import schema_synthesizer
+from . import synthetic_data
 
 try:
     import duckdb
@@ -2228,10 +2242,24 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         output_path=os.path.join(charts_dir, f"eda_{target_name}_dashboard.html")
     )
 
+    # Generate Executive Briefing Memo (McKinsey Pyramid Principle)
+    memo_dict = storyteller.generate_executive_memo(detok_df)
+    briefing_html_path = os.path.join(charts_dir, f"eda_{target_name}_briefing.html")
+    briefing_md_path = os.path.join(charts_dir, f"eda_{target_name}_briefing.md")
+    storyteller.export_briefing(memo_dict, output_format="html", output_path=briefing_html_path)
+    storyteller.export_briefing(memo_dict, output_format="markdown", output_path=briefing_md_path)
+
+    # Synthesize DuckDB SQL Schema DDL
+    sql_ddl = schema_synthesizer.infer_sql_schema(detok_df, table_name=target_name, dialect="duckdb")
+    sql_path = os.path.join(charts_dir, f"eda_{target_name}_schema.sql")
+    with open(sql_path, "w", encoding="utf-8") as f_sql:
+        f_sql.write(sql_ddl)
+
     chart_paths_str = "\n".join([f"  • [underline cyan]{p}[/underline cyan]" for p in generated_charts]) if generated_charts else "  • Plots rendered in-memory"
     stage5_info = (
         f"[bold]📊 Visual Assets (PNG):[/bold]\n{chart_paths_str}\n\n"
         f"[bold]🌐 Interactive Executive Dashboard (HTML/JS):[/bold]\n  • [underline green]{dash_path}[/underline green]\n\n"
+        f"[bold]🏛️ Executive Strategic Briefing Memo:[/bold]\n  • [underline green]{briefing_html_path}[/underline green]\n  • [underline green]{briefing_md_path}[/underline green]\n\n"
         f"[bold]📋 Executive Briefing & Root Causes:[/bold]\n{exec_narrative}"
     )
     console.print(Panel(stage5_info, title="📈 [bold magenta]Stage 5: Executive Insights & Interactive Dashboard[/bold magenta]", border_style="magenta"))
@@ -2374,6 +2402,15 @@ def deepanalyze(line, cell=None):
     parser.add_argument("-t", "--stat", action="store_true")
     parser.add_argument("-m", "--ml", action="store_true")
     parser.add_argument("-r", "--repair", action="store_true")
+
+    # SPECIALIZED INTELLIGENCE ENGINES
+    parser.add_argument("--stats", "-st", action="store_true", help="Run adaptive hypothesis testing battery & regularized SVD VIF")
+    parser.add_argument("--story", "-sm", action="store_true", help="Generate McKinsey Pyramid Principle executive briefing memo")
+    parser.add_argument("--engineer", "-fe", action="store_true", help="Run automated leak-free feature engineering and temporal lags")
+    parser.add_argument("--forecast", "-fc", action="store_true", help="Autonomous time-series projection with conformal intervals")
+    parser.add_argument("--drift", "-dr", action="store_true", help="Run Population Stability Index (PSI) and data drift watchdog")
+    parser.add_argument("--schema", "-sc", action="store_true", help="Synthesize DuckDB / SQL DDL and dbt schema.yml")
+    parser.add_argument("--synthetic", "-sy", action="store_true", help="Generate differentially private Gaussian Copula synthetic clone")
     
     # DATA INGESTION & EXPORT FLAGS
     parser.add_argument("--import", dest="import_path", type=str, default=None, help="Import data from path, URL, or 'clip' (clipboard)")
@@ -2523,6 +2560,79 @@ def deepanalyze(line, cell=None):
             console.print(Panel("\n".join(log), title="🔗 [bold green]DeepAnalyze Relational Stitcher[/bold green]", border_style="green"))
         else:
             print("[DeepAnalyze --stitch]: No DataFrames found in session to stitch.")
+        return
+
+    if parsed_args.stats:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            hyp_res = statistical_engine.run_hypothesis_battery(df_obj)
+            vif_df = statistical_engine.compute_vif_robust(df_obj)
+            console.print(Panel(f"Normality Tests: {len(hyp_res.get('normality', {}))}\nVIF Dimensions Checked: {len(vif_df)}", title="📊 [bold yellow]DeepAnalyze Statistical Engine[/bold yellow]", border_style="yellow"))
+            if not vif_df.empty:
+                print(vif_df.to_string(index=False))
+        return
+
+    if parsed_args.story:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            memo = storyteller.generate_executive_memo(df_obj)
+            brief_path = os.path.abspath(f"./charts/eda_{target_name}_briefing.html")
+            storyteller.export_briefing(memo, output_format="html", output_path=brief_path)
+            console.print(Panel(f"Executive Headline:\n{memo['headline']}\n\nBriefing Exported: {brief_path}", title="🏛️ [bold cyan]DeepAnalyze Storyteller Memo[/bold cyan]", border_style="cyan"))
+        return
+
+    if parsed_args.engineer:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            fe_df, fe_log = feature_forge.auto_engineer_features(df_obj)
+            ip.user_ns[target_name] = fe_df
+            _register_snapshot(target_name, fe_df, "auto_feature_engineer")
+            print(f"⚡ [DeepAnalyze --engineer]: Synthesized {fe_log['engineered_features_created']} new features for `{target_name}` ({fe_df.shape[1]} total columns).")
+        return
+
+    if parsed_args.forecast:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            fc_res = forecaster.auto_forecast_series(df_obj, horizon=14)
+            if "error" not in fc_res:
+                console.print(Panel(f"Cadence: {fc_res['cadence']} | Trend: {fc_res['trend_direction']}\nMean Projected: {fc_res['mean_forecast']}", title="📈 [bold magenta]DeepAnalyze Forecaster (14-Day Horizon)[/bold magenta]", border_style="magenta"))
+                fc_df = pd.DataFrame(fc_res['forecast_table'])
+                print(fc_df.head(7).to_string(index=False))
+            else:
+                print(f"⚠ Forecaster: {fc_res['error']}")
+        return
+
+    if parsed_args.drift:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            curr_df = ip.user_ns[target_name]
+            ref_df = _DF_SNAPSHOTS.get(target_name, [curr_df])[0]
+            drift_res = drift_sentinel.detect_data_drift(ref_df, curr_df)
+            console.print(Panel(f"Pipeline Health: {drift_res['overall_status']} (Max PSI: {drift_res['max_psi_score']})", title="🛡️ [bold green]DeepAnalyze Drift Sentinel[/bold green]", border_style="green"))
+        return
+
+    if parsed_args.schema:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            ddl = schema_synthesizer.infer_sql_schema(df_obj, table_name=target_name, dialect="duckdb")
+            console.print(Panel(ddl, title="🏛️ [bold blue]DeepAnalyze SQL Schema (DuckDB DDL)[/bold blue]", border_style="blue"))
+        return
+
+    if parsed_args.synthetic:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_obj = ip.user_ns[target_name]
+            synth_df = synthetic_data.generate_synthetic_clone(df_obj)
+            out_name = f"{target_name}_synthetic"
+            ip.user_ns[out_name] = synth_df
+            audit = synthetic_data.audit_synthetic_fidelity(df_obj, synth_df)
+            _register_snapshot(out_name, synth_df, "synthetic_clone")
+            console.print(Panel(f"Generated `{out_name}` ({synth_df.shape[0]} rows).\nStatistical Fidelity: {audit['fidelity_score_pct']}%\nPrivacy Guarantee: {audit['privacy_guarantee']}", title="🧬 [bold green]DeepAnalyze Synthetic Data Engine[/bold green]", border_style="green"))
         return
 
     # Resilient Data Ingestion (--import)

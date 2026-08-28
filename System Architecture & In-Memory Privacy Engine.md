@@ -512,6 +512,55 @@ Train a Random Forest classifier to predict target:
 
 ---
 
+## 5b. Specialized Intelligence & Analytical Subsystems
+
+DeepAnalyze packages 7 standalone, modular intelligence engines designed for production data pipelines:
+
+```mermaid
+graph TD
+    DF["In-Memory DataFrame\n(Polars / Pandas)"] --> SE["statistical_engine.py\n(Hypothesis Battery & SVD VIF)"]
+    DF --> ST["storyteller.py\n(McKinsey Pyramid Briefings)"]
+    DF --> FF["feature_forge.py\n(Leak-Free ML Transformations)"]
+    DF --> FC["forecaster.py\n(Hierarchical STL & Conformal Bands)"]
+    DF --> DS["drift_sentinel.py\n(PSI & Kolmogorov-Smirnov Shift)"]
+    DF --> SS["schema_synthesizer.py\n(DuckDB DDL, dbt & ER-Lineage)"]
+    DF --> SD["synthetic_data.py\n(Gaussian Copula Differential Privacy)"]
+    DF --> UN["cleaners.py\n(Universal Hierarchical ERP Unraveller)"]
+```
+
+1. **Statistical Engine (`statistical_engine.py`)**:
+   - Adaptive Shapiro-Wilk normality testing routing between parametric (ANOVA, Pearson) and non-parametric tests (Mann-Whitney U, Kruskal-Wallis, Spearman $\rho$).
+   - Singular Value Decomposition (SVD) Moore-Penrose regularized VIF preventing matrix inversion crashes on collinear columns.
+   - Non-linear Random Forest + Mutual Information driver ranker.
+2. **Executive Storyteller (`storyteller.py`)**:
+   - McKinsey Pyramid Principle executive memos (*Headline $\rightarrow$ 3 Pillars $\rightarrow$ Verifiable Proof $\rightarrow$ 30/60/90-day Roadmap*).
+   - Generates interactive `.html` executive briefings and Markdown documents.
+   - 4-slide board-ready presentation outlines (Marp/PPTX compatible).
+3. **Feature Forge (`feature_forge.py`)**:
+   - Leak-free temporal sine/cosine cyclical encoding (DoW, Month, Fiscal Quarters).
+   - Entity rolling statistics, momentum, and lags strictly preventing look-ahead bias.
+   - Out-of-fold (OOF) K-Fold regularized target encoding with prior smoothing.
+4. **Autonomous Forecaster (`forecaster.py`)**:
+   - Automatic cadence detection (`D`, `W-MON`, `MS`) and calendar gap alignment.
+   - Multi-model ensemble (Holt-Winters Exponential Smoothing + Linear Trend).
+   - 80% and 95% conformal prediction intervals.
+5. **Drift Sentinel (`drift_sentinel.py`)**:
+   - Population Stability Index (PSI) & 2-sample Kolmogorov-Smirnov distribution shift tests.
+   - Schema evolution tracking (dropped/added columns, type mutations, null jumps).
+   - Automated HTML/SVG drift health badge and diagnostic reports.
+6. **Schema Synthesizer (`schema_synthesizer.py`)**:
+   - Candidate primary key, uniqueness, and constraint discovery.
+   - Multi-dialect SQL DDL generator (**DuckDB**, **PostgreSQL**, **Snowflake**, **BigQuery**, **SQLite**).
+   - Standard dbt `schema.yml` with automated data validation tests and Mermaid ER diagrams.
+7. **Synthetic Data Generator (`synthetic_data.py`)**:
+   - Differentially private Gaussian Copula clone generator preserving joint covariance.
+   - Domain invariant enforcement (non-negative numeric bounds, category sets).
+   - Statistical fidelity auditor ($>90\%$ correlation preservation with $0\%$ PII leakage).
+8. **Universal Hierarchical ERP Report Unraveller (`cleaners.py`)**:
+   - Autonomous state machine transforming multi-level hierarchical accounting reports (Invoices, GL, POs, AR/AP Aging) into clean 2D normalized tables.
+
+---
+
 ## 6. Troubleshooting & Operational FAQ
 
 * **Issue: `ValueError: No closing quotation` on multi-line cell prompts**

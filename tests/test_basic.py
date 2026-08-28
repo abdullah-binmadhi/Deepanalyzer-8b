@@ -1488,6 +1488,163 @@ def test_cleaners_unravel_purchase_orders():
     assert res["Item Amount"].sum() == 6875.0
 
 
+def test_statistical_engine_hypothesis_and_vif():
+    """Verify statistical hypothesis battery, SVD VIF, and feature importance."""
+    import pandas as pd
+    from deepanalyze import statistical_engine
+
+    df = pd.DataFrame({
+        "revenue": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0],
+        "quantity": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "discount": [0.0, 0.05, 0.1, 0.0, 0.05, 0.1, 0.0, 0.05, 0.1, 0.0],
+        "region": ["East", "West", "East", "West", "East", "West", "East", "West", "East", "West"]
+    })
+
+    hyp_res = statistical_engine.run_hypothesis_battery(df, target_col="revenue")
+    assert "normality" in hyp_res
+    assert "revenue" in hyp_res["normality"]
+    assert len(hyp_res["target_tests"]) >= 1
+
+    vif_df = statistical_engine.compute_vif_robust(df)
+    assert not vif_df.empty
+    assert "feature" in vif_df.columns
+    assert "vif" in vif_df.columns
+
+    feat_imp = statistical_engine.calculate_feature_importance(df, target_col="revenue")
+    assert not feat_imp.empty
+    assert "composite_score" in feat_imp.columns
+
+
+def test_storyteller_pyramid_memo_and_exports(tmp_path):
+    """Verify McKinsey Pyramid Principle executive briefing and multi-format exports."""
+    import pandas as pd
+    from deepanalyze import storyteller
+
+    df = pd.DataFrame({
+        "sales": [1000, 2500, 3200, 4100, 5000],
+        "profit": [200, 450, 600, 820, 1100],
+        "category": ["A", "B", "A", "B", "A"]
+    })
+
+    memo = storyteller.generate_executive_memo(df, target_col="sales")
+    assert "headline" in memo
+    assert len(memo["pillars"]) == 3
+    assert len(memo["action_plan"]) == 3
+
+    html_path = str(tmp_path / "memo.html")
+    md_path = str(tmp_path / "memo.md")
+
+    html_out = storyteller.export_briefing(memo, output_format="html", output_path=html_path)
+    md_out = storyteller.export_briefing(memo, output_format="markdown", output_path=md_path)
+
+    assert "Executive Strategic Briefing" in html_out
+    assert os.path.exists(html_path)
+    assert os.path.exists(md_path)
+
+
+def test_feature_forge_leak_free_pipeline():
+    """Verify automated feature engineering with temporal decomposition and rolling stats."""
+    import pandas as pd
+    from deepanalyze import feature_forge
+
+    df = pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=10, freq="D"),
+        "sales": [100, 120, 140, 160, 180, 200, 220, 240, 260, 280],
+        "costs": [50, 60, 70, 80, 90, 100, 110, 120, 130, 140],
+        "segment": ["Retail", "Wholesale", "Retail", "Wholesale", "Retail", "Wholesale", "Retail", "Wholesale", "Retail", "Wholesale"]
+    })
+
+    fe_df, log = feature_forge.auto_engineer_features(df, target_col="sales")
+    assert log["engineered_features_created"] > 0
+    assert "costs_lag1" in fe_df.columns
+    assert "date_dow_sin" in fe_df.columns
+
+
+def test_forecaster_cadence_and_conformal_bands():
+    """Verify autonomous time-series forecasting and 80%/95% conformal bounds."""
+    import pandas as pd
+    from deepanalyze import forecaster
+
+    df = pd.DataFrame({
+        "txn_date": pd.date_range("2025-01-01", periods=20, freq="D"),
+        "revenue": np.linspace(100, 300, 20) + np.random.normal(0, 5, 20)
+    })
+
+    res = forecaster.auto_forecast_series(df, horizon=7)
+    assert "error" not in res
+    assert res["horizon"] == 7
+    assert len(res["forecast_table"]) == 7
+    assert "lower_80" in res["forecast_table"][0]
+    assert "upper_95" in res["forecast_table"][0]
+
+
+def test_drift_sentinel_psi_and_schema_tracking():
+    """Verify PSI, distribution shift detection, and schema evolution tracking."""
+    import numpy as np
+    import pandas as pd
+    from deepanalyze import drift_sentinel
+
+    ref_df = pd.DataFrame({
+        "amount": np.random.normal(100, 15, size=100),
+        "status": ["active"] * 100
+    })
+    # Shifted current distribution
+    curr_df = pd.DataFrame({
+        "amount": np.random.normal(180, 25, size=100),
+        "status": ["active"] * 80 + ["churned"] * 20
+    })
+
+    drift_res = drift_sentinel.detect_data_drift(ref_df, curr_df)
+    assert "overall_status" in drift_res
+    assert drift_res["max_psi_score"] > 0.0
+    assert len(drift_res["feature_drift"]) >= 1
+
+
+def test_schema_synthesizer_duckdb_and_dbt():
+    """Verify SQL DDL transpilation and dbt schema.yml synthesis."""
+    import pandas as pd
+    from deepanalyze import schema_synthesizer
+
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5],
+        "name": ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"],
+        "price": [10.5, 20.0, 30.5, 40.0, 50.5]
+    })
+
+    ddl = schema_synthesizer.infer_sql_schema(df, table_name="products", dialect="duckdb")
+    assert "CREATE TABLE IF NOT EXISTS products" in ddl
+    assert "PRIMARY KEY" in ddl or "BIGINT" in ddl
+
+    dbt_yml = schema_synthesizer.generate_dbt_models(df, table_name="products")
+    assert "version: 2" in dbt_yml
+    assert "unique" in dbt_yml
+
+    er = schema_synthesizer.generate_er_diagram(df, table_name="Products")
+    assert "erDiagram" in er
+
+
+def test_synthetic_data_copula_and_fidelity_audit():
+    """Verify Gaussian Copula synthetic data cloning and fidelity evaluation."""
+    import numpy as np
+    import pandas as pd
+    from deepanalyze import synthetic_data
+
+    real_df = pd.DataFrame({
+        "units": [10, 20, 30, 40, 50, 60, 70, 80],
+        "price": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0],
+        "tier": ["Gold", "Silver", "Gold", "Bronze", "Silver", "Gold", "Bronze", "Silver"]
+    })
+
+    synth_df = synthetic_data.generate_synthetic_clone(real_df, num_rows=15)
+    assert synth_df.shape[0] == 15
+    assert synth_df.shape[1] == 3
+
+    audit = synthetic_data.audit_synthetic_fidelity(real_df, synth_df)
+    assert "fidelity_score_pct" in audit
+    assert audit["fidelity_score_pct"] >= 70.0
+
+
+
 
 
 
