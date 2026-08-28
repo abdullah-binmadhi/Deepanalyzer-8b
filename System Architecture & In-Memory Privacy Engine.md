@@ -43,9 +43,17 @@ DeepAnalyze eliminates this trade-off by decoupling **layout reasoning** from **
  ┌──────────────────────────────────────────────┐
  │           4. CLOUD / LOCAL INFERENCE         │
  │  (DeepAnalyze-8B Local / DeepSeek Cloud)     │
- │  • Synthesizes cleaning & parsing logic      │
+ │  • Ensemble Intent Router + Persona Modes   │
+ │  • Streaming Syntax HUD (token-by-token)     │
  └──────────────────────┬───────────────────────┘
                         │ Python Code Payload
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │    4b. CRITIC VERIFICATION (Optional)        │
+ │  • Logical flaw detection (grouping, joins)  │
+ │  • Local (--critic) or Cloud (--critic-pro)  │
+ └──────────────────────┬───────────────────────┘
+                        │ Pass Critic Audit
                         ▼
  ┌──────────────────────────────────────────────┐
  │     5. EGRESS: Local AST Safety Sandbox      │
@@ -55,22 +63,43 @@ DeepAnalyze eliminates this trade-off by decoupling **layout reasoning** from **
                         │ Pass AST Audit
                         ▼
  ┌──────────────────────────────────────────────┐
+ │    5b. PRE-FLIGHT VALIDATION (Optional)      │
+ │  • Ghost Preview (--preview / --diff)        │
+ │  • Stress Fuzzer (--stress)                  │
+ │  • Metamorphic Validator (--meta)            │
+ │  • Quality Gates (--guard)                   │
+ └──────────────────────┬───────────────────────┘
+                        │ Pass Validation
+                        ▼
+ ┌──────────────────────────────────────────────┐
  │     6. LOCAL EXECUTION & RECONCILIATION      │
  │  • Executes script on raw data in local RAM  │
  │  • Restores tokenized PII from local map     │
  │  • Interactive Auto-Repair on Runtime Errors │
+ │  • Anomaly Radar (null surge / sign flip)    │
  └──────────────────────┬───────────────────────┘
                         │
                         ▼
  ┌──────────────────────────────────────────────┐
- │         7. OUTPUT: Cleaned DataFrame         │
+ │     7. POST-EXECUTION INTELLIGENCE          │
+ │  • Next-Action Recommender (--next)          │
+ │  • DAG Lineage Rendering (--dag)             │
+ │  • Artifact Spawner (--spawn)                │
+ │  • Insight Synthesis (--insight / --persona) │
+ └──────────────────────┬───────────────────────┘
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │         8. OUTPUT: Cleaned DataFrame         │
  │         (Ready in active IPython memory)     │
  └──────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Deep Dive: The 7-Tier Architecture
+## 2. Deep Dive: The Extended Architecture
+
+DeepAnalyze v2.1.0 expands the original 7-tier pipeline into a comprehensive 8-tier architecture with optional critic verification, pre-flight validation, and post-execution intelligence stages.
 
 ### Tier 1: In-Memory Raw Input
 Data is loaded directly into your Python session memory (e.g., `df_erp = pd.read_excel(...)` or a multi-line ragged matrix). DeepAnalyze never forces you to export staging files or write unencrypted intermediate tables to disk.
@@ -141,6 +170,96 @@ Select [1/2/3] (default: 1):
 
 ### Tier 7: Output Clean DataFrame
 The resulting DataFrame is returned to your active IPython kernel under your target variable (e.g., `df_erp` or `df`), fully structured and ready for downstream analytics or DuckDB queries.
+
+---
+
+## 2b. Advanced Verification & Validation Layer
+
+DeepAnalyze v2.1.0 introduces a multi-stage verification pipeline that sits between code generation and execution. Each stage is independently toggleable via CLI flags.
+
+### Logical Critic Loop (`--critic`, `--critic-pro`)
+After code generation, an optional secondary LLM pass scans the generated code for logical errors: incorrect grouping columns, wrong aggregation functions, join key mismatches, or missing null handling. `--critic` runs this check against the local DeepAnalyze-8B model; `--critic-pro` escalates to DeepSeek Reasoner for deeper reasoning.
+
+### Ghost Execution & State Diff HUD (`--preview`, `--diff`)
+The preview system clones the target DataFrame into a shadow namespace, executes the generated code on this copy, and renders a Rich table showing:
+* Row/column count deltas
+* Data type mutations per column
+* Null count drifts
+* New/removed columns
+
+The user then receives an interactive prompt to commit changes to live memory or discard them.
+
+### Adversarial Edge-Case Fuzzer (`--stress`)
+Synthesizes a 5-row adversarial matrix matching the target schema (NaN values, empty strings, `$0.00` strings, zero-denominators, negative numbers) and pre-tests the generated code. Failures are caught before the code touches real data.
+
+### Metamorphic Logic Validator (`--meta`)
+Creates a 2x numerically scaled copy of the DataFrame, runs the generated code against both the original and scaled versions, and verifies proportional linear scaling invariance to detect hardcoded constants or magic numbers.
+
+### Automated Quality Gates (`--guard`)
+Evaluates arbitrary Python boolean expressions against the resulting DataFrame. On violation, the engine blocks commit, restores the snapshot, and routes the guard failure into the auto-repair loop for autonomous correction.
+
+### Inline Data Minimaps (`--spark`)
+Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) for all numeric columns, alongside Min, Median, Max, and Null % summary statistics.
+
+---
+
+## 2c. Workflow Orchestration Engine
+
+DeepAnalyze v2.1.0 introduces a global workflow state machine that guides users through multi-phase analytical projects.
+
+### Global State Orchestrator (`--roadmap`)
+Initializes and tracks a persistent global state dictionary across 4 project phases:
+1. **Profiling & Cleaning** — Schema inspection, null handling, type corrections
+2. **Goal Interview** — Stakeholder objective alignment
+3. **Execution & Radar** — Hypothesis testing with anomaly detection
+4. **Synthesis** — Final reporting and artifact generation
+
+Each invocation renders the current phase and prints the exact `%deepanalyze` command to execute next.
+
+### Zero-Prompt Kickstart (`--kickstart`)
+Sends the workspace context (DataFrame shape, column names, dtypes, sample statistics) to the LLM and asks it to autonomously infer the business domain, identify target KPIs, and output a prioritized 3-step action plan — all without requiring any user prompt.
+
+### Reverse-Prompting Interview (`--interview`)
+The LLM generates 3 targeted multiple-choice analytical constraint questions based on the dataset context. User choices are recorded as the project goal in the global roadmap state for downstream hypothesis generation.
+
+### Autonomous Hypothesis Generator (`--brainstorm`)
+Reads the aligned project goal and dataset context to generate 3–5 specific, testable business hypotheses with exact executable `%deepanalyze` commands the user can run immediately.
+
+### Proactive Anomaly Radar (`--radar`)
+Runs automatically during execution to detect:
+* **Null surges:** >20% increase in null counts post-transformation
+* **Metric mean shifts:** >35% deviation in numeric column means
+* **Sign flips:** Previously non-negative columns containing negative values
+
+Anomalies are rendered as red alert panels with explanatory context.
+
+---
+
+## 2d. UI, Visuals & Notebook Automation
+
+### Live Transformation Flow Graph (`--dag`)
+Parses the generated AST and renders a Rich tree showing step-by-step lineage from the source DataFrame through filters, aggregations, and mutations to the final output target variable.
+
+### Interactive In-Notebook Data Explorer (`--gui`)
+Injects an HTML/JS data table widget via `IPython.display.HTML` with sticky headers, live search filtering, column sorting, and data type badges — all rendered inline in the notebook output cell.
+
+### Visual Time-Machine Explorer (`--history`)
+Displays a Rich table of all cached DataFrame snapshots with timestamps, row/column dimensions, and column name samples for easy rollback navigation.
+
+### Predictive Next-Action Recommender (`--next`)
+After each execution, analyzes the current dataset state and suggests 3 logical follow-up analytical actions with copy-pasteable `%deepanalyze` commands.
+
+### Semantic Auto-Sanitizer (`--auto-clean`)
+Autonomously detects formatting anomalies (currency symbols, dirty strings, wrong types, whitespace) and generates a comprehensive cleaning script, routing it through the `--preview` ghost execution flow for user confirmation.
+
+### Notebook Artifact Spawner (`--spawn`)
+Injects formatted Markdown narrative cells and validated Python Code cells directly below the active cell using `get_ipython().set_next_input()`, building a documented analytical narrative.
+
+### Streaming Syntax HUD
+Replaces static progress text with an animated step-by-step indicator during LLM inference:
+```
+[1/3] 🔍 Routing ➔ [2/3] ⚡ Streaming (142 tokens) ➔ [3/3] 🛡️ Validating
+```
 
 ---
 
@@ -215,6 +334,7 @@ If a transformation produces unexpected results, roll back your DataFrame to its
 | `--target <var>` | **Target Binding** | Scope | Binds execution to a specific DataFrame in memory (defaults to `df`). |
 | `--audit-only` | **Privacy Audit** | Security | Displays the sanitized context payload without calling an LLM or running code. |
 | `--privacy <mode>` | **Privacy Override** | Security | Enforces sanitization mode: `auto`, `mask` (ERP), `mock` (PII), `profile` (Stats), or `none`. |
+| `--context <path>` | **Schema Context** | Security | Injects external business logic schema (Markdown/JSON) into LLM context. |
 | `-u`, `--unravel` | **Unravel** | Skill | Injects hierarchical state-machine heuristics for ragged spreadsheet reports. |
 | `-s`, `--sql` | **DuckDB SQL** | Skill | Executes analytical SQL queries directly on DataFrames via DuckDB. |
 | `-f`, `--feat` | **Feature Engineering** | Skill | Constrains the model to vectorized operations, zero-division guards, and in-place typing. |
@@ -227,7 +347,28 @@ If a transformation produces unexpected results, roll back your DataFrame to its
 | `--tune` | **Hyperparameter Tuning**| ML Guardrail | Encapsulates models in leak-free `Pipeline` and `GridSearchCV` routines. |
 | `--explain` | **Interpretability** | ML Guardrail | Extracts, ranks, and asserts feature importance and model coefficient distributions. |
 | `-i`, `--insight` | **Insight Synthesis** | Analytics | Captures execution stdout and generates concise business takeaways. |
+| `--persona <mode>` | **Persona Mode** | Analytics | Switches insight persona: `default` (analyst), `exec` (C-suite), `dev` (data engineer). |
 | `-r`, `--repair` | **Autonomous Repair** | Reliability | Forces a dedicated syntax/logic repair prompt against a broken code snippet. |
+| `--critic` | **Critic Loop** | Validation | Local logical critic verification before execution. |
+| `--critic-pro` | **Critic Pro** | Validation | Cloud critic loop via DeepSeek Reasoner for deep logical verification. |
+| `--preview` | **Ghost Preview** | Validation | Shadow execution with State Diff HUD and interactive commit/discard. |
+| `--diff` | **State Diff HUD** | Validation | Renders side-by-side delta showing row/col, dtype, and null changes. |
+| `--guard <expr>` | **Quality Gate** | Validation | Evaluates boolean constraint; blocks commit and triggers repair on violation. |
+| `--stress` | **Stress Fuzzer** | Validation | Pre-tests code against a 5-row adversarial edge-case matrix. |
+| `--meta` | **Metamorphic Check** | Validation | Validates code against 2x numerical perturbation for scaling invariance. |
+| `--simulate <desc>` | **What-If Simulator** | Validation | Sandboxed hypothesis simulation with comparative HUD, zero global mutation. |
+| `--spark` | **Sparkline Minimaps** | Diagnostics | ASCII distribution minimaps for numeric columns. |
+| `--roadmap` | **Roadmap** | Orchestration | Multi-phase project orchestrator HUD with next-action recommendations. |
+| `--kickstart` | **Kickstart** | Orchestration | Zero-prompt domain inference and prioritized 3-step action plan. |
+| `--interview` | **Interview** | Orchestration | Stakeholder goal & constraint alignment via multiple-choice questions. |
+| `--brainstorm` | **Brainstorm** | Orchestration | Autonomous hypothesis generator with executable `%deepanalyze` commands. |
+| `--radar` | **Anomaly Radar** | Orchestration | Proactive anomaly scanning for null surges, metric shifts, and sign flips. |
+| `--dag` | **DAG Graph** | UI / Visual | Renders AST transformation lineage as a Rich tree. |
+| `--gui` | **GUI Explorer** | UI / Visual | Interactive in-notebook HTML data table with search, sort, and type badges. |
+| `--history` | **History** | UI / Visual | Visual time-machine table of DataFrame snapshot rollback points. |
+| `--next` | **Next Actions** | Automation | Predictive 3-action recommender with executable commands. |
+| `--auto-clean` | **Auto-Clean** | Automation | Autonomous data sanitizer routed through `--preview` ghost execution. |
+| `--spawn` | **Spawn Cells** | Automation | Injects Markdown narrative + Code cells into notebook below current cell. |
 | `--pro` | **Cloud Pro** | Routing | Routes prompt to `deepseek-chat` (DeepSeek-V3) for complex workloads. |
 | `--flash` | **Cloud Flash** | Routing | Routes prompt to lighter, high-speed cloud reasoning models. |
 | `--think` | **Cloud Reasoner** | Routing | Routes prompt to `deepseek-reasoner` (R1) for deep Chain-of-Thought processing. |
@@ -345,6 +486,18 @@ Train a Random Forest classifier to predict target:
 * **Issue: Local inference server latency on Apple Silicon**
   * *Root Cause:* Thread saturation or context memory fragmentation on unified memory.
   * *Resolution:* Run `llama-server` with `-fa on` (Flash Attention), `--cache-type-k q8_0`, `--cache-type-v q8_0`, and set `-t` to performance core count (e.g., 4 or 6 on M2).
+
+* **Issue: `--roadmap` shows stale phase after restarting kernel**
+  * *Root Cause:* The `_ACTIVE_ROADMAP` global dictionary is stored in session memory and resets on kernel restart.
+  * *Resolution:* Re-run `%deepanalyze --roadmap` after kernel restart to reinitialize the orchestrator state.
+
+* **Issue: `--gui` widget not rendering in JupyterLab**
+  * *Root Cause:* JupyterLab may restrict inline HTML/JS injection depending on security settings.
+  * *Resolution:* Ensure JupyterLab's Content Security Policy allows inline scripts, or run in classic Jupyter Notebook mode.
+
+* **Issue: `--guard` expression fails with `NameError`**
+  * *Root Cause:* The guard expression references a variable not present in the evaluation namespace.
+  * *Resolution:* Use `df` as the DataFrame reference in guard expressions (e.g., `--guard "len(df) > 0"`), not the target variable name.
 
 ---
 

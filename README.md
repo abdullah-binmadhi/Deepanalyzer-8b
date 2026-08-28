@@ -8,18 +8,49 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 
 ## Key Capabilities
 
+### Core Engine
 * **Universal Polymorphic Adapter:** Seamlessly detects and handles both Pandas and Polars DataFrames at runtime. Automatically dispatches high-speed, parallelized Rust expressions for large datasets while maintaining 100% backward compatibility for legacy Pandas text-parsing workflows.
 * **Zero-Data-Leakage Privacy Gatekeeper (`privacy_knife`):** Intercepts data before any cloud transmission. Generates reversible PII tokenizations, statistical schema profiles, or structural geometry masks (`ERP_STRUCTURAL_MASK`), ensuring sensitive row records never leave local RAM.
 * **Pre-Flight Privacy Auditing (`--audit-only`):** Inspects the exact sanitized JSON schema payload scheduled for transmission before dispatching API requests.
 * **Dual-Brain Model Routing:** Runs entirely locally via `llama-server` by default, with on-demand escalation to cloud reasoning models (DeepSeek-V3/R1 via `--pro`, `--flash`, `--think`) for mathematically dense or structurally complex operations.
 * **Interactive Auto-Escalator & Self-Repair:** Traps runtime exceptions and syntax crashes in an isolated sandbox, opening a human-in-the-loop menu to retry locally with DeepAnalyze-8B, escalate tracebacks to DeepSeek Reasoner, or abort without mutating session state.
 * **Egress AST Security Sandbox:** Audits generated code before execution, blocking unauthorized network sockets (`requests`, `urllib`, `socket`), disk writes, or shell exploits.
+* **Streaming Syntax HUD & Step Tracker:** Replaces static progress text with an animated step-by-step indicator (`[1/3] 🔍 Routing ➔ [2/3] ⚡ Streaming ➔ [3/3] 🛡️ Validating`) with real-time token count during LLM inference.
+* **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
+
+### Data Science Skills
 * **Hierarchical Unravelling Engine (`-u`, `--unravel`):** Deterministic state machines that parse ragged, multi-line, non-rectangular ERP ledger exports (SAP, Navision, Oracle) into normalized 2D DataFrames.
 * **Zero-Copy DuckDB SQL Engine (`-s`, `--sql`):** High-speed analytical SQL execution directly on in-memory Pandas and Polars DataFrames via Apache Arrow memory pointers, featuring automated schema registration.
 * **Enterprise ML Guardrails (`--validate`, `--tune`, `--explain`):** Enforces strict scikit-learn `Pipeline` encapsulation, leak-free `GridSearchCV`, metric assertions, and feature importance extractions.
 * **Insight Synthesis (`-i`, `--insight`):** Automatically captures execution stdout and runs a secondary analytical pass to generate actionable business takeaways.
+* **Custom Persona Modes (`--persona exec|dev`):** Switch insight synthesis between Executive Strategist (ROI, business impact) and Lead Data Engineer (schema anomalies, pipeline edge cases) personas.
+* **Ensemble Intent Routing:** Automatically classifies zero-flag natural language prompts into specialized skill categories (SQL, visualization, statistics, ML, feature engineering) before code generation.
+
+### Advanced Validation & Sandboxing
+* **Logical Critic Verification (`--critic`, `--critic-pro`):** Before execution, a secondary LLM pass scans the generated code for logical flaws (incorrect grouping, wrong aggregation, join key mismatches). `--critic` runs locally; `--critic-pro` escalates to DeepSeek Reasoner.
+* **Interactive Ghost Execution (`--preview`) & Visual State Diff HUD (`--diff`):** Clones the target DataFrame into an isolated shadow namespace, executes the generated code, and renders a side-by-side Rich delta HUD showing row/col count changes, data type mutations, null count drifts, and schema additions/removals before prompting interactive commit.
+* **Automated Quality Gates (`--guard`):** Evaluates custom Python boolean expressions (e.g., `--guard "len(df) > 0 and df['price'].min() >= 0"`) against the resulting DataFrame. On violation, blocks commit, reverts state, and routes the failure into the auto-repair loop.
+* **Adversarial Edge-Case Fuzzer (`--stress`):** Synthesizes a 5-row schema-matched adversarial matrix (NaN, empty strings, `$0.00`, zero-denominators) and pre-tests the generated code to catch crash-prone edge cases before execution.
+* **Metamorphic Logic Validator (`--meta`):** Creates a 2x numerically scaled copy of the DataFrame, runs the generated code against both, and verifies proportional linear scaling invariance to detect hardcoded constants.
+* **Sandboxed "What-If" Simulator (`--simulate`):** Forks the target DataFrame, injects a hypothesis scenario, renders a comparative Rich table, and immediately garbage-collects all shadow objects without polluting global state.
+* **Inline Data Minimaps (`--spark`):** Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) for numeric columns alongside Min, Median, Max, and Null % summaries.
+
+### Workflow Orchestration
+* **Global State Orchestrator (`--roadmap`):** Tracks project progress across 4 phases (Profiling & Cleaning → Goal Interview → Execution & Radar → Synthesis) in a persistent global state dictionary, rendering the next recommended `%deepanalyze` command.
+* **Zero-Prompt Kickstart (`--kickstart`):** Sends workspace context to the LLM to autonomously infer business domain, identify target KPIs, and output a prioritized 3-step action plan.
+* **Reverse-Prompting Interview (`--interview`):** The LLM generates 3 targeted multiple-choice analytical constraint questions. User choices are recorded as the project goal for downstream hypothesis generation.
+* **Autonomous Hypothesis Generator (`--brainstorm`):** Reads the aligned project goal and dataset context to generate 3–5 specific, testable business hypotheses with exact executable `%deepanalyze` commands.
+* **Proactive Anomaly Radar (`--radar`):** Runs automatically during execution to detect null surges (>20%), metric mean shifts (>35%), and sign flips in previously non-negative columns, rendering red alert panels.
+
+### UI, Visuals & Notebook Automation
+* **Live Transformation Flow Graph (`--dag`):** Parses the generated AST and renders a Rich tree showing step-by-step lineage from source DataFrame through filters, aggregations, and mutations to the final output target.
+* **Interactive In-Notebook Data Explorer (`--gui`):** Injects an HTML/JS data table widget via `IPython.display.HTML` with sticky headers, live search, column sorting, and data type badges.
+* **Visual Time-Machine Explorer (`--history`):** Displays a Rich table of all cached DataFrame snapshots with timestamps, dimensions, and column samples for easy rollback navigation.
+* **Predictive Next-Action Recommender (`--next`):** Suggests 3 logical follow-up analytical actions with executable `%deepanalyze` commands after each execution.
+* **Semantic Auto-Sanitizer (`--auto-clean`):** Autonomously detects formatting anomalies (currency symbols, dirty strings, wrong types) and generates a cleaning script, routing it through the `--preview` ghost execution flow for confirmation.
+* **Notebook Artifact Spawner (`--spawn`):** Injects formatted Markdown narrative cells and validated Code cells directly below the active cell.
 * **Transactional State Rollback (`--undo`):** Automated deepcopy (Pandas) or instant zero-copy clone (Polars) prior to execution, enabling instant state rollback and safe experimentation with zero RAM overhead.
-* **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
+* **Semantic Schema Dictionaries (`--context`):** Inject external business logic schemas (Markdown/JSON) into the LLM context for domain-aware code generation.
 
 ---
 
@@ -305,32 +336,94 @@ df = pd.read_excel("raw_hierarchical_invoice.xlsx", header=None)
 
 The execution engine is controlled via CLI flags passed to the magic command, allowing you to define the strictness, target variable, and execution scope of the agent.
 
-| Directive | Flag | Behavior | Primary Use Case |
-| :--- | :--- | :--- | :--- |
-| **Engine Status** | `--status` | Probes `llama-server` health endpoints, context window size, active model parameters, and current interceptor state. | Engine monitoring, health checks, and runtime environment inspection. |
-| **Privacy Mode** | `--privacy <mode>` | Enforces privacy strategy: auto, mask (ERP), profile (Stats), mock (PII), or none. | Controlling data sanitization levels prior to model ingestion. |
-| **Auto-Pilot Toggle** | `--toggle` | Dynamically flips the global cell interceptor on or off for plain-English auto-pilot execution. | Toggling between explicit magic calls and natural language auto-interception without restarting Jupyter. |
-| **Execute** | `-x`, `--exec` | Bypasses dry-run inspection and executes the verified AST directly into the active kernel namespace. | Autonomous pipelines and trusted in-memory transformations. |
-| **Target Binding** | `--target <var>` | Dynamically designates the target DataFrame in session memory (defaults to `df`). | Working with named datasets (e.g., `sales_data`, `raw_df`) without variable renaming. |
-| **Cloud Pro** | `--pro` | Bypasses the local engine and routes the prompt to `deepseek-chat` (DeepSeek-V4-Pro). | Fast, highly accurate cloud processing for standard heavy analytics. |
-| **Cloud Flash** | `--flash` | Routes the prompt to the lighter, high-speed `deepseek-chat` variant. | Rapid cloud execution for simple parsing or lighter workloads. |
-| **Deep Reasoner** | `--think` | Routes the prompt to `deepseek-reasoner` (R1) for deep Chain-of-Thought processing. | Highly complex transformations, dense mathematical modeling, or debugging tricky tracebacks. |
-| **Insight Synthesis** | `-i`, `--insight` | Captures execution stdout and triggers a secondary LLM pass to explain the metrics. | Translating raw numbers into actionable business insights. |
-| **Unravel** | `-u`, `--unravel` | Activates hierarchical state-machine unravelling heuristics and defensive parsing rules. | Normalizing nested, multi-row, non-rectangular ERP ledger exports into flat tables. |
-| **Feature** | `-f`, `--feat` | Constrains the model to vectorized operations, safe casting, and in-place transformations. | Defensive feature engineering, missing value imputation, and schema cleaning. |
-| **SQL Engine** | `-s`, `--sql` | Routes transformations through DuckDB for zero-copy memory execution across Pandas and Polars DataFrames. | High-performance SQL queries and complex relational joins directly on active in-memory tables. |
-| **Visualize** | `-v`, `--viz` | Instructs the model to generate styled Matplotlib/Seaborn rendering scripts. | Automated exploratory data analysis (EDA) and publication-quality distributions. |
-| **Statistical Test** | `-t`, `--stat` | Automatically selects and runs parametric/non-parametric tests. | Hypothesis testing (ANOVA, t-test, Chi-square). |
-| **Machine Learning** | `-m`, `--ml` | Bundles scikit-learn preprocessing and estimators via Pipeline. | Rapid baseline model training and classification reports. |
-| **Save Charts** | `--save` | Forces the visualization generator to write figures to disk (`charts/<slug>.png`) at 300 DPI. | Batch artifact export and automated reporting workflows. |
-| **Profile** | `-p`, `--profile` | Generates a strategic structural health audit alongside safe diagnostic sampling. | Schema inspection, cardinality profiling, and null distribution checks. |
-| **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable, exact syntax. | Strict ETL pipelines and reproducible transformations. |
-| **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. | Large data matrices, multi-step state machines, or extensive AST traceback repairs. |
-| **Auto-Repair** | `--retries <n>` | Specifies the maximum number of automated runtime exception retry loops (defaults to 1). | Fault-tolerant execution handling transient syntax or execution exceptions. |
-| **Revert State** | `--undo` | Restores the specified target DataFrame to the exact deepcopy (Pandas) or zero-copy clone (Polars) snapshot taken prior to execution. | Instant state rollback, safety isolation, and non-destructive experimentation. |
-| **Validate** | `--validate` | Forces strict cross-validation, explicit metric reporting, and shape/type assertions. | Ensuring model integrity and preventing evaluation on training data. |
-| **Tune** | `--tune` | Encapsulates all estimators/scalers in `Pipeline` and `GridSearchCV`. | Zero-leakage hyperparameter optimization. |
-| **Explain** | `--explain` | Extracts and ranks feature importances/coefficients with mathematical invariants. | Model interpretability and auditing. |
+#### Core Execution & Routing
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Execute** | `-x`, `--exec` | Runs the verified AST directly into the active kernel namespace. |
+| **Target Binding** | `--target <var>` | Designates the target DataFrame in session memory (defaults to `df`). |
+| **Cloud Pro** | `--pro` | Routes prompt to `deepseek-chat` (DeepSeek-V4-Pro). |
+| **Cloud Flash** | `--flash` | Routes prompt to the lighter, high-speed cloud model. |
+| **Deep Reasoner** | `--think` | Routes prompt to `deepseek-reasoner` (R1) for Chain-of-Thought processing. |
+| **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable output. |
+| **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. |
+| **Fast Profile** | `--fast` | Temperature `0.0`, max 1,000 tokens for rapid execution. |
+| **Auto-Repair** | `--retries <n>` | Max automated runtime exception retry loops (default: 1). |
+| **Continuation** | `-c`, `--continue` | Iterates on previous generated code using refinement instructions. |
+
+#### Privacy & Security
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Privacy Mode** | `--privacy <mode>` | Enforces sanitization: `auto`, `mask` (ERP), `profile` (Stats), `mock` (PII), or `none`. |
+| **Privacy Audit** | `--audit-only` | Displays the sanitized context payload without calling the LLM. |
+| **Schema Context** | `--context <path>` | Injects external business logic schema (Markdown/JSON) into LLM context. |
+
+#### Data Science Skills
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Unravel** | `-u`, `--unravel` | Hierarchical state-machine parsing for nested ERP ledger exports. |
+| **Feature** | `-f`, `--feat` | Vectorized operations, safe casting, and in-place transformations. |
+| **SQL Engine** | `-s`, `--sql` | Zero-copy DuckDB execution on in-memory DataFrames. |
+| **Visualize** | `-v`, `--viz` | Themed Matplotlib/Seaborn visualization scripts. |
+| **Statistical Test** | `-t`, `--stat` | Parametric/non-parametric hypothesis tests (ANOVA, t-test, Chi-square). |
+| **Machine Learning** | `-m`, `--ml` | scikit-learn Pipeline-bundled preprocessing and estimators. |
+| **Profile** | `-p`, `--profile` | Executive structural health audit and diagnostic sampling. |
+| **Insight Synthesis** | `-i`, `--insight` | Captures execution stdout and generates business takeaways. |
+| **Persona Mode** | `--persona <mode>` | Insight persona: `default` (analyst), `exec` (C-suite strategist), `dev` (data engineer). |
+| **Save Charts** | `--save` | Saves generated plots to disk (`charts/<slug>.png`) at 300 DPI. |
+
+#### ML Guardrails
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Validate** | `--validate` | Cross-validation, confusion matrices, and structural metric assertions. |
+| **Tune** | `--tune` | Leak-free `Pipeline` + `GridSearchCV` hyperparameter optimization. |
+| **Explain** | `--explain` | Feature importance extraction, ranking, and weight validation. |
+
+#### Advanced Validation & Sandboxing
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Critic Loop** | `--critic` | Local logical critic verification loop before execution. |
+| **Critic Pro** | `--critic-pro` | Cloud critic loop via DeepSeek Reasoner for deep logical verification. |
+| **Ghost Preview** | `--preview` | Shadow execution with State Diff HUD and interactive commit/discard. |
+| **State Diff HUD** | `--diff` | Renders side-by-side delta showing row/col, dtype, and null changes after execution. |
+| **Quality Gate** | `--guard <expr>` | Evaluates boolean constraint; blocks commit and triggers repair on violation. |
+| **Stress Fuzzer** | `--stress` | Pre-tests code against a 5-row adversarial edge-case matrix (NaN, zero-division). |
+| **Metamorphic Check** | `--meta` | Validates code against 2x numerical perturbation for scaling invariance. |
+| **What-If Simulator** | `--simulate <scenario>` | Sandboxed hypothesis simulation with comparative HUD, zero global mutation. |
+| **Sparkline Minimaps** | `--spark` | ASCII distribution minimaps (` ▂▃▄▅▆▇█`) for numeric columns. |
+
+#### Workflow Orchestration
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Roadmap** | `--roadmap` | Multi-phase project orchestrator HUD with next-action recommendations. |
+| **Kickstart** | `--kickstart` | Zero-prompt domain inference and prioritized 3-step action plan. |
+| **Interview** | `--interview` | Stakeholder goal & constraint alignment via multiple-choice questions. |
+| **Brainstorm** | `--brainstorm` | Autonomous hypothesis generator with executable `%deepanalyze` commands. |
+| **Anomaly Radar** | `--radar` | Proactive anomaly scanning for null surges, metric shifts, and sign flips. |
+
+#### UI, Visuals & Notebook Automation
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **DAG Graph** | `--dag` | Renders AST transformation lineage as a Rich tree. |
+| **GUI Explorer** | `--gui` | Interactive in-notebook HTML data table with search, sort, and type badges. |
+| **History** | `--history` | Visual time-machine table of DataFrame snapshot rollback points. |
+| **Next Actions** | `--next` | Predictive 3-action recommender with executable commands. |
+| **Auto-Clean** | `--auto-clean` | Autonomous data sanitizer routed through `--preview` ghost execution. |
+| **Spawn Cells** | `--spawn` | Injects Markdown narrative + Code cells into notebook below current cell. |
+
+#### State Management & Convenience
+
+| Directive | Flag | Behavior |
+| :--- | :--- | :--- |
+| **Revert State** | `--undo` | Restores target DataFrame to pre-execution deepcopy/clone snapshot. |
+| **Auto-Pilot Toggle** | `--toggle` | Toggles cell interceptor on/off for plain-English auto-pilot execution. |
+| **Engine Status** | `--status` | Probes server health, API keys, snapshots, and interceptor state. |
 ---
 
 ## Protocol & Prompt Architecture
@@ -500,6 +593,90 @@ sensor_pl = pl.DataFrame({
 
 # Polars-native transformation
 %deepanalyze -x -f --target sensor_pl Clean reading column into numeric float filling nulls with 0 and filter for flag == 'ok'.
+```
+
+---
+
+### 10. Autonomous Workflow Orchestration
+
+```python
+# Phase 1: Zero-prompt analysis kickstart
+%deepanalyze --kickstart
+
+# Phase 2: Stakeholder goal alignment interview
+%deepanalyze --interview
+
+# Phase 3: Autonomous hypothesis generation
+%deepanalyze --brainstorm
+
+# Check roadmap progress at any time
+%deepanalyze --roadmap
+```
+
+---
+
+### 11. Ghost Preview, Quality Gates & Stress Testing
+
+```python
+# Preview changes before committing (interactive commit/discard)
+%deepanalyze --preview --diff --spark -f --target sales_data Clean gross_revenue and standardize status.
+
+# Enforce quality constraints with auto-repair
+%deepanalyze -x --guard "len(df) > 0 and df['gross_revenue'].min() >= 0" -f --target sales_data Clean and validate revenue.
+
+# Pre-test code against adversarial edge cases
+%deepanalyze --stress -f --target sales_data Strip currency symbols and cast to numeric.
+
+# Metamorphic invariance check
+%deepanalyze --meta -f --target sales_data Compute net_revenue as gross_revenue * (1 - tax_rate).
+```
+
+---
+
+### 12. Interactive Notebook Explorer & Time-Machine
+
+```python
+# Launch interactive in-notebook data table with search and sort
+%deepanalyze --gui --target sales_data
+
+# View all DataFrame snapshot rollback points
+%deepanalyze --history
+
+# Sandboxed What-If simulation
+%deepanalyze --simulate "30% revenue decline" -f --target sales_data Apply revenue shock scenario.
+```
+
+---
+
+### 13. Critic Verification & Persona Insights
+
+```python
+# Local logical critic loop before execution
+%deepanalyze -x --critic -f --target sales_data Group by customer and sum revenue.
+
+# Executive persona insight synthesis
+%deepanalyze -x -i --persona exec --target sales_data Summarize top customers by total revenue.
+
+# Dev/engineer persona insight synthesis
+%deepanalyze -x -i --persona dev --target sales_data Profile null distributions and type anomalies.
+```
+
+---
+
+### 14. Auto-Clean, DAG Visualization & Artifact Spawning
+
+```python
+# Autonomous data sanitization with interactive preview
+%deepanalyze --auto-clean --target sales_data
+
+# Render transformation lineage DAG after execution
+%deepanalyze -x --dag -f --target sales_data Clean all columns and compute net revenue.
+
+# Spawn Markdown narrative + Code cells into notebook
+%deepanalyze -x --spawn -i --target sales_data Generate executive summary of cleaned data.
+
+# Predictive next-action recommender
+%deepanalyze -x --next -f --target sales_data Strip whitespace from all string columns.
 ```
 
 ## Attribution & Licensing
