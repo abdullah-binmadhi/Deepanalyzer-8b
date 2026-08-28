@@ -1199,3 +1199,222 @@ def test_eda_lifecycle_pipeline(monkeypatch, tmp_path):
     # Check that monitor script was generated
     assert os.path.exists("./eda_quality_monitor.py")
 
+
+def test_local_gatekeeper_detect_header_offset():
+    """Verify detection of true header row index in messy multi-row metadata files."""
+    from deepanalyze.privacy_knife import LocalGatekeeper
+
+    messy_lines = [
+        "Company: ACME Global Corp",
+        "Report: Financial Ledger 2026",
+        "Generated Date: 2026-08-28",
+        "========================================",
+        "Transaction_ID,Posting_Date,Customer_Name,Gross_Amount,Net_Margin",
+        "TXN_001,2026-01-01,Alpha Ltd,1000.50,250.00",
+        "TXN_002,2026-01-02,Beta LLC,2400.00,600.00"
+    ]
+
+    offset = LocalGatekeeper.detect_header_offset(messy_lines, sep=",")
+    assert offset == 4  # The 5th line (index 4) is the real header row
+
+
+def test_sniff_tabular_file_and_import_messy_erp(tmp_path):
+    """Verify smart sniffing of semicolon delimiter and leading title rows."""
+    import polars as pl
+    from deepanalyze import core
+
+    dirty_csv = tmp_path / "messy_ledger.csv"
+    dirty_content = (
+        "ACME ERP System v4.2\n"
+        "Department: Enterprise Sales\n"
+        "Period: 2026-Q1\n"
+        "\n"
+        "Invoice_No;Invoice_Date;Client_Name;Amount_USD;Status\n"
+        "INV-101;2026-01-15;Globex Corp;(1,500.00);Completed\n"
+        "INV-102;9999-99-99 99:99:99;Initech; $4,250.75 ;Completed\n"
+        "INV-103;0000-00-00 00:00:00;Umbrella Corp;(250.00);Pending\n"
+    )
+    dirty_csv.write_text(dirty_content, encoding="utf-8")
+
+    # 1. Test Sniffer
+    sniff_info = core._sniff_tabular_file(str(dirty_csv))
+    assert sniff_info["separator"] == ";"
+    assert sniff_info["skip_rows"] == 4
+
+    # 2. Test Import Engine
+    class MockIP:
+        user_ns = {}
+
+    mock_ip = MockIP()
+    args = argparse.Namespace(
+        import_path=str(dirty_csv),
+        target="ledger_df",
+        sheet=None,
+        lazy=False
+    )
+    core._handle_import(mock_ip, args)
+
+    assert "ledger_df" in mock_ip.user_ns
+    df = mock_ip.user_ns["ledger_df"]
+    assert isinstance(df, pl.DataFrame)
+    assert "Invoice_No" in df.columns
+    assert "Amount_USD" in df.columns
+    assert df.height == 3
+
+
+def test_cleaners_ftfy_unicode_and_mojibake():
+    """Verify repair of Mojibake, zero-width spaces, and HTML entities."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "text": ["CafÃ© &amp; Bistro\u200b", "â€˜Specialâ€™ Quote\xa0", "Clean Name"]
+    })
+    res = cleaners.sanitize_unicode_and_mojibake(df)
+    assert res["text"].to_list() == ["Café & Bistro", "'Special' Quote", "Clean Name"]
+
+
+def test_cleaners_fuzzy_harmonize_categories():
+    """Verify clustering and harmonizing of messy category typos."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "country": ["United States", "United States", "USA", "United States", "U.S.A.", "Germany", "Germany"]
+    })
+    res = cleaners.fuzzy_harmonize_categories(df, threshold=0.8)
+    vals = res["country"].to_list()
+    assert vals[2] == "United States" or vals[4] == "United States"
+    assert "Germany" in vals
+
+
+def test_cleaners_explode_nested_json():
+    """Verify flattening of embedded JSON string columns."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "id": [1, 2],
+        "metadata": ['{"device": "iOS", "os_ver": 17}', '{"device": "Android", "os_ver": 14}']
+    })
+    res = cleaners.explode_nested_json(df)
+    assert "metadata_device" in res.columns
+    assert "metadata_os_ver" in res.columns
+    assert "metadata" not in res.columns
+    assert res["metadata_device"].to_list() == ["iOS", "Android"]
+
+
+def test_cleaners_unpivot_temporal_matrix():
+    """Verify reshaping wide monthly reports into tidy tabular rows."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "Department": ["Sales", "Engineering"],
+        "Jan_2025": [100, 200],
+        "Feb_2025": [110, 210],
+        "Mar_2025": [120, 220]
+    })
+    res = cleaners.unpivot_temporal_matrix(df)
+    assert "period" in res.columns
+    assert "value" in res.columns
+    assert res.height == 6  # 2 depts * 3 months
+
+
+def test_cleaners_normalize_units_and_currencies():
+    """Verify parsing and standardization of accounting negatives and mixed units."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "weight": ["5 kg", "5000 g", "10 kg"],
+        "balance": ["(1,250.00)", "$3,400.50", "200.00"]
+    })
+    res = cleaners.normalize_units_and_currencies(df)
+    assert res["weight"].to_list() == [5.0, 5.0, 10.0]
+    assert res["balance"].to_list() == [-1250.0, 3400.5, 200.0]
+
+
+def test_cleaners_winsorize_numeric_outliers():
+    """Verify clipping of extreme human data entry typos."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    # Create dataset with 90 normal values and 2 extreme outliers (999 and -5000)
+    ages = [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 999]
+    df = pl.DataFrame({"age": ages})
+    res = cleaners.winsorize_numeric_outliers(df, lower_p=0.05, upper_p=0.90)
+    # The max value must be clipped below 999
+    assert res["age"].max() < 999
+
+
+def test_cleaners_auto_cast_data_types():
+    """Verify safe coercion of boolean strings and numeric strings."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    df = pl.DataFrame({
+        "is_active": ["true", "false", "yes", "no"],
+        "num_str": ["1,200", "3,450.5", "500", "25"]
+    })
+    res = cleaners.auto_cast_data_types(df)
+    assert res.schema["is_active"] == pl.Boolean
+    assert res["is_active"].to_list() == [True, False, True, False]
+    assert res.schema["num_str"] == pl.Float64
+    assert res["num_str"].to_list() == [1200.0, 3450.5, 500.0, 25.0]
+
+
+def test_cleaners_auto_stitch_dataframes():
+    """Verify relational foreign-key linking across multiple session DataFrames."""
+    import polars as pl
+    from deepanalyze import cleaners
+
+    customers_df = pl.DataFrame({
+        "customer_id": [1, 2, 3],
+        "name": ["Alice", "Bob", "Charlie"]
+    })
+    orders_df = pl.DataFrame({
+        "order_id": [101, 102],
+        "customer_id": [1, 2],
+        "total": [250.0, 400.0]
+    })
+    stitched, log = cleaners.auto_stitch_dataframes({"customers": customers_df, "orders": orders_df})
+    assert "name" in stitched.columns
+    assert "total" in stitched.columns
+    assert stitched.height == 3
+
+
+def test_eda_dashboard_standalone(tmp_path):
+    """Verify generation of interactive Chart.js HTML executive dashboard."""
+    import polars as pl
+    from deepanalyze import dashboard
+
+    df = pl.DataFrame({
+        "revenue": [100.0, 250.0, 300.0, 150.0, 400.0],
+        "category": ["A", "B", "A", "C", "B"],
+        "margin": [20.0, 50.0, 60.0, 30.0, 80.0]
+    })
+    out_file = str(tmp_path / "test_dashboard.html")
+    dash_path = dashboard.generate_eda_dashboard(
+        df,
+        target_name="sales_df",
+        goal="Maximize Q3 Margin",
+        num_cols=["revenue", "margin"],
+        cat_cols=["category"],
+        corr_highlights=[("revenue", "margin", 0.98)],
+        exec_narrative="Strong linear revenue-margin alignment observed.",
+        recommendations=["Invest in Category B", "Monitor Category C"],
+        output_path=out_file
+    )
+
+    assert os.path.exists(dash_path)
+    content = open(dash_path, encoding="utf-8").read()
+    assert "Executive Analytics Dashboard: sales_df" in content
+    assert "Chart.js" in content
+    assert "chartDistribution" in content
+    assert "Maximize Q3 Margin" in content
+    assert "Strong linear revenue-margin alignment observed." in content
+
+
+
+

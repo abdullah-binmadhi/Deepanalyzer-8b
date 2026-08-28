@@ -275,7 +275,9 @@ class LocalGatekeeper:
 
         # 2. Detect Sensitive PII / PHI Columns
         pii_patterns = re.compile(
-            r"(name|patient|customer|email|phone|address|ssn|contact|ic_no|nric|passport|salary|credit_card|iban|tax_id)",
+            r"(name|patient|customer|email|phone|address|ssn|contact|ic_no|nric|passport|salary|"
+            r"credit_card|iban|tax_id|national_id|beneficiary|claim_no|mrn|medical_record|"
+            r"ip_address|zip_code|postal_code|dob|birth_date|driver_license)",
             re.IGNORECASE
         )
         pii_columns = [c for c in columns if pii_patterns.search(c)]
@@ -293,6 +295,39 @@ class LocalGatekeeper:
             "reason": "Clean tabular format with no obvious PII headers",
             "actions": ["statistical_summary", "data_profile"]
         }
+
+    @classmethod
+    def detect_header_offset(cls, lines: list[str], sep: str = ",") -> int:
+        """Detects the index of the true header line in messy ERP text with leading report titles."""
+        if not lines:
+            return 0
+            
+        best_row = 0
+        best_score = -1.0
+
+        for idx, line in enumerate(lines[:25]):
+            line_str = line.strip()
+            if not line_str:
+                continue
+            tokens = [t.strip().strip('"').strip("'") for t in line_str.split(sep)]
+            non_empty = [t for t in tokens if t]
+            if not non_empty:
+                continue
+            
+            # Score based on token count, alphanumeric density, and non-numeric ratio (headers are text)
+            non_num_count = sum(1 for t in non_empty if not re.match(r'^-?\d+(?:\.\d+)?$', t))
+            unique_ratio = len(set(non_empty)) / len(non_empty) if non_empty else 0
+            score = (len(non_empty) * 2.0) + (non_num_count * 1.5) + (unique_ratio * 3.0)
+
+            # Penalize single-cell title lines like "Report Date: 2026-01-01"
+            if len(non_empty) == 1 or line_str.startswith(("Report", "Company", "Date:", "Title:", "Page", "---", "===")):
+                score *= 0.2
+
+            if score > best_score:
+                best_score = score
+                best_row = idx
+
+        return best_row
 
     @classmethod
     def inspect_folder(cls, folder_path: str) -> dict:

@@ -55,6 +55,14 @@ FLAGS = [
     "--history",
     "--next",
     "--auto-clean",
+    "--ftfy",
+    "--fuzzy-clean",
+    "--explode",
+    "--unpivot",
+    "--convert-units",
+    "--winsorize",
+    "--auto-type",
+    "--stitch",
     "--spawn",
     "--import",
     "--export",
@@ -100,8 +108,10 @@ try:
 except ImportError:
     pl = None
 
-# Ensure startup directory is in sys.path for privacy module imports
+# Ensure startup directory is in sys.path for privacy & cleaner module imports
 from .privacy_knife import DeepAnalyzePrivacyKnife, LocalGatekeeper
+from . import cleaners
+from . import dashboard
 
 try:
     import duckdb
@@ -157,7 +167,7 @@ TRANSIENT_VARS = {
 
 SKILL_RULEBOOKS = {
     "general": (
-        "[GENERAL CODING RULES - MAXIMUM RELIABILITY]:\n"
+        "[GENERAL CODING RULES - MAXIMUM RELIABILITY & MESSY DATA RESILIENCE]:\n"
         "1. ENGINE DETECTION: Check active environment context to identify whether the target DataFrame is Pandas or Polars.\n"
         "2. PANDAS IN-PLACE MUTATION & ALIASING:\n"
         "   - Mutate columns directly: `df['col'] = ...` or assign filtered subsets `df = df[df['col'] > 0]`.\n"
@@ -167,10 +177,14 @@ SKILL_RULEBOOKS = {
         "3. POLARS IDIOMATIC TRANSFORMATIONS:\n"
         "   - Use explicit Polars expressions and assign back to the target variable: `df = df.with_columns(pl.col('a') * 2)`.\n"
         "   - Use `.group_by(...)` instead of deprecated `.groupby(...)`.\n"
-        "4. DEFENSIVE NUMERICAL CASTING & ZERO-DIVISION:\n"
-        "   - Pandas: `pd.to_numeric(df['col'].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)`.\n"
-        "   - Protect divisions: `np.where(denom == 0, 0.0, num / denom)`.\n"
-        "5. STRICT SYNTAX FORMAT: Output ONLY executable Python code inside <Answer>```python\n...\n```</Answer>.\n"
+        "4. DEFENSIVE NUMERICAL, CURRENCY & ACCOUNTING CASTING:\n"
+        "   - Accounting Negatives: Convert `(1,234.56)` or `$(1,234.56)` to negative float `-1234.56`.\n"
+        "   - Strip currency symbols (`$`, `€`, `£`, `SAR`, `AED`, `₹`, `USD`, `EUR`) and commas.\n"
+        "   - Polars: `pl.col('col').cast(pl.Utf8, strict=False).str.replace_all(r'\\((.*?)\\)', r'-\\1').str.replace_all(r'[^0-9.-]', '').cast(pl.Float64, strict=False).fill_null(0.0)`.\n"
+        "   - Pandas: `pd.to_numeric(df['col'].astype(str).str.replace(r'\\((.*?)\\)', r'-\\1', regex=True).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)`.\n"
+        "   - Protect divisions: `np.where(denom == 0, 0.0, num / denom)` in Pandas, `pl.when(pl.col('d') == 0).then(0.0).otherwise(pl.col('n') / pl.col('d'))` in Polars.\n"
+        "5. DEFENSIVE DATES: Use `.str.to_datetime(strict=False)` in Polars or `pd.to_datetime(..., errors='coerce')` in Pandas so sentinels like '9999-99-99' become nulls instead of crashing.\n"
+        "6. STRICT SYNTAX FORMAT: Output ONLY executable Python code inside <Answer>```python\n...\n```</Answer>.\n"
     ),
     "unravel": (
         "[HIERARCHICAL ERP REPORT FLATTENING RULEBOOK]:\n"
@@ -183,7 +197,7 @@ SKILL_RULEBOOKS = {
         "2. HORIZONTAL HEADER PARSING: Header rows contain multiple key-value pairs horizontally across columns:\n"
         "   `if c(0).startswith('Doc. No') or c(0) == 'Doc. No': active_doc = {'doc_no': c(2), 'doc_date': c(4), 'customer': c(6)}`\n"
         "3. DETAIL LINE ITEMS: Detect line items with `if c(0).isdigit() and c(1):`. Merge with `active_doc`, append dictionary to `records`, and set `last_item = item`.\n"
-        "4. NUMERIC CASTING: Use `float(re.sub(r'[^0-9.-]', '', c(idx))) if re.sub(r'[^0-9.-]', '', c(idx)) else 0.0`.\n"
+        "4. NUMERIC CASTING: Use `float(re.sub(r'\\((.*?)\\)', r'-\\1', c(idx)).replace(',', '').strip()) if re.search(r'\\d', c(idx)) else 0.0`.\n"
         "5. WRAPPED TRAILING TEXT: If `not c(0) and c(2) and last_item is not None and c(2).startswith('-')`, append cleanly to the PRECEDING item:\n"
         "   `last_item['description'] += ' ' + c(2).lstrip('- ').strip()`\n"
         "6. SUMMARY ROW TERMINATION: Stop parsing at totals (`if any(k in c(0).lower() for k in ['grand total', 'total']): break`).\n"
@@ -191,19 +205,22 @@ SKILL_RULEBOOKS = {
         "8. Output ONLY executable code inside <Answer>```python\n...\n```</Answer>.\n"
     ),
     "feature": (
-        "[FEATURE ENGINEERING & WRANGLING RULEBOOK]:\n"
+        "[FEATURE ENGINEERING & ADVANCED WRANGLING RULEBOOK]:\n"
         "1. ENGINE-SPECIFIC TRANSFORMATIONS: Check if the engine is Polars or Pandas and transform directly.\n"
         "2. PANDAS SAFE CLEANING & CASTING:\n"
-        "   - Numbers: `pd.to_numeric(df['col'].astype(str).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)`.\n"
+        "   - Accounting & Currencies: `pd.to_numeric(df['col'].astype(str).str.replace(r'\\((.*?)\\)', r'-\\1', regex=True).str.replace(r'[^0-9.-]', '', regex=True), errors='coerce').fillna(0.0)`.\n"
         "   - Dates: `pd.to_datetime(df['date_col'], errors='coerce')` -> extract `.dt.year`, `.dt.month`, `.dt.day_name()`, `.dt.is_weekend`.\n"
         "   - Strings: `df['str_col'] = df['str_col'].astype(str).str.strip().str.lower()`.\n"
+        "   - Hierarchical Fill: `df['parent_col'] = df['parent_col'].ffill()`.\n"
         "   - Zero-Division Protection: `np.where(denom == 0, 0.0, num / denom)`.\n"
         "3. POLARS SAFE CLEANING & CASTING:\n"
-        "   - Numbers: `pl.col('col').cast(pl.Utf8, strict=False).str.replace_all(r'[^0-9.-]', '').cast(pl.Float64, strict=False).fill_null(0.0)`.\n"
+        "   - Accounting & Currencies: `pl.col('col').cast(pl.Utf8, strict=False).str.replace_all(r'\\((.*?)\\)', r'-\\1').str.replace_all(r'[^0-9.-]', '').cast(pl.Float64, strict=False).fill_null(0.0)`.\n"
+        "   - Dates: `pl.col('date_col').str.to_datetime(strict=False)`.\n"
+        "   - Hierarchical Fill: `pl.col('parent_col').forward_fill()`.\n"
         "   - Zero-Division Protection: `pl.when(pl.col('denom') == 0).then(0.0).otherwise(pl.col('num') / pl.col('denom'))`.\n"
         "   - Strings: `pl.col('str_col').str.strip_chars().str.to_lowercase()`.\n"
         "4. CATEGORICAL & OUTLIER ENCODING:\n"
-        "   - Use frequency encoding or one-hot encoding with `pd.get_dummies(..., drop_first=True, dtype=int)`.\n"
+        "   - Frequency encoding or one-hot encoding.\n"
         "   - Cap extreme outliers using IQR or percentile clipping (`.clip(lower, upper)`).\n"
         "5. Output executable code inside <Answer>```python\n...\n```</Answer>.\n"
     ),
@@ -440,6 +457,24 @@ def _restore_snapshot(ip, target="df") -> bool:
             ip.user_ns[target] = snap.clone()
         return True
     return False
+
+def _register_snapshot(target: str, df_obj, action_name: str = "transform"):
+    """Helper to register DataFrame snapshots with metadata in global state."""
+    global _DF_SNAPSHOTS, _DF_SNAPSHOT_METADATA
+    snapshot_key = f"{action_name}_{target}"
+    try:
+        if pl is not None and isinstance(df_obj, pl.LazyFrame):
+            _DF_SNAPSHOTS[snapshot_key] = None
+        elif pl is not None and isinstance(df_obj, pl.DataFrame):
+            _DF_SNAPSHOTS[snapshot_key] = df_obj.clone()
+        elif isinstance(df_obj, pd.DataFrame):
+            _DF_SNAPSHOTS[snapshot_key] = df_obj.copy(deep=True)
+    except Exception:
+        pass
+    _DF_SNAPSHOT_METADATA[snapshot_key] = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "action": action_name
+    }
 
 def _reconcile_target_dataframe(ip, code_str: str, prompt: str, default_target: str = "df"):
     """Parses executed AST to extract the last assigned DataFrame variable
@@ -1329,8 +1364,52 @@ def _estimate_memory_mb(df_obj):
     return 0.0
 
 
+def _sniff_tabular_file(file_path: str) -> dict:
+    """Intelligently sniffs encoding, delimiter, and header row offset for messy tabular files."""
+    encodings_to_try = ["utf-8-sig", "utf-8", "latin-1", "cp1252", "windows-1256", "iso-8859-1"]
+    sample_text = ""
+    chosen_encoding = "utf-8"
+
+    # 1. Detect Encoding via binary read of first 32KB
+    try:
+        with open(file_path, "rb") as f_raw:
+            raw_bytes = f_raw.read(32768)
+            for enc in encodings_to_try:
+                try:
+                    sample_text = raw_bytes.decode(enc)
+                    chosen_encoding = enc
+                    break
+                except UnicodeDecodeError:
+                    continue
+    except Exception:
+        pass
+
+    lines = [ln.strip() for ln in sample_text.splitlines()][:30] if sample_text else []
+    
+    # 2. Detect Delimiter
+    delimiters = [",", "\t", ";", "|"]
+    chosen_sep = ","
+    max_delim_count = 0.0
+    if lines:
+        for d in delimiters:
+            counts = [ln.count(d) for ln in lines[:10]]
+            avg_count = sum(counts) / len(counts) if counts else 0
+            if avg_count > max_delim_count and avg_count >= 1.0:
+                max_delim_count = avg_count
+                chosen_sep = d
+
+    # 3. Detect Header Start Row (Skip leading metadata/title lines)
+    header_offset = LocalGatekeeper.detect_header_offset(lines, sep=chosen_sep) if lines else 0
+
+    return {
+        "encoding": chosen_encoding,
+        "separator": chosen_sep,
+        "skip_rows": header_offset
+    }
+
+
 def _handle_import(ip, args):
-    """Resilient data ingestion engine using Polars with defensive path handling."""
+    """Resilient data ingestion engine using Polars with defensive path handling and smart tabular sniffing."""
     global _DF_SNAPSHOTS, _ACTIVE_ROADMAP, _DF_SNAPSHOT_METADATA
 
     if pl is None:
@@ -1378,43 +1457,32 @@ def _handle_import(ip, args):
                 if use_lazy:
                     print("[DeepAnalyze Warning]: --lazy is not supported for Excel files. Loading eagerly.")
                 
-                # 1. Normalize Sheet Argument for Polars
                 sheet_kwargs = {}
                 if sheet is not None:
                     raw_sheet = str(sheet).strip()
                     if raw_sheet.isdigit():
-                        # Polars calamine/fastexcel engine uses 1-indexed sheet_id for integer indices
                         sheet_kwargs["sheet_id"] = int(raw_sheet)
                     else:
-                        # String sheet names go to sheet_name
                         sheet_kwargs["sheet_name"] = raw_sheet
                 else:
-                    # Default to first sheet (sheet_id=1 for Polars)
                     sheet_kwargs["sheet_id"] = 1
 
-                # 2. Resilient Parsing with Fallbacks
                 try:
-                    # Primary: Fast Rust engine via fastexcel / calamine
                     df = pl.read_excel(resolved_path, engine="calamine", **sheet_kwargs)
                 except ImportError:
                     try:
-                        # Fallback 1: openpyxl engine
-                        # openpyxl expects sheet_name (either string name or 0-indexed integer)
                         op_kwargs = {}
                         if "sheet_id" in sheet_kwargs:
                             op_kwargs["sheet_name"] = sheet_kwargs["sheet_id"] - 1
                         else:
                             op_kwargs["sheet_name"] = sheet_kwargs["sheet_name"]
-                            
                         df = pl.read_excel(resolved_path, engine="openpyxl", **op_kwargs)
                     except Exception:
-                        # Fallback 2: Pandas conversion bridge
                         import pandas as pd
                         pd_sheet = sheet_kwargs.get("sheet_name", sheet_kwargs.get("sheet_id", 1) - 1)
                         pdf = pd.read_excel(resolved_path, sheet_name=pd_sheet)
                         df = pl.from_pandas(pdf)
-                except Exception as e:
-                    # Final safety fallback via Pandas
+                except Exception:
                     try:
                         import pandas as pd
                         pd_sheet = sheet_kwargs.get("sheet_name", sheet_kwargs.get("sheet_id", 1) - 1)
@@ -1426,39 +1494,64 @@ def _handle_import(ip, args):
 
             # --- Delimited Text (CSV / TSV / TXT) ---
             elif ext in (".csv", ".tsv", ".txt"):
-                separator = "\t" if ext == ".tsv" else ","
-                null_values = ["", "NA", "N/A", "null", "NULL", "None", "-"]
-                try:
-                    if use_lazy:
-                        df = pl.scan_csv(
-                            resolved_path, separator=separator,
-                            null_values=null_values, truncate_ragged_lines=True,
-                            try_parse_dates=True
-                        )
-                    else:
-                        df = pl.read_csv(
-                            resolved_path, separator=separator,
-                            null_values=null_values, truncate_ragged_lines=True,
-                            try_parse_dates=True
-                        )
-                except Exception:
-                    # Retry with latin-1 encoding
+                null_values = [
+                    "", "NA", "N/A", "null", "NULL", "None", "-", "--", "N/A", "#N/A", "#VALUE!",
+                    "9999-99-99 99:99:99", "9999-99-99", "0000-00-00 00:00:00", "0000-00-00",
+                    "9999-12-31 23:59:59", "9999-12-31", "1900-01-01 00:00:00", "(null)", "nil"
+                ]
+
+                # Run smart tabular sniffer
+                sniff_info = _sniff_tabular_file(resolved_path) if not resolved_path.startswith(("http://", "https://")) else {"encoding": "utf8", "separator": "\t" if ext == ".tsv" else ",", "skip_rows": 0}
+                
+                csv_configs = [
+                    # 1. Sniffed encoding, delimiter, and header offset (string dates for safe ingestion)
+                    {"encoding": sniff_info["encoding"], "separator": sniff_info["separator"], "skip_rows": sniff_info["skip_rows"], "try_parse_dates": False},
+                    # 2. Sniffed with date parsing
+                    {"encoding": sniff_info["encoding"], "separator": sniff_info["separator"], "skip_rows": sniff_info["skip_rows"], "try_parse_dates": True},
+                    # 3. Fallback: UTF-8 without skip_rows
+                    {"encoding": "utf8", "separator": sniff_info["separator"], "skip_rows": 0, "try_parse_dates": False},
+                    # 4. Fallback: Latin-1
+                    {"encoding": "latin-1", "separator": sniff_info["separator"], "skip_rows": 0, "try_parse_dates": False},
+                ]
+
+                parsed_successfully = False
+                last_csv_error = None
+
+                for cfg in csv_configs:
                     try:
                         if use_lazy:
                             df = pl.scan_csv(
-                                resolved_path, separator=separator,
-                                null_values=null_values, truncate_ragged_lines=True,
-                                try_parse_dates=True, encoding="latin-1"
+                                resolved_path,
+                                separator=cfg["separator"],
+                                skip_rows=cfg["skip_rows"],
+                                null_values=null_values,
+                                truncate_ragged_lines=True,
+                                ignore_errors=True,
+                                try_parse_dates=cfg["try_parse_dates"],
+                                encoding=cfg["encoding"],
+                                infer_schema_length=10000
                             )
                         else:
                             df = pl.read_csv(
-                                resolved_path, separator=separator,
-                                null_values=null_values, truncate_ragged_lines=True,
-                                try_parse_dates=True, encoding="latin-1"
+                                resolved_path,
+                                separator=cfg["separator"],
+                                skip_rows=cfg["skip_rows"],
+                                null_values=null_values,
+                                truncate_ragged_lines=True,
+                                ignore_errors=True,
+                                try_parse_dates=cfg["try_parse_dates"],
+                                encoding=cfg["encoding"],
+                                infer_schema_length=10000
                             )
-                    except Exception as e_enc:
-                        print(f"[DeepAnalyze Import Error]: CSV/TSV read failed (UTF-8 + latin-1): {e_enc}")
-                        return
+                        parsed_successfully = True
+                        break
+                    except Exception as e_cfg:
+                        last_csv_error = e_cfg
+                        continue
+
+                if not parsed_successfully or df is None:
+                    print(f"[DeepAnalyze Import Error]: CSV/TSV read failed: {last_csv_error}")
+                    return
 
             # --- JSON / NDJSON ---
             elif ext in (".json", ".ndjson", ".jsonl"):
@@ -1485,6 +1578,18 @@ def _handle_import(ip, args):
     if df is None:
         print("[DeepAnalyze Import Error]: Failed to produce a DataFrame from the source.")
         return
+
+    # Normalize column names in eager DataFrames to prevent empty header crashes
+    if pl is not None and isinstance(df, pl.DataFrame):
+        new_cols = []
+        for idx, col in enumerate(df.columns):
+            c_str = str(col).strip()
+            if not c_str or c_str.lower() in ("none", "null", "nan"):
+                new_cols.append(f"column_{idx+1}")
+            else:
+                new_cols.append(c_str)
+        if new_cols != df.columns:
+            df.columns = new_cols
 
     elapsed = time.time() - t_start
 
@@ -1517,20 +1622,19 @@ def _handle_import(ip, args):
         schema_info = "\n".join([f"  {name}: {dtype}" for name, dtype in lazy_schema.items()])
         row_count = "Unknown (LazyFrame)"
         col_count = str(len(lazy_schema))
-        mem_str = "N/A (LazyFrame)"
+        mem_str = "N/A (Lazy)"
     else:
-        schema_info = "\n".join([f"  {name}: {dtype}" for name, dtype in df.schema.items()])
+        schema_info = "\n".join([f"  {name}: {dtype}" for name, dtype in zip(df.columns, df.dtypes)])
         row_count = f"{df.shape[0]:,}"
         col_count = str(df.shape[1])
         mem_mb = _estimate_memory_mb(df)
-        mem_str = f"{mem_mb:.2f} MB" if mem_mb >= 1.0 else f"{mem_mb * 1024:.1f} KB"
+        mem_str = f"{mem_mb:.2f} MB"
 
     panel_body = (
-        f"[bold]Variable:[/bold] {target_name}\n"
-        f"[bold]Source:[/bold] {source}\n"
-        f"[bold]Rows:[/bold] {row_count}  |  [bold]Columns:[/bold] {col_count}\n"
+        f"[bold]Target Variable:[/bold] `{target_name}`\n"
+        f"[bold]Engine:[/bold] {'Polars (LazyFrame)' if is_lazy else 'Polars'}\n"
+        f"[bold]Dimensions:[/bold] {row_count} rows x {col_count} columns\n"
         f"[bold]Memory:[/bold] {mem_str}\n"
-        f"[bold]Type:[/bold] {'pl.LazyFrame' if is_lazy else 'pl.DataFrame'}\n"
         f"[bold]Load Time:[/bold] {elapsed:.3f}s\n\n"
         f"[bold]Schema:[/bold]\n{schema_info}"
     )
@@ -1771,17 +1875,21 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         console.print(f"🔒 [dim]Tokenized sensitive columns in RAM vault: {pii_cols} (Zero row records sent to cloud)[/dim]")
 
     # Autonomous Polars Cleaning Code Generation
+    # Autonomous Polars Cleaning Code Generation
     clean_sys = (
-        "[POLARS DATA CLEANING ENGINE]:\n"
-        "You are an expert Data Engineer. Output ONLY valid, clean, idiomatic Polars code to normalize and sanitize the dataset.\n"
-        "RULES:\n"
-        "1. Strictly use Polars methods: `df = df.with_columns(...)`, `df = df.unique()`.\n"
-        "2. Clean/standardize column names (lowercase, replace spaces/dots with underscores).\n"
-        "3. Impute nulls on numeric columns with mean/median or 0.0 (`.fill_null(...)`).\n"
-        "4. Cast numerical string representations safely (`.cast(pl.Float64, strict=False)`).\n"
-        "5. Strip leading/trailing whitespaces from string columns.\n"
-        "6. Assign result to the target variable.\n"
-        "7. Output ONLY executable Python code inside <Answer>```python\n...\n```</Answer>."
+        "[UNIVERSAL DATA SANITIZATION & ERP NORMALIZATION PROTOCOL]:\n"
+        "You are an expert Data Engineer. Output ONLY valid, robust, idiomatic Polars code to normalize and clean the dataset.\n"
+        "MANDATORY CLEANING DIRECTIVES:\n"
+        "1. COLUMN IDENTIFIERS: Normalize all column names to clean, lowercase snake_case (e.g. `col.lower().strip().replace(' ', '_').replace('.', '_')`).\n"
+        "2. ACCOUNTING & CURRENCIES: Convert parenthetical negatives `(1,234.56)` or `$(1,234.56)` to negative numbers (`-1234.56`).\n"
+        "   - Strip currency symbols (`$`, `€`, `£`, `SAR`, `AED`, `₹`, `USD`, `EUR`, `Q1`, `Q2`).\n"
+        "   - Remove thousand-separator commas: `pl.col(c).cast(pl.Utf8, strict=False).str.replace_all(r'\\((.*?)\\)', r'-\\1').str.replace_all(r'[^0-9.-]', '').cast(pl.Float64, strict=False).fill_null(0.0)`.\n"
+        "3. SAFE DATES: Defensively parse dates using `.str.to_datetime(strict=False)` so impossible dates (e.g. '9999-99-99') safely become nulls.\n"
+        "4. ERP HIERARCHICAL GROUPINGS: If a parent key (e.g. Customer, Invoice, Dept) has trailing nulls for line items, apply `pl.col(parent_col).forward_fill()`.\n"
+        "5. SUMMARY FOOTER TRIMMING: Drop trailing summary/total rows containing 'Grand Total', 'Total:', 'Page X of Y', or 'Printed on'.\n"
+        "6. DEDUPLICATION: Call `df = df.unique()`.\n"
+        "7. Assign the cleaned result back to the target variable: `{target_name} = ...`.\n"
+        "8. Output ONLY executable Python code inside <Answer>```python\n...\n```</Answer>."
     )
     clean_prompt = (
         f"Target DataFrame Variable: `{target_name}`\n"
@@ -1852,26 +1960,82 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     _ACTIVE_ROADMAP["phase"] = 3
 
     # =========================================================================
-    # STAGE 4: ANALYZE (EXPLORATORY DATA ANALYSIS & CORRELATIONS)
+    # STAGE 4: ANALYZE (5-10 COMPREHENSIVE DEEP ANALYTICAL PASSES)
     # =========================================================================
-    console.print("\n[bold cyan][Stage 4/6] 📊 ANALYZE (Exploration, Correlations & Modeling)[/bold cyan]")
+    console.print("\n[bold cyan][Stage 4/6] 📊 ANALYZE (5-10 Deep Analytical Passes & Statistical Telemetry)[/bold cyan]")
     
     num_cols = []
     cat_cols = []
+    date_cols = []
     if pl and isinstance(df, pl.DataFrame):
         for col in df.columns:
             dtype = df.schema[col]
             if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64, pl.Float32, pl.Float64):
                 num_cols.append(col)
+            elif dtype in (pl.Date, pl.Datetime, pl.Time, pl.Duration):
+                date_cols.append(col)
             elif dtype in (pl.String, pl.Utf8, pl.Categorical):
                 cat_cols.append(col)
     else:
         for col in df.columns:
             if pd.api.types.is_numeric_dtype(df[col]):
                 num_cols.append(col)
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                date_cols.append(col)
             else:
                 cat_cols.append(col)
 
+    # 1. Statistical Telemetry & Sparkline Table
+    table_stats = Table(title="📈 Polars Descriptive Profile & Univariate Telemetry", box=box.ROUNDED)
+    table_stats.add_column("Column", style="cyan bold")
+    table_stats.add_column("Type", style="magenta")
+    table_stats.add_column("Null %", justify="right", style="yellow")
+    table_stats.add_column("Unique", justify="right")
+    table_stats.add_column("Mean ± Std", justify="right")
+    table_stats.add_column("Skewness", justify="right")
+    table_stats.add_column("Sparkline", justify="center", style="green")
+
+    stat_telemetry = {}
+    for col in df.columns[:12]:
+        if pl and isinstance(df, pl.DataFrame):
+            dtype_str = str(df.schema[col])
+            null_count = df[col].null_count()
+            null_pct = round((null_count / df.height) * 100, 1) if df.height > 0 else 0.0
+            n_uniq = df[col].n_unique()
+            if col in num_cols:
+                s_clean = df[col].drop_nulls()
+                m_val = s_clean.mean() if s_clean.len() > 0 else 0.0
+                std_val = s_clean.std() if s_clean.len() > 1 else 0.0
+                skew_val = s_clean.skew() if hasattr(s_clean, "skew") else 0.0
+                m_str = f"{m_val:.2f} ± {std_val:.2f}" if m_val is not None else "N/A"
+                sk_str = f"{skew_val:+.2f}" if skew_val is not None else "0.0"
+                spark = _generate_sparkline(df[col])
+                stat_telemetry[col] = {"mean": m_val, "std": std_val, "skew": skew_val, "null_pct": null_pct}
+            else:
+                m_str, sk_str = "—", "—"
+                spark = "—"
+        else:
+            dtype_str = str(df[col].dtype)
+            null_pct = round((df[col].isna().sum() / len(df)) * 100, 1) if len(df) > 0 else 0.0
+            n_uniq = df[col].nunique()
+            if col in num_cols:
+                s_clean = df[col].dropna()
+                m_val = float(s_clean.mean()) if len(s_clean) > 0 else 0.0
+                std_val = float(s_clean.std()) if len(s_clean) > 1 else 0.0
+                skew_val = float(s_clean.skew()) if hasattr(s_clean, "skew") else 0.0
+                m_str = f"{m_val:.2f} ± {std_val:.2f}"
+                sk_str = f"{skew_val:+.2f}"
+                spark = _generate_sparkline(df[col])
+                stat_telemetry[col] = {"mean": m_val, "std": std_val, "skew": skew_val, "null_pct": null_pct}
+            else:
+                m_str, sk_str = "—", "—"
+                spark = "—"
+
+        table_stats.add_row(str(col), dtype_str, f"{null_pct}%", str(n_uniq), m_str, sk_str, spark)
+
+    console.print(table_stats)
+
+    # 2. Correlation Highlights (Pearson r)
     corr_highlights = []
     if len(num_cols) >= 2 and pl and isinstance(df, pl.DataFrame):
         try:
@@ -1879,47 +2043,94 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
                 for j in range(i + 1, len(num_cols)):
                     c1, c2 = num_cols[i], num_cols[j]
                     corr_val = df.select(pl.corr(c1, c2)).item()
-                    if corr_val is not None and not np.isnan(corr_val) and abs(corr_val) >= 0.3:
-                        corr_highlights.append((c1, c2, corr_val))
+                    if corr_val is not None and not np.isnan(corr_val) and abs(corr_val) >= 0.25:
+                        corr_highlights.append((c1, c2, round(float(corr_val), 3)))
             corr_highlights.sort(key=lambda x: abs(x[2]), reverse=True)
         except Exception:
             pass
 
-    table_stats = Table(title="📈 Polars Descriptive Profile Summary", box=box.ROUNDED)
-    table_stats.add_column("Column", style="cyan bold")
-    table_stats.add_column("Type", style="magenta")
-    table_stats.add_column("Null %", justify="right", style="yellow")
-    table_stats.add_column("Unique", justify="right")
-    table_stats.add_column("Distribution / Sparkline", justify="center", style="green")
+    # 3. Anomaly & Outlier Isolation (IQR fences)
+    outlier_counts = {}
+    if num_cols and pl and isinstance(df, pl.DataFrame):
+        for col in num_cols[:6]:
+            try:
+                s = df[col].drop_nulls()
+                if s.len() >= 10:
+                    q1 = s.quantile(0.25)
+                    q3 = s.quantile(0.75)
+                    if q1 is not None and q3 is not None:
+                        iqr = q3 - q1
+                        low_fence, high_fence = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+                        n_out = df.filter((pl.col(col) < low_fence) | (pl.col(col) > high_fence)).height
+                        if n_out > 0:
+                            outlier_counts[col] = n_out
+            except Exception:
+                pass
 
-    for col in df.columns[:12]:
-        if pl and isinstance(df, pl.DataFrame):
-            dtype_str = str(df.schema[col])
-            null_count = df[col].null_count()
-            null_pct = round((null_count / df.height) * 100, 1) if df.height > 0 else 0.0
-            n_uniq = df[col].n_unique()
-            spark = _generate_sparkline(df[col]) if col in num_cols else "—"
-        else:
-            dtype_str = str(df[col].dtype)
-            null_pct = round((df[col].isna().sum() / len(df)) * 100, 1) if len(df) > 0 else 0.0
-            n_uniq = df[col].nunique()
-            spark = _generate_sparkline(df[col]) if col in num_cols else "—"
+    # 4. Cohort & Categorical Concentration (80/20 Pareto)
+    pareto_insights = []
+    if cat_cols and pl and isinstance(df, pl.DataFrame):
+        for col in cat_cols[:4]:
+            try:
+                vc = df[col].value_counts().sort("count" if "count" in df[col].value_counts().columns else "counts", descending=True)
+                c_col = "count" if "count" in vc.columns else "counts"
+                top1_share = (vc[c_col][0] / df.height) * 100 if df.height > 0 and vc.height > 0 else 0
+                pareto_insights.append(f"• `{col}`: Top segment '{vc[col][0]}' accounts for {top1_share:.1f}% of total volume")
+            except Exception:
+                pass
 
-        table_stats.add_row(str(col), dtype_str, f"{null_pct}%", str(n_uniq), spark)
+    # 5. Temporal / Trend Cadence
+    temporal_summary = "No explicit temporal index detected. Sequential record ordering analyzed."
+    if date_cols:
+        temporal_summary = f"Detected temporal columns: {', '.join(date_cols)}. Date progression and periodic cadence active."
 
-    console.print(table_stats)
+    # Multi-Dimensional Cloud API Deep Analysis Synthesis (5-10 Analyses)
+    analyze_sys = (
+        "You are a Lead Principal Data Scientist. Synthesize a structured, multi-dimensional exploratory analysis report.\n"
+        "Generate 5 to 10 specific, relevant, and mathematically grounded analytical dimensions for this dataset:\n"
+        "1. Univariate Distribution & Skewness Dynamics\n"
+        "2. Feature Correlation & Multicollinearity Network\n"
+        "3. Anomaly & Outlier Severity Assessment\n"
+        "4. Segment & Cohort Concentration (Pareto Dynamics)\n"
+        "5. Temporal Cadence / Sequential Drift\n"
+        "6. Missingness Topology & Data Health Quality\n"
+        "7. Dispersion & Volatility Indicators\n"
+        "8. Target KPI Key Driver Attribution\n"
+        "9. Non-Linear Interaction Signals\n"
+        "10. Statistical Hypothesis & Confidence Indicators\n"
+        "Format each analysis with clear bullet points and actionable interpretations."
+    )
+    analyze_prompt = (
+        f"Target Dataset: `{target_name}`\n"
+        f"Strategic Goal: {_ACTIVE_ROADMAP.get('goal', 'Comprehensive Multi-Dimensional EDA')}\n"
+        f"Dimensions: {clean_rows:,} rows x {clean_cols} columns\n"
+        f"Numeric Features: {num_cols}\n"
+        f"Categorical Features: {cat_cols}\n"
+        f"Outlier Telemetry: {outlier_counts}\n"
+        f"Pareto Signals: {pareto_insights}\n"
+        f"Top Correlations: {corr_highlights[:8]}\n"
+        f"Temporal Info: {temporal_summary}\n\n"
+        "Generate the 5 to 10 deep analytical dimensions with quantitative insights."
+    )
 
-    corr_summary_str = "No significant linear correlations (|r| >= 0.3) detected."
-    if corr_highlights:
-        corr_items = [f"• `{c1}` ↔ `{c2}`: r = {r:+.3f}" for c1, c2, r in corr_highlights[:5]]
-        corr_summary_str = "Top Feature Correlations:\n" + "\n".join(corr_items)
+    try:
+        raw_analysis = _call_llm(analyze_prompt, analyze_sys, temp=0.2, max_tokens=1600, target_model="deepanalyze-8b")
+        analysis_report = re.sub(r'<think>.*?</think>', '', raw_analysis, flags=re.DOTALL).strip()
+    except Exception:
+        analysis_report = (
+            f"1. **Univariate Analysis:** Analyzed {len(num_cols)} numeric features.\n"
+            f"2. **Correlation Analysis:** Top feature associations identified ({len(corr_highlights)} pairs).\n"
+            f"3. **Anomaly Isolation:** Identified {sum(outlier_counts.values())} outlier occurrences across IQR fences.\n"
+            f"4. **Cohort Analysis:** Segment distributions mapped across {len(cat_cols)} categorical fields.\n"
+            f"5. **Data Health:** Missing values cleaned and validated across all columns."
+        )
 
-    console.print(Panel(corr_summary_str, title="🔗 [bold yellow]Stage 4: Statistical Correlations & Patterns[/bold yellow]", border_style="yellow"))
+    console.print(Panel(analysis_report, title="🔬 [bold yellow]Stage 4: 10-Point Deep Analytical Findings[/bold yellow]", border_style="yellow"))
 
     # =========================================================================
-    # STAGE 5: SHARE (VISUALIZATIONS & EXECUTIVE SYNTHESIS)
+    # STAGE 5: SHARE (VISUALIZATIONS & INTERACTIVE EXECUTIVE DASHBOARD)
     # =========================================================================
-    console.print("\n[bold cyan][Stage 5/6] 📈 SHARE (Publication Visualizations & Insights)[/bold cyan]")
+    console.print("\n[bold cyan][Stage 5/6] 📈 SHARE (Publication Visualizations & Interactive Dashboard)[/bold cyan]")
     
     detok_df = DeepAnalyzePrivacyKnife.detokenize_dataframe(df, dataset_id=target_name)
 
@@ -1973,7 +2184,7 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         f"Business Context: {_ACTIVE_ROADMAP.get('goal', 'General EDA')}\n"
         f"Data Summary: {clean_rows:,} rows, {clean_cols} columns\n"
         f"Numeric Columns: {', '.join(num_cols[:8])}\n"
-        f"Correlation Highlights: {corr_summary_str}\n\n"
+        f"Analytical Dimensions:\n{analysis_report}\n\n"
         "Synthesize 3 crisp executive takeaways outlining core business drivers, risks, and strategic implications."
     )
     try:
@@ -1982,12 +2193,30 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     except Exception:
         exec_narrative = "Analysis completed. Discovered key segment distributions and verified data cleanliness."
 
+    # Generate Standalone Interactive HTML/JS Dashboard
+    dash_path = dashboard.generate_eda_dashboard(
+        detok_df,
+        target_name=target_name,
+        goal=_ACTIVE_ROADMAP.get('goal', 'Exploratory Data Analysis'),
+        num_cols=num_cols,
+        cat_cols=cat_cols,
+        corr_highlights=corr_highlights,
+        exec_narrative=exec_narrative,
+        recommendations=[
+            "Monitor key metric drift weekly",
+            "Enforce schema assertion gates on ingestion",
+            "Optimize segment allocation based on Pareto concentration"
+        ],
+        output_path=os.path.join(charts_dir, f"eda_{target_name}_dashboard.html")
+    )
+
     chart_paths_str = "\n".join([f"  • [underline cyan]{p}[/underline cyan]" for p in generated_charts]) if generated_charts else "  • Plots rendered in-memory"
     stage5_info = (
-        f"[bold]📊 Generated Visual Assets:[/bold]\n{chart_paths_str}\n\n"
+        f"[bold]📊 Visual Assets (PNG):[/bold]\n{chart_paths_str}\n\n"
+        f"[bold]🌐 Interactive Executive Dashboard (HTML/JS):[/bold]\n  • [underline green]{dash_path}[/underline green]\n\n"
         f"[bold]📋 Executive Briefing & Root Causes:[/bold]\n{exec_narrative}"
     )
-    console.print(Panel(stage5_info, title="📈 [bold magenta]Stage 5: Executive Insights & Visual Assets[/bold magenta]", border_style="magenta"))
+    console.print(Panel(stage5_info, title="📈 [bold magenta]Stage 5: Executive Insights & Interactive Dashboard[/bold magenta]", border_style="magenta"))
     _ACTIVE_ROADMAP["phase"] = 4
 
     # =========================================================================
@@ -2055,7 +2284,6 @@ if __name__ == "__main__":
 
 def deepanalyze(line, cell=None):
     global _LAST_GENERATED_CODE, _LAST_USER_PROMPT, _INTERCEPTOR_ACTIVE
-    raw_input = f"{line}\n{cell}" if cell else line
     ip = get_ipython()
 
     parser = argparse.ArgumentParser(prog="%deepanalyze", description="Agentic LLM Execution Engine", add_help=False)
@@ -2105,6 +2333,14 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--history", action="store_true", help="Visual time-machine displaying snapshot history")
     parser.add_argument("--next", action="store_true", help="Predictive next-action recommender")
     parser.add_argument("--auto-clean", action="store_true", help="Autonomous data sanitizer with interactive preview diff")
+    parser.add_argument("--ftfy", action="store_true", help="Sanitize Unicode, fix Mojibake, and strip zero-width chars")
+    parser.add_argument("--fuzzy-clean", action="store_true", help="Entity resolution and fuzzy categorical deduplication")
+    parser.add_argument("--explode", action="store_true", help="Explode nested JSON strings and dicts into columns")
+    parser.add_argument("--unpivot", action="store_true", help="Unpivot wide temporal matrices into tidy rows")
+    parser.add_argument("--convert-units", action="store_true", help="Normalize mixed measurement units and currencies")
+    parser.add_argument("--winsorize", action="store_true", help="Winsorize numeric outliers to percentile boundaries")
+    parser.add_argument("--auto-type", action="store_true", help="Automatically assert and cast booleans, numbers, and dates")
+    parser.add_argument("--stitch", action="store_true", help="Relational star-schema auto-linker across session DataFrames")
     parser.add_argument("--spawn", action="store_true", help="Spawn Markdown narrative and Code cells into notebook")
 
     # DATA SCIENCE SKILL FLAGS
@@ -2180,6 +2416,86 @@ def deepanalyze(line, cell=None):
             print(f"[DeepAnalyze Undo]: Restored `{parsed_args.target}` from snapshot. Shape: {df_restored.shape[0]} rows, {df_restored.shape[1]} columns.")
         else:
             print(f"[DeepAnalyze Undo]: No previous snapshot found in memory for `{parsed_args.target}`.")
+        return
+
+    # --- 8-Engine Specialized Cleaning Suite Handlers ---
+    if parsed_args.ftfy:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.sanitize_unicode_and_mojibake(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "ftfy_unicode_sanitize")
+            print(f"✨ [DeepAnalyze --ftfy]: Unicode & Mojibake sanitized for `{target_name}`.")
+        return
+
+    if parsed_args.fuzzy_clean:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.fuzzy_harmonize_categories(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "fuzzy_dedup")
+            print(f"🔤 [DeepAnalyze --fuzzy-clean]: Categorical entities harmonized for `{target_name}`.")
+        return
+
+    if parsed_args.explode:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.explode_nested_json(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "explode_json")
+            print(f"💥 [DeepAnalyze --explode]: Nested JSON unrolled into top-level columns for `{target_name}`.")
+        return
+
+    if parsed_args.unpivot:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.unpivot_temporal_matrix(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "unpivot_matrix")
+            print(f"📊 [DeepAnalyze --unpivot]: Wide temporal matrix melted into tidy 2D rows for `{target_name}`.")
+        return
+
+    if parsed_args.convert_units:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.normalize_units_and_currencies(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "convert_units")
+            print(f"⚖️ [DeepAnalyze --convert-units]: Mixed units and currencies standardized for `{target_name}`.")
+        return
+
+    if parsed_args.winsorize:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.winsorize_numeric_outliers(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "winsorize_outliers")
+            print(f"🛡️ [DeepAnalyze --winsorize]: Numeric outliers clipped to 1st/99th percentiles for `{target_name}`.")
+        return
+
+    if parsed_args.auto_type:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if ip and target_name in ip.user_ns:
+            df_clean = cleaners.auto_cast_data_types(ip.user_ns[target_name])
+            ip.user_ns[target_name] = df_clean
+            _register_snapshot(target_name, df_clean, "auto_type_cast")
+            print(f"🏷️ [DeepAnalyze --auto-type]: Data types and booleans asserted for `{target_name}`.")
+        return
+
+    if parsed_args.stitch:
+        session_dfs = {}
+        if ip and hasattr(ip, "user_ns"):
+            for k, v in ip.user_ns.items():
+                if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl and isinstance(v, pl.DataFrame))):
+                    session_dfs[k] = v
+        if session_dfs:
+            stitched_df, log = cleaners.auto_stitch_dataframes(session_dfs)
+            out_target = parsed_args.target if parsed_args.target != "df" else "stitched_df"
+            ip.user_ns[out_target] = stitched_df
+            _register_snapshot(out_target, stitched_df, "auto_stitch")
+            console.print(Panel("\n".join(log), title="🔗 [bold green]DeepAnalyze Relational Stitcher[/bold green]", border_style="green"))
+        else:
+            print("[DeepAnalyze --stitch]: No DataFrames found in session to stitch.")
         return
 
     # Resilient Data Ingestion (--import)
@@ -2541,7 +2857,6 @@ def deepanalyze(line, cell=None):
 
                 if parsed_args.execute_code and is_valid:
                     _take_snapshot(ip, target=parsed_args.target)
-                    original_row_count = ip.user_ns[parsed_args.target].shape[0] if parsed_args.target in ip.user_ns else None
 
                     print(f"[{active_model} Executing]:\n" + clean_code + "\n" + "-" * 40)
                     
@@ -2692,7 +3007,7 @@ def deepanalyze(line, cell=None):
                                     break
                                 err = result.error_in_exec
                             else:
-                                print(f"❌ Failed to parse valid python code during repair.")
+                                print("❌ Failed to parse valid python code during repair.")
                                 break
 
                     if parsed_args.insight and not result.error_in_exec:

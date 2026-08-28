@@ -20,6 +20,16 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Defensive Polyglot Exporter (`--export`):** Universal export engine supporting `.parquet`, `.csv`, `.tsv`, `.xlsx`, `.json`, `.ndjson`, `.ipc`/`.arrow`, and DuckDB database tables (`db.duckdb:table_name`) with auto directory creation and LazyFrame auto-collection.
 * **BYOK (Bring Your Own Key) Security:** Pulls credentials dynamically from OS environment variables (`DEEPSEEK_API_KEY`) without hardcoding secrets in notebooks.
 
+### Universal Dirty Data Cleaning Suite
+* **Multilingual Unicode & Mojibake Sanitizer (`--ftfy`):** Fixes double-encoding artifacts (`Ã©` → `é`, `â€™` → `'`), strips invisible zero-width characters (`\u200b`), non-breaking spaces (`\xa0`), and unescapes HTML entities.
+* **Entity Resolution & Fuzzy Deduplication (`--fuzzy-clean`):** Rapid in-memory similarity clustering unifies categorical typos and acronyms (`"USA"`, `"United States"`, `"U.S.A."`) into dominant canonical entities.
+* **Semi-Structured JSON / Struct Exploder (`--explode`):** Automatically detects and unrolls embedded JSON strings, dictionaries, and lists into top-level typed columns.
+* **Wide-to-Long Matrix Unpivoter (`--unpivot`):** Detects wide financial reports (e.g. `[Jan_2025, Feb_2025, Mar_2025]`) and unpivots them into tidy `[Period, Value]` rows.
+* **Mixed Units & Currency Normalizer (`--convert-units`):** Converts mixed unit strings (`"5 kg"`, `"11 lbs"`, `"5000 g"`) and currencies (`$`, `€`, `SAR`, `AED`, `£`) into standardized base numbers.
+* **Statistical Outlier & Typo Guard (`--winsorize`):** Detects extreme human typos (e.g. Age = `999`, Price = `-$50,000`) and non-destructively clips them using IQR / percentile fences.
+* **Automatic Data Type & Boolean Asserter (`--auto-type`):** Coerces boolean strings (`"true"`, `"yes"`, `"1"`), numeric strings, and timestamps with zero data loss.
+* **Relational Multi-Table Auto-Linker (`--stitch`):** Detects foreign-key overlap across session DataFrames and performs star-schema joins in DuckDB/Polars.
+
 ### Data Science Skills
 * **Hierarchical Unravelling Engine (`-u`, `--unravel`):** Deterministic state machines that parse ragged, multi-line, non-rectangular ERP ledger exports (SAP, Navision, Oracle) into normalized 2D DataFrames.
 * **Zero-Copy DuckDB SQL Engine (`-s`, `--sql`):** High-speed analytical SQL execution directly on in-memory Pandas and Polars DataFrames via Apache Arrow memory pointers, featuring automated schema registration.
