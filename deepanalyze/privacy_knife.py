@@ -9,6 +9,18 @@ try:
 except ImportError:
     pl = None
 
+# In-memory local token vault storing reversible mappings: {dataset_id: {token: original_value}}
+_LOCAL_TOKEN_VAULT = {}
+
+def get_token_vault() -> dict:
+    """Returns the in-memory local token vault dictionary."""
+    return _LOCAL_TOKEN_VAULT
+
+def clear_token_vault():
+    """Clears the in-memory local token vault dictionary."""
+    global _LOCAL_TOKEN_VAULT
+    _LOCAL_TOKEN_VAULT.clear()
+
 class DeepAnalyzePrivacyKnife:
     """Core privacy masking, structural synthesis, and AST security sandbox."""
 
@@ -19,7 +31,8 @@ class DeepAnalyzePrivacyKnife:
     FORBIDDEN_CALLS = {"eval", "exec", "compile", "__import__"}
     FORBIDDEN_OS_ATTRS = {"system", "popen", "spawn", "fork", "kill", "remove", "unlink", "rmdir"}
 
-    def __init__(self, df):
+    def __init__(self, df, dataset_id: str = "default"):
+        self.dataset_id = dataset_id
         if isinstance(df, pd.DataFrame):
             self.df = df.copy()
             self.engine = "pandas"
@@ -67,16 +80,25 @@ class DeepAnalyzePrivacyKnife:
             return pl.DataFrame(masked_rows)
 
     def tokenize_pii_columns(self, pii_cols: list):
-        """Replaces sensitive PII values with de-identified positional tokens."""
+        """Replaces sensitive PII values with de-identified positional tokens and records them in _LOCAL_TOKEN_VAULT."""
+        global _LOCAL_TOKEN_VAULT
+        if self.dataset_id not in _LOCAL_TOKEN_VAULT:
+            _LOCAL_TOKEN_VAULT[self.dataset_id] = {}
+
         if self.engine == "pandas":
             df_copy = self.df.copy()
             for col in pii_cols:
                 if col in df_copy.columns:
                     clean_tag = re.sub(r'[^A-Za-z0-9]', '_', str(col)).upper()
-                    df_copy[col] = [
-                        f"[{clean_tag}_{i+1}]" if pd.notna(v) else v 
-                        for i, v in enumerate(df_copy[col])
-                    ]
+                    new_vals = []
+                    for i, v in enumerate(df_copy[col]):
+                        if pd.notna(v) and v is not None:
+                            token = f"[{clean_tag}_{i+1}]"
+                            _LOCAL_TOKEN_VAULT[self.dataset_id][token] = str(v)
+                            new_vals.append(token)
+                        else:
+                            new_vals.append(v)
+                    df_copy[col] = new_vals
             return df_copy
             
         elif self.engine == "polars":
@@ -84,13 +106,53 @@ class DeepAnalyzePrivacyKnife:
             for col in pii_cols:
                 if col in df_copy.columns:
                     clean_tag = re.sub(r'[^A-Za-z0-9]', '_', str(col)).upper()
-                    df_copy = df_copy.with_columns(
-                        pl.when(pl.col(col).is_not_null())
-                          .then(pl.lit(f"[{clean_tag}_") + pl.int_range(1, pl.len() + 1).cast(pl.String) + pl.lit("]"))
-                          .otherwise(pl.col(col))
-                          .alias(col)
-                    )
+                    series_list = df_copy[col].to_list()
+                    new_vals = []
+                    for i, v in enumerate(series_list):
+                        if v is not None:
+                            token = f"[{clean_tag}_{i+1}]"
+                            _LOCAL_TOKEN_VAULT[self.dataset_id][token] = str(v)
+                            new_vals.append(token)
+                        else:
+                            new_vals.append(None)
+                    df_copy = df_copy.with_columns(pl.Series(col, new_vals))
             return df_copy
+
+    @classmethod
+    def detokenize_dataframe(cls, df, dataset_id: str = "default"):
+        """Replaces de-identified tokens back with original values from the local vault."""
+        vault = _LOCAL_TOKEN_VAULT.get(dataset_id, {})
+        if not vault:
+            return df
+
+        if isinstance(df, pd.DataFrame):
+            df_detok = df.copy()
+            for col in df_detok.columns:
+                if df_detok[col].dtype == object or df_detok[col].dtype == "string":
+                    df_detok[col] = df_detok[col].map(lambda x: vault.get(x, x) if isinstance(x, str) else x)
+            return df_detok
+        elif pl is not None and isinstance(df, pl.DataFrame):
+            df_detok = df.clone()
+            for col in df_detok.columns:
+                if df_detok[col].dtype == pl.String or df_detok[col].dtype == pl.Utf8:
+                    series_vals = df_detok[col].to_list()
+                    restored = [vault.get(v, v) if isinstance(v, str) else v for v in series_vals]
+                    df_detok = df_detok.with_columns(pl.Series(col, restored))
+            return df_detok
+        return df
+
+    @classmethod
+    def detokenize_text(cls, text: str, dataset_id: str = "default") -> str:
+        """Replaces token patterns like [CUSTOMER_1] with the original values from local vault."""
+        vault = _LOCAL_TOKEN_VAULT.get(dataset_id, {})
+        if not vault or not text:
+            return text
+
+        def _replace_match(match):
+            tok = match.group(0)
+            return vault.get(tok, tok)
+
+        return re.sub(r'\[[A-Za-z0-9_]+_\d+\]', _replace_match, text)
 
     def generate_synthetic_toy(self, safe_df=None, n_rows: int = 5) -> list:
         """Directly slices target DataFrame to guarantee uniform column lengths."""
@@ -213,7 +275,7 @@ class LocalGatekeeper:
 
         # 2. Detect Sensitive PII / PHI Columns
         pii_patterns = re.compile(
-            r"(name|patient|customer|email|phone|address|ssn|contact|ic_no|nric|passport)",
+            r"(name|patient|customer|email|phone|address|ssn|contact|ic_no|nric|passport|salary|credit_card|iban|tax_id)",
             re.IGNORECASE
         )
         pii_columns = [c for c in columns if pii_patterns.search(c)]
@@ -233,8 +295,46 @@ class LocalGatekeeper:
         }
 
     @classmethod
-    def generate_safe_payload(cls, df, custom_strategy: str = None) -> tuple:
-        knife = DeepAnalyzePrivacyKnife(df)
+    def inspect_folder(cls, folder_path: str) -> dict:
+        """Locally inspects all tabular data files inside a folder and returns aggregate privacy classifications."""
+        import os
+        results = {}
+        supported_exts = {".csv", ".tsv", ".parquet", ".xlsx", ".json"}
+        
+        if not os.path.isdir(folder_path):
+            return {"error": f"Path '{folder_path}' is not a directory"}
+
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                if ext in supported_exts:
+                    file_path = os.path.join(root, file)
+                    try:
+                        if pl is not None:
+                            if ext in {".csv", ".tsv"}:
+                                sep = "\t" if ext == ".tsv" else ","
+                                sample_df = pl.read_csv(file_path, n_rows=15, separator=sep, truncate_ragged_lines=True)
+                            elif ext == ".parquet":
+                                sample_df = pl.read_parquet(file_path, n_rows=15)
+                            elif ext == ".xlsx":
+                                sample_df = pl.read_excel(file_path, engine="calamine") if hasattr(pl, "read_excel") else None
+                                if sample_df is not None: sample_df = sample_df.head(15)
+                            else:
+                                sample_df = None
+                        else:
+                            sample_df = pd.read_csv(file_path, nrows=15) if ext in {".csv", ".tsv"} else None
+
+                        if sample_df is not None:
+                            inspection = cls.inspect(sample_df)
+                            results[file] = inspection
+                    except Exception as e:
+                        results[file] = {"strategy": "STANDARD_STATISTICAL_PROFILE", "error": str(e)}
+
+        return results
+
+    @classmethod
+    def generate_safe_payload(cls, df, custom_strategy: str = None, dataset_id: str = "default") -> tuple:
+        knife = DeepAnalyzePrivacyKnife(df, dataset_id=dataset_id)
         decision = cls.inspect(df)
         strategy = custom_strategy or decision["strategy"]
 

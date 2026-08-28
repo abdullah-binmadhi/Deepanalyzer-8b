@@ -38,6 +38,7 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Inline Data Minimaps (`--spark`):** Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) for numeric columns alongside Min, Median, Max, and Null % summaries.
 
 ### Workflow Orchestration
+* **Autonomous 6-Stage Lifecycle (`--EDA`):** Executes the full data analysis lifecycle (Ask → Prepare → Process → Analyze → Share → Act) in a single autonomous Polars-powered run, with local privacy tokenization, publication charts in `./charts/`, and an automated monitoring script.
 * **Global State Orchestrator (`--roadmap`):** Tracks project progress across 4 phases (Profiling & Cleaning → Goal Interview → Execution & Radar → Synthesis) in a persistent global state dictionary, rendering the next recommended `%deepanalyze` command.
 * **Zero-Prompt Kickstart (`--kickstart`):** Sends workspace context to the LLM to autonomously infer business domain, identify target KPIs, and output a prioritized 3-step action plan.
 * **Reverse-Prompting Interview (`--interview`):** The LLM generates 3 targeted multiple-choice analytical constraint questions. User choices are recorded as the project goal for downstream hypothesis generation.
@@ -402,6 +403,8 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 
 | Directive | Flag | Behavior |
 | :--- | :--- | :--- |
+| **Autonomous Lifecycle** | `--EDA` | Autonomous 6-stage Data Analysis Lifecycle (Polars-native, local privacy, charts, monitoring). |
+| **Target Goal** | `--goal <text>` | Explicit domain objective or KPI guidance for `--EDA` or `--roadmap`. |
 | **Roadmap** | `--roadmap` | Multi-phase project orchestrator HUD with next-action recommendations. |
 | **Kickstart** | `--kickstart` | Zero-prompt domain inference and prioritized 3-step action plan. |
 | **Interview** | `--interview` | Stakeholder goal & constraint alignment via multiple-choice questions. |

@@ -1101,5 +1101,101 @@ def test_import_excel_sheet_by_index_and_name(tmp_path):
 
 def test_sanitize_var_name_invoice_listing():
     """Verify exact stem sanitization for inv_listing_31082025.xlsx."""
+    from deepanalyze.core import _sanitize_var_name
     assert _sanitize_var_name("inv_listing_31082025.xlsx") == "inv_listing_31082025_df"
     assert _sanitize_var_name("/path/to/inv_listing_31082025.xlsx") == "inv_listing_31082025_df"
+
+
+def test_privacy_token_vault_and_detokenization():
+    """Verify bidirectional in-memory tokenization and detokenization in Polars and Pandas."""
+    import polars as pl
+    from deepanalyze.privacy_knife import DeepAnalyzePrivacyKnife, get_token_vault, clear_token_vault
+
+    clear_token_vault()
+    pldf = pl.DataFrame({
+        "customer_name": ["Alice Smith", "Bob Jones", "Charlie Brown"],
+        "email": ["alice@corp.com", "bob@corp.com", "charlie@corp.com"],
+        "revenue": [100.0, 250.5, 300.0]
+    })
+
+    knife = DeepAnalyzePrivacyKnife(pldf, dataset_id="test_sales")
+    tokenized_df = knife.tokenize_pii_columns(["customer_name", "email"])
+    
+    # Verify tokenized columns contain tags
+    assert tokenized_df["customer_name"][0] == "[CUSTOMER_NAME_1]"
+    assert tokenized_df["email"][0] == "[EMAIL_1]"
+    
+    # Verify vault mapping
+    vault = get_token_vault()
+    assert "test_sales" in vault
+    assert vault["test_sales"]["[CUSTOMER_NAME_1]"] == "Alice Smith"
+    assert vault["test_sales"]["[EMAIL_1]"] == "alice@corp.com"
+
+    # Verify detokenization restores original values
+    restored_df = DeepAnalyzePrivacyKnife.detokenize_dataframe(tokenized_df, dataset_id="test_sales")
+    assert restored_df["customer_name"][0] == "Alice Smith"
+    assert restored_df["email"][0] == "alice@corp.com"
+
+    # Verify text detokenization
+    sample_text = "Top customer [CUSTOMER_NAME_1] spent $100. Contact: [EMAIL_1]."
+    restored_text = DeepAnalyzePrivacyKnife.detokenize_text(sample_text, dataset_id="test_sales")
+    assert "Top customer Alice Smith spent $100. Contact: alice@corp.com." == restored_text
+
+
+def test_local_gatekeeper_inspect_folder(tmp_path):
+    """Verify folder inspection classifying multiple files."""
+    import polars as pl
+    from deepanalyze.privacy_knife import LocalGatekeeper
+
+    f1 = tmp_path / "patients.csv"
+    f1.write_text("patient_name,age,diagnosis\nJohn Doe,45,Hypertension\nJane Roe,50,Diabetes\n")
+
+    f2 = tmp_path / "sales.parquet"
+    pl.DataFrame({"product_id": [1, 2], "qty": [10, 20]}).write_parquet(str(f2))
+
+    res = LocalGatekeeper.inspect_folder(str(tmp_path))
+    assert "patients.csv" in res
+    assert res["patients.csv"]["strategy"] == "PII_DEIDENTIFIED_MOCK"
+    assert "sales.parquet" in res
+    assert res["sales.parquet"]["strategy"] == "STANDARD_STATISTICAL_PROFILE"
+
+
+def test_eda_lifecycle_pipeline(monkeypatch, tmp_path):
+    """Verify end-to-end 6-stage --EDA lifecycle execution with Polars."""
+    import polars as pl
+    from deepanalyze import core
+
+    # Mock _call_llm so test runs self-contained without needing live network
+    def mock_call_llm(prompt, sys_prompt, temp=0.0, max_tokens=3500, target_model="deepanalyze-8b"):
+        if "idiomatic Polars cleaning" in prompt or "POLARS DATA CLEANING" in sys_prompt:
+            return "<Answer>```python\ntest_df = test_df.with_columns(pl.col('amount').fill_null(0.0))\n```</Answer>"
+        return "<Answer>```text\nInferred business domain: Retail E-Commerce Revenue Analysis.\n```</Answer>"
+
+    monkeypatch.setattr(core, "_call_llm", mock_call_llm)
+
+    class MockIP:
+        user_ns = {
+            "test_df": pl.DataFrame({
+                "customer_name": ["Alice", "Bob", "Charlie"],
+                "amount": [50.0, None, 150.0],
+                "category": ["Electronics", "Clothing", "Electronics"]
+            })
+        }
+
+    mock_ip = MockIP()
+    monkeypatch.setattr(core, "get_ipython", lambda: mock_ip)
+
+    # Run --EDA lifecycle
+    core.deepanalyze("--EDA --target test_df --goal 'Optimize Q3 Sales'")
+
+    # Check snapshots
+    assert "0_raw_test_df" in core._DF_SNAPSHOTS
+    assert "1_cleaned_test_df" in core._DF_SNAPSHOTS
+
+    # Check roadmap phase reached 4
+    assert core._ACTIVE_ROADMAP["phase"] == 4
+    assert core._ACTIVE_ROADMAP["goal"] == "Optimize Q3 Sales"
+
+    # Check that monitor script was generated
+    assert os.path.exists("./eda_quality_monitor.py")
+

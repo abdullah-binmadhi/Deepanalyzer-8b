@@ -207,6 +207,15 @@ Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) fo
 
 DeepAnalyze v2.1.0 introduces a global workflow state machine that guides users through multi-phase analytical projects.
 
+### Autonomous 6-Stage Lifecycle Engine (`--EDA`)
+Executes the full end-to-end Data Analysis Lifecycle natively in **Polars** across 6 automated stages:
+1. **Ask (Problem Definition):** Incurs business domain, KPI priorities, and analytical objectives.
+2. **Prepare (Ingestion & Lineage):** Imports file/folder via Polars, records schema, and commits initial `0_raw_<target>` snapshot.
+3. **Process (Local Privacy & Cleaning):** `LocalGatekeeper` tokenizes PII in local RAM (`_LOCAL_TOKEN_VAULT`), transmits safe schema to LLM, validates code via AST sandbox, executes cleaning in Polars with a 2-attempt self-healing retry loop, and commits `1_cleaned_<target>` snapshot.
+4. **Analyze (Exploration & Correlations):** Computes descriptive statistics with ASCII minimaps (`--spark`), Polars Pearson correlation matrix, and segment anomaly detection.
+5. **Share (Visuals & Executive Briefing):** Detokenizes labels locally via RAM vault, generates publication-ready charts to `./charts/`, and synthesizes an executive root-cause briefing.
+6. **Act (Continuous Monitoring):** Formulates operational recommendations and writes an automated `eda_quality_monitor.py` data quality script.
+
 ### Global State Orchestrator (`--roadmap`)
 Initializes and tracks a persistent global state dictionary across 4 project phases:
 1. **Profiling & Cleaning** — Schema inspection, null handling, type corrections
@@ -215,6 +224,11 @@ Initializes and tracks a persistent global state dictionary across 4 project pha
 4. **Synthesis** — Final reporting and artifact generation
 
 Each invocation renders the current phase and prints the exact `%deepanalyze` command to execute next.
+
+### In-Memory Detokenizer Vault (`_LOCAL_TOKEN_VAULT`)
+* **Local Volatile Memory:** Sensitive values (names, emails, phones, SSNs, credit cards) are replaced with de-identified tokens (e.g. `[CUSTOMER_NAME_1]`).
+* **Airgapped Safety:** The bidirectional token-to-value map lives purely in volatile Python memory and is never transmitted over network payloads or saved to disk.
+* **Local Detokenization:** `DeepAnalyzePrivacyKnife.detokenize_dataframe()` seamlessly restores original labels for local chart generation and notebook displays.
 
 ### Zero-Prompt Kickstart (`--kickstart`)
 Sends the workspace context (DataFrame shape, column names, dtypes, sample statistics) to the LLM and asks it to autonomously infer the business domain, identify target KPIs, and output a prioritized 3-step action plan — all without requiring any user prompt.
