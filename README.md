@@ -219,127 +219,194 @@ llama-server -m ~/Desktop/deepanalyze-8b.gguf --port 8080 -c 32768 -np 1 -ngl 99
 
 
 
-## Installation & Setup
+## 🚀 Universal Installation & Setup Guide
 
-### 1. Prerequisites
+DeepAnalyze requires two lightweight components:
+1. **Local Inference Engine (`llama-server`)** — runs the quantized 8B model and 1.5B draft model locally with GPU/Metal acceleration.
+2. **DeepAnalyze Python Environment** — installs the agent, Polars SIMD engine, DuckDB, FastEmbed, and Jupyter extension.
 
-Ensure you have a local instance of `llama-server` or an OpenAI-compatible server running the quantized DeepAnalyze GGUF model:
+---
 
-# Example: Running llama-server locally
+### Step 1: Install the Local Inference Binary (`llama-server`)
+
+Select your operating system:
+
+#### 🍏 macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+Using Homebrew (Recommended):
 ```bash
-llama-server \
-  -m models/deepanalyze-8b-q4_k_m.gguf \
-  --port 8080 \
-  -c 16384 \
-  --host 127.0.0.1
+brew install llama.cpp
+```
+*Metal GPU acceleration is enabled automatically.*
+
+#### 🐧 Linux (Ubuntu, Debian, RHEL, Arch)
+- **With NVIDIA GPU (CUDA):**
+```bash
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp
+cmake -B build -DGGML_CUDA=ON
+cmake --build build --config Release -j --target llama-server
+sudo cp build/bin/llama-server /usr/local/bin/
+```
+- **CPU Only:**
+```bash
+sudo apt-get update && sudo apt-get install -y cmake build-essential
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp && cmake -B build && cmake --build build --config Release -j --target llama-server
+sudo cp build/bin/llama-server /usr/local/bin/
 ```
 
-# High-Efficiency Startup with KV-Cache Quantization & GBNF Enforcement
+#### 🪟 Windows 10/11 (WSL2 or Native)
+- **Option 1 (WSL2 Ubuntu - Recommended):**
+```bash
+sudo apt update && sudo apt install -y cmake build-essential
+git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp && cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release -j --target llama-server
+sudo cp build/bin/llama-server /usr/local/bin/
+```
+- **Option 2 (Native PowerShell via Winget / Releases):**
+```powershell
+winget install llama.cpp
+# Or download prebuilt release binaries from https://github.com/ggml-org/llama.cpp/releases
+```
+
+---
+
+### Step 2: Clone Repository & Set Up Python Environment
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/ruc-datalab/DeepAnalyze.git
+cd deepanalyze
+
+# 2. Create and activate a clean Python 3.10+ environment
+# Using Conda:
+conda create -n deepanalyze python=3.11 -y
+conda activate deepanalyze
+
+# Or using standard venv:
+python3 -m venv .venv
+source .venv/bin/activate      # macOS / Linux
+# .venv\Scripts\activate       # Windows PowerShell
+
+# 3. Install DeepAnalyze in editable mode
+pip install -e .
+
+# Or install with dense ONNX neural semantic search:
+pip install -e ".[semantic]"
+```
+
+---
+
+### Step 3: Download Model Weights (GGUF)
+
+DeepAnalyze uses a fine-tuned 8B primary model and an optional 1.5B speculative draft model for $2.5\times$ speedup:
+
+```bash
+mkdir -p models
+
+# 1. Primary 8B Model (4.7 GB)
+curl -L -o ./models/deepanalyze-8b-q4_k_m.gguf \
+  https://huggingface.co/ruc-datalab/DeepAnalyze-8B-GGUF/resolve/main/deepanalyze-8b-q4_k_m.gguf
+
+# 2. Speculative Draft Model: Qwen2.5-Coder-1.5B (1.0 GB for 75-85 tok/s generation)
+curl -L -o ./models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
+  https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
+```
+
+---
+
+### Step 4: Start the Local Inference Server
+
+#### ⚡ Option A: Automatic 1-Command Launcher (All Platforms)
+The built-in launcher automatically detects your operating system, GPU acceleration (Metal / CUDA / Vulkan), and the speculative draft model:
+
+```bash
+# Universal Python CLI
+deepanalyze server start
+
+# Or on macOS / Linux:
+./start_server.sh
+```
+
+#### 🛠️ Option B: Platform-Specific Manual Startup Commands
+
+- **macOS (Apple Silicon Metal with Speculative Decoding):**
 ```bash
 llama-server \
   -m models/deepanalyze-8b-q4_k_m.gguf \
-  --port 8080 \
-  -c 16384 \
-  -fa on \
-  --cache-type-k q8_0 \
-  --cache-type-v q8_0 \
-  --grammar-file grammars/deepanalyze.gbnf
+  -a deepanalyze-8b \
+  -md models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
+  --spec-draft-n-max 8 \
+  -ngl 99 -c 16384 -fa on \
+  --cache-type-k q8_0 --cache-type-v q8_0 \
+  -t 4 --cache-reuse 256 \
+  --host 127.0.0.1 --port 8080
+```
+
+- **Linux (NVIDIA CUDA):**
+```bash
+llama-server \
+  -m models/deepanalyze-8b-q4_k_m.gguf \
+  -a deepanalyze-8b \
+  -md models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
+  --spec-draft-n-max 8 \
+  -ngl 99 -c 16384 -fa on \
+  --cache-type-k q8_0 --cache-type-v q8_0 \
+  --cache-reuse 256 \
+  --host 127.0.0.1 --port 8080
+```
+
+- **Windows (PowerShell with CUDA / Vulkan):**
+```powershell
+llama-server.exe `
+  -m models\deepanalyze-8b-q4_k_m.gguf `
+  -a deepanalyze-8b `
+  -md models\qwen2.5-coder-1.5b-instruct-q4_k_m.gguf `
+  --spec-draft-n-max 8 `
+  -ngl 99 -c 16384 `
+  --cache-type-k q8_0 --cache-type-v q8_0 `
+  --cache-reuse 256 `
+  --host 127.0.0.1 --port 8080
 ```
 
 ### `llama-server` Configuration Reference
 
 | Parameter / Flag | Recommended Value | Purpose & Description |
 | :--- | :--- | :--- |
-| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Specifies the path to the primary 8B model weights file. |
-| `-md`, `--model-draft` | `models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf` | *(Optional)* 1.5B Speculative draft model enabling $2.5\times$ faster token generation ($75–85\text{ tok/s}$). |
-| `--draft-max` | `8` | Maximum draft tokens speculatively verified per step. |
-| `--prompt-cache` | `models/deepanalyze.cache` | Persistent KV-cache slot dropping cold-start TTFT to $<10\text{ ms}$. |
+| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Path to primary 8B model weights. |
+| `-a`, `--alias` | `deepanalyze-8b` | Names the server instance for OpenAI-compatible client routing. |
+| `-md`, `--model-draft` | `models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf` | 1.5B Speculative draft model enabling $2.5\times$ faster token generation ($75–85\text{ tok/s}$). |
+| `--spec-draft-n-max` | `8` | Maximum draft tokens speculatively verified per pass. |
+| `--cache-reuse` | `256` | Reuses matching KV cache blocks across iterations for instant TTFT. |
 | `--port` | `8080` | Sets the HTTP port for the local OpenAI-compatible API expected by DeepAnalyze. |
-| `--host` | `127.0.0.1` | Binds the server to localhost, restricting network access strictly to your local machine. |
-| `-c`, `--ctx-size` | `16384` | Context window size in tokens. Use `16384` (16K) for standard data science workflows or `32768` (32K) for large matrices. |
-| `-ngl`, `--n-gpu-layers` | `99` | Offloads all transformer layers to GPU/Metal unified memory for hardware acceleration. |
-| `--cache-type-k` | `q8_0` | Quantizes Key-cache to 8-bit precision, cutting context memory usage in half with no degradation. |
-| `--cache-type-v` | `q8_0` | Quantizes Value-cache to 8-bit precision to maintain low RAM overhead during multi-step runs. |
-| `-fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
-| `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
+| `--host` | `127.0.0.1` | Binds server to localhost, restricting access strictly to your local machine. |
+| `-c`, `--ctx-size` | `16384` | Context window size (16K tokens for standard workflows; expandable to 32K). |
+| `-ngl`, `--n-gpu-layers` | `99` | Offloads all transformer layers to GPU/Metal unified memory. |
+| `--cache-type-k` | `q8_0` | Quantizes Key-cache to 8-bit precision, saving 50% KV-RAM with 0% accuracy loss. |
+| `--cache-type-v` | `q8_0` | Quantizes Value-cache to 8-bit precision. |
+| `-fa on` | `on` | Enables Flash Attention for high memory bandwidth efficiency. |
+| `-t` | `4` | Sets CPU threads to Performance cores on Apple Silicon. |
 
-### Quick-Launch Shell Configuration (`start-deepanalyze` / `deepanalyze server start`)
+---
 
-You can launch the server using the cross-platform CLI tool or add a shell function:
+### Step 5: Launch Jupyter & Load DeepAnalyze
 
+In a separate terminal window:
 ```bash
-# Recommended Universal Launcher CLI (Auto-detects Metal / CUDA / CPU & Qwen draft model)
-deepanalyze server start
-
-# Or add to ~/.zshrc
-start-deepanalyze() {
-  llama-server \
-    -m ~/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf \
-    -md ~/Desktop/deepanalyze/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
-    --draft-max 8 \
-    --port 8080 \
-    -c 16384 \
-    -fa on \
-    --cache-type-k q8_0 \
-    --cache-type-v q8_0 \
-    "$@"
-}
-```
-Apply the updated configuration:
-```
-source ~/.zshrc
+jupyter lab
+# or: ipython
 ```
 
-Default Launch (16K Context + 8-bit KV Quantization + GBNF):
-```
-start-deepanalyze
-```
-
-Dynamic Context Expansion (e.g., Scaling to 32K Context):
-
-```
-start-deepanalyze -c 32768
-```
-
-Port Reassignment:
-
-```
-start-deepanalyze --port 8000
-```
-
-Custom Model Path Override:
-
-```
-start-deepanalyze -m /path/to/another-model.gguf
-```
-
-### 2. Python Dependencies & Environment Setup
-
-Install dependencies using `uv` (recommended for 10x–100x faster installation) or standard `pip`:
-
-```bash
-# Option A: Ultra-fast installation with uv (Recommended)
-uv pip install -e .
-
-# Option B: Standard pip
-pip install -e .
-```
-
-For dense ONNX neural semantic search, install the optional semantic extra:
-```bash
-uv pip install -e ".[semantic]"
-```
-
-### 3. Start the Server & Load the Package
-Start the local inference server with automatic hardware acceleration detection:
-```bash
-deepanalyze server start
-```
-
-Launch IPython or start a Jupyter notebook. Load the extension by running the following command in your first cell:
-
+In your notebook's first cell:
 ```python
+# 1. (Optional) Set Cloud Provider API Key for hybrid C-suite synthesis:
+# import os; os.environ["GEMINI_API_KEY"] = "AIzaSy..."
+
+# 2. Load the DeepAnalyze extension
 %load_ext deepanalyze
+
+# 3. Verify server connection & hardware acceleration
+%deepanalyze --status
 ```
 
 #### Universal Multi-Provider Cloud Setup (For `--pro`, `--flash`, `--think`, and `--model`)
