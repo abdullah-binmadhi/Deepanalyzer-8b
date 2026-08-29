@@ -43716,8 +43716,8 @@
     ],
     "archetype": "CUSTOM_TEST",
     "dataset_id": "default",
-    "stored_at": 1787975498.986495,
-    "last_accessed": 1787975498.986495,
+    "stored_at": 1788020106.259458,
+    "last_accessed": 1788020106.259458,
     "access_count": 1,
     "verified_invariants": true,
     "columns": []
@@ -43768,8 +43768,8 @@
     "archetype": "CLEAN_ANALYTICAL_TABLE",
     "dataset_id": "default",
     "stored_at": 1787974973.25125,
-    "last_accessed": 1787975497.570475,
-    "access_count": 4,
+    "last_accessed": 1788020104.827296,
+    "access_count": 7,
     "verified_invariants": true,
     "columns": [
       "customer_name",

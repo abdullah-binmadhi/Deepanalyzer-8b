@@ -2983,7 +2983,9 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--dag", action="store_true", help="Render AST transformation flow lineage graph")
     parser.add_argument("--gui", action="store_true", help="Interactive in-notebook searchable/sortable data explorer")
     parser.add_argument("--history", action="store_true", help="Visual time-machine displaying snapshot history")
-    parser.add_argument("--vault", "--memory", dest="vault", action="store_true", help="Display Institutional Schema Memory Vault statistics & patterns")
+    parser.add_argument("--vault", "--memory", dest="vault", action="store_true", help="Display Institutional Schema & Knowledge Vault statistics & patterns")
+    parser.add_argument("--vault-build", action="store_true", help="Index all JSON files in memorey_vault/ into DuckDB Knowledge Vault")
+    parser.add_argument("--vault-search", type=str, default=None, help="Search 500K Knowledge Vault for matching recipes")
     parser.add_argument("--next", action="store_true", help="Predictive next-action recommender")
     parser.add_argument("--auto-clean", action="store_true", help="Autonomous data sanitizer with interactive preview diff")
     parser.add_argument("--ftfy", action="store_true", help="Sanitize Unicode, fix Mojibake, and strip zero-width chars")
@@ -3091,17 +3093,57 @@ def deepanalyze(line, cell=None):
         _render_history_explorer()
         return
 
+    if getattr(parsed_args, "vault_build", False):
+        from deepanalyze import knowledge_vault
+        kvault = knowledge_vault.get_knowledge_vault()
+        vault_dir = os.path.abspath("memorey_vault")
+        if not os.path.exists(vault_dir):
+            print(f"❌ Directory `{vault_dir}` not found.")
+            return
+        print(f"🚀 Ingesting 500K Knowledge Vault from `{vault_dir}` into DuckDB...")
+        indexed = kvault.build_vault_from_directory(vault_dir, progress_cb=lambda msg: print(f"  • {msg}"))
+        stats = kvault.get_vault_stats()
+        print(f"✅ Ingestion Complete! Indexed {indexed:,} recipes ({stats.get('db_size_mb', 0)} MB DB).")
+        return
+
+    if getattr(parsed_args, "vault_search", None):
+        from deepanalyze import knowledge_vault
+        kvault = knowledge_vault.get_knowledge_vault()
+        query = parsed_args.vault_search.strip()
+        recipes = kvault.search_recipes(query, limit=3)
+        if not recipes:
+            print(f"🔍 No recipes found in Knowledge Vault matching: `{query}`")
+            return
+        for idx, r in enumerate(recipes):
+            panel = Panel(
+                f"[bold cyan]Source:[/bold cyan] {r['source_file']} | [bold magenta]Category:[/bold magenta] {r['category']}\n\n"
+                f"[bold yellow]Task Instruction:[/bold yellow]\n{r['instruction']}\n\n"
+                f"[bold green]Thought Chain:[/bold green]\n{r['thought_chain'][:400]}...\n\n"
+                f"[bold white]Verified Code Solution:[/bold white]\n```python\n{r['code_solution'][:600]}\n```",
+                title=f"🧠 Match {idx+1}/{len(recipes)}: {r['task_id']}",
+                border_style="bright_blue"
+            )
+            console.print(panel)
+        return
+
     if getattr(parsed_args, "vault", False):
-        from deepanalyze import memory_vault
-        vault = memory_vault.get_memory_vault()
-        stats = vault.get_vault_stats()
-        table = Table(title="🧠 Institutional Schema Memory Vault", box=box.ROUNDED)
-        table.add_column("Metric", style="bold cyan")
-        table.add_column("Value", style="bold green")
-        table.add_row("Total Enterprise Patterns Stored", f"{stats['total_patterns_stored']:,}")
-        table.add_row("Cache Hits (Sub-millisecond)", f"{stats['cache_hits']:,}")
-        table.add_row("Cache Misses", f"{stats['cache_misses']:,}")
-        table.add_row("Persistence Storage File", stats['storage_file'])
+        from deepanalyze import memory_vault, knowledge_vault
+        mvault = memory_vault.get_memory_vault()
+        mstats = mvault.get_vault_stats()
+        kvault = knowledge_vault.get_knowledge_vault()
+        kstats = kvault.get_vault_stats()
+
+        table = Table(title="🧠 DeepAnalyze Institutional Memory & Knowledge Vault", box=box.ROUNDED)
+        table.add_column("Vault Component", style="bold cyan")
+        table.add_column("Metric / Status", style="bold green")
+
+        table.add_row("1. Schema Memory Vault (Sub-millisecond)", f"{mstats['total_patterns_stored']:,} Verified Blueprints")
+        table.add_row("   • Cache Hits / Misses", f"{mstats['cache_hits']:,} hits / {mstats['cache_misses']:,} misses")
+        table.add_row("   • Persistence File", mstats['storage_file'])
+        table.add_row("2. 500K Knowledge Vault (DuckDB FTS)", f"{kstats['total_recipes']:,} Indexed Data Science Solutions")
+        table.add_row("   • Database Size", f"{kstats['db_size_mb']} MB ({kstats['db_path']})")
+        for cat, cnt in kstats.get('categories', {}).items():
+            table.add_row(f"     ↳ Category: {cat}", f"{cnt:,} recipes")
         console.print(table)
         return
 
@@ -3730,7 +3772,22 @@ def deepanalyze(line, cell=None):
             "3. Transformations did not introduce invalid negative/NaN values.\n"
         )
 
-    system_prompt = f"{rulebook}\n{INVARIANT_CHECKLIST}\n{ast_exemplar}{dynamic_enums}{save_directive}{assert_directive}\n{env_context}\n{fuzzy_aliases}"
+    vault_exemplar = ""
+    try:
+        from deepanalyze import knowledge_vault
+        kvault = knowledge_vault.get_knowledge_vault()
+        if prompt:
+            recipes = kvault.search_recipes(prompt, limit=1)
+            if recipes:
+                vault_exemplar = (
+                    f"\n--- VERIFIED INSTITUTIONAL RECIPE ({recipes[0]['category']}) ---\n"
+                    f"{recipes[0]['code_solution'][:600]}\n"
+                    f"-----------------------------------------------------------------\n"
+                )
+    except Exception:
+        vault_exemplar = ""
+
+    system_prompt = f"{rulebook}\n{INVARIANT_CHECKLIST}\n{ast_exemplar}{vault_exemplar}{dynamic_enums}{save_directive}{assert_directive}\n{env_context}\n{fuzzy_aliases}"
 
     if parsed_args.is_continuation and _LAST_GENERATED_CODE:
         full_prompt = (

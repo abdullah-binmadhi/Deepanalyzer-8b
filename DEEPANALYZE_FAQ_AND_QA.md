@@ -232,3 +232,10 @@ The Memory Vault computes a deterministic SHA-256 schema signature hash. Once a 
 5. **Zero-PII Leakage Gate:** Confirms no unmasked national IDs or credit card tokens exist in cloud egress payloads.
 
 If any invariant fails in the shadow sandbox, DeepAnalyze automatically falls back to the deterministic compiled archetype routine before outputting.
+
+### Q11.5: How does the 500K Knowledge Vault (`.deepanalyze_vault.duckdb`) work alongside the Schema Memory Vault?
+**Answer:** DeepAnalyze operates a **Dual-Vault Memory Architecture**:
+1. **The Schema Memory Vault (`.deepanalyze_memory.json`):** Tracks dataset structural signatures and exact action DSL plans. On recurring monthly/quarterly files, it bypasses LLM inference entirely, applying the verified blueprint in **`<1ms`**.
+2. **The 500K Knowledge Vault (`.deepanalyze_vault.duckdb`):** An embedded DuckDB database containing 500,000+ indexed data science trajectories from the RUC DataLab corpus. When you query DeepAnalyze with a complex natural language task (e.g. *"difference-in-differences causal panel"* or *"hierarchical Excel unravelling"*), the engine executes an instantaneous BM25 full-text search, retrieves the gold-standard code recipe, and injects it as few-shot in-context grounding into the 8B model's context.
+
+You can inspect both vaults via `%deepanalyze --vault`, search recipes via `%deepanalyze --vault-search "<query>"`, or ingest new datasets via `%deepanalyze --vault-build`.

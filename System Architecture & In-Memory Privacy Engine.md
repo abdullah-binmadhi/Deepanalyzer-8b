@@ -682,10 +682,10 @@ graph TD
   5. **Zero-PII Leakage:** Asserts no raw national IDs or credit card numbers remain exposed in cloud egress payloads.
 * If any invariant check fails, DeepAnalyze automatically engages the compiled deterministic fallback pipeline before outputting.
 
-### Pillar 4: Institutional Schema Memory Vault (`memory_vault.py`)
-* Persists verified transformation blueprints and schema signatures to `.deepanalyze_memory.json`.
-* Pre-seeded with **1,200+ enterprise schema patterns** across ERP invoices, medical EHRs, freight manifests, smart grids, SaaS churn tables, telecoms, customs tariffs, payroll, and banking ledgers.
-* Enables **`<1ms` instant execution** for recurring monthly/quarterly corporate reports. Inspectable via `%deepanalyze --vault`.
+### Pillar 4: Institutional Schema & Knowledge Vault (`memory_vault.py` & `knowledge_vault.py`)
+* **Layer A — Schema Memory Vault (`.deepanalyze_memory.json`):** Persists verified transformation blueprints and schema signatures. Pre-seeded with **1,200+ enterprise schema patterns** across ERP invoices, medical EHRs, freight manifests, smart grids, SaaS churn tables, telecoms, customs tariffs, payroll, and banking ledgers for **`<1ms` instant execution** on recurring reports.
+* **Layer B — 500K Knowledge Vault (`.deepanalyze_vault.duckdb`):** Embedded DuckDB database with full-text BM25 search over 500,000+ real-world data science trajectories from the RUC DataScience-Instruct corpus. Automatically matches complex user prompt intents and injects gold-standard code templates into the 8B model's context as few-shot in-context grounding.
+* **Interactive Inspection:** Inspectable via `%deepanalyze --vault`, searchable via `%deepanalyze --vault-search "<query>"`, and extensible via `%deepanalyze --vault-build`.
 
 ---
 

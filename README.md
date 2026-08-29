@@ -32,7 +32,9 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Pillar 1: Data DNA Archetype Fingerprinting (`data_dna.py`):** Computes structural raggedness, `__UNNAMED__` header density, JSON payload density, currency markers, and Mojibake index in `<5ms` to classify datasets into 5 enterprise archetypes (`ERP_HIERARCHICAL_LEDGER`, `WIDE_TEMPORAL_MATRIX`, `SEMI_STRUCTURED_JSON_LOG`, `MESSY_DENORMALIZED_TABULAR`, `CLEAN_ANALYTICAL_TABLE`).
 * **Pillar 2: Grammar-Constrained Declarative Action DSL (`action_dsl.py`):** Compiles high-level declarative JSON action plans (`UNRAVEL_ERP`, `SANITIZE_TEXT`, `EXPLODE_JSON`, `UNPIVOT_TEMPORAL`, `NORMALIZE_UNITS`, `HARMONIZE_CATEGORIES`, `AUTO_CAST`, `WINSORIZE`, `DEDUPLICATE`) directly into vectorized Polars/Rust routines in local RAM. Eliminates syntax hallucinations completely.
 * **Pillar 3: Ephemeral Shadow Sandbox & Invariant Engine (`shadow_sandbox.py`):** Transforms data inside an ephemeral in-memory sandbox and verifies 5 strict mathematical invariants (Volume Conservation, Financial Sum Penny-Exact Reconciler, Zero-Null Primary Key Guarantee, Strict Numeric/Date Type Contract, Zero PII Exposure) before committing results.
-* **Pillar 4: Institutional Schema Memory Vault (`memory_vault.py` / `.deepanalyze_memory.json`):** Persists verified transformation blueprints and schema signatures. Pre-seeded with 1,200+ enterprise schema patterns for sub-millisecond (`<1ms`) instant cache hits on recurring corporate reports. Inspectable via `%deepanalyze --vault`.
+* **Pillar 4: Institutional Schema & Knowledge Vault (`memory_vault.py` & `knowledge_vault.py`):** Dual-layer memory engine combining:
+  1. *Schema Memory Vault (`.deepanalyze_memory.json`):* Sub-millisecond (`<1ms`) instant cache hits on recurring corporate report signatures.
+  2. *500K Knowledge Vault (`.deepanalyze_vault.duckdb`):* Embedded DuckDB full-text BM25 index over 500,000+ real-world data science trajectories, providing dynamic few-shot in-context grounding for complex queries. Inspectable via `%deepanalyze --vault`, searchable via `%deepanalyze --vault-search "<query>"`, and buildable via `%deepanalyze --vault-build`.
 
 ### Universal Dirty Data Cleaning Suite
 * **Multilingual Unicode & Mojibake Sanitizer (`--ftfy`):** Fixes double-encoding artifacts (`Ã©` → `é`, `â€™` → `'`), strips invisible zero-width characters (`\u200b`), non-breaking spaces (`\xa0`), and unescapes HTML entities.
@@ -615,7 +617,9 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 
 | Directive | Flag | Behavior |
 | :--- | :--- | :--- |
-| **Memory Vault** | `--vault`, `--memory` | Displays Institutional Schema Memory Vault statistics, patterns, and hit rates. |
+| **Dual Memory Vault**| `--vault`, `--memory` | Displays Institutional Schema & 500K Knowledge Vault statistics, patterns, and hit rates. |
+| **Vault Search** | `--vault-search "<q>"` | Performs DuckDB FTS BM25 search over 500,000+ data science trajectories. |
+| **Vault Ingestion** | `--vault-build` | Indexes JSON trajectory datasets from `memorey_vault/` into DuckDB Knowledge Vault. |
 | **Revert State** | `--undo` | Restores target DataFrame to pre-execution deepcopy/clone snapshot. |
 | **Auto-Pilot Toggle** | `--toggle` | Toggles cell interceptor on/off for plain-English auto-pilot execution. |
 | **Engine Status** | `--status` | Probes server health, API keys, snapshots, and interceptor state. |

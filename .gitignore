@@ -1,7 +1,10 @@
 *.xlsx
 *.csv
+*.parquet
 *.gguf
 *.bin
+*.duckdb
+*.duckdb.tmp
 __pycache__/
 .DS_Store
 charts/
@@ -10,3 +13,7 @@ venv/
 .pytest_cache/
 *.egg-info/
 .aider*
+memorey_vault/
+memory_vault/
+eda_quality_monitor.py
+pipeline.py

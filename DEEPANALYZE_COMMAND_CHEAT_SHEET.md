@@ -37,7 +37,9 @@ A complete, practical reference guide for using DeepAnalyze (`%deepanalyze`) acr
 | **Reasoning Effort**| `--effort <level>`| Control reasoning depth for thinking models (`low`, `medium`, `high`, `max`) | `%deepanalyze --think --effort high "Prove invariant"` |
 | **Assertions** | `--assert` | Auto-generate & verify 2-3 runtime data invariants | `%deepanalyze --assert "Filter inactive users"` |
 | **Statistical Drift**| `--diff-stats` | Kolmogorov-Smirnov distribution drift HUD | `%deepanalyze --diff-stats "Winsorize outliers"` |
-| **Memory Vault** | `--vault`, `--memory` | Inspect 1,200+ stored schema blueprints & cache stats | `%deepanalyze --vault` |
+| **Dual Memory Vault**| `--vault`, `--memory` | Inspect 1,200+ schema blueprints & 500K knowledge recipes | `%deepanalyze --vault` |
+| **Vault Search** | `--vault-search "<q>"` | Search 500,000 data science solution recipes | `%deepanalyze --vault-search "clean driver tables"` |
+| **Vault Ingestion** | `--vault-build` | Index JSON trajectory datasets from `memorey_vault/` | `%deepanalyze --vault-build` |
 | **Safety** | `--preview` | Ghost execution without mutating session state | `%deepanalyze --preview "Filter outliers"` |
 | **Safety** | `--undo` | 5-level LIFO rollback to previous snapshots | `%deepanalyze --undo --target df` |
 | **Server CLI** | `deepanalyze server`| Universal cross-platform server launcher | `deepanalyze server start --port 8080` |
@@ -55,8 +57,11 @@ You **never need to memorize or select individual cleaning flags**. DeepAnalyze 
 # 2. Auto-Remedy any DataFrame currently in session
 %deepanalyze --EDA --target raw_dataframe
 
-# 3. Inspect Institutional Schema Memory Vault statistics & stored patterns
+# 3. Inspect Institutional Schema & Knowledge Memory Vault statistics
 %deepanalyze --vault
+
+# 4. Search 500,000 verified data science recipes
+%deepanalyze --vault-search "hierarchical invoice unravelling"
 ```
 
 ## Detailed Command Workflows & Examples
