@@ -32,9 +32,14 @@ A complete, practical reference guide for using DeepAnalyze (`%deepanalyze`) acr
 | **Transpile** | `--pipeline` | Transpile notebook transformations to `pipeline.py` | `%deepanalyze --pipeline --target clean_df` |
 | **Executive Brief**| `--report` | Standalone interactive HTML executive brief | `%deepanalyze --report --target kpi_df` |
 | **Presentations**| `--story` | Marp Markdown slide decks and executive memos | `%deepanalyze --story --target sales_df` |
-| **Database DDL** | `--schema` | Multi-dialect SQL (Snowflake, BigQuery, DuckDB) | `%deepanalyze --schema --target data_df` |
+| **Direct SQL** | `--sql "<query>"` | Zero-copy ANSI SQL query execution on Arrow buffers | `%deepanalyze --sql "SELECT dept, AVG(sal) FROM df GROUP BY dept"` |
+| **Custom Model** | `--model <name>` | Explicit cloud model override (Claude, Gemini, GPT, Mythos) | `%deepanalyze --model claude-3-7-sonnet "Analyze churn"` |
+| **Reasoning Effort**| `--effort <level>`| Control reasoning depth for thinking models (`low`, `medium`, `high`, `max`) | `%deepanalyze --think --effort high "Prove invariant"` |
+| **Assertions** | `--assert` | Auto-generate & verify 2-3 runtime data invariants | `%deepanalyze --assert "Filter inactive users"` |
+| **Statistical Drift**| `--diff-stats` | Kolmogorov-Smirnov distribution drift HUD | `%deepanalyze --diff-stats "Winsorize outliers"` |
 | **Safety** | `--preview` | Ghost execution without mutating session state | `%deepanalyze --preview "Filter outliers"` |
-| **Safety** | `--undo` | Roll back target DataFrame to previous snapshot | `%deepanalyze --undo --target df` |
+| **Safety** | `--undo` | 5-level LIFO rollback to previous snapshots | `%deepanalyze --undo --target df` |
+| **Server CLI** | `deepanalyze server`| Universal cross-platform server launcher | `deepanalyze server start --port 8080` |
 
 ---
 
@@ -170,4 +175,34 @@ A complete, practical reference guide for using DeepAnalyze (`%deepanalyze`) acr
 # Inspect transformation DAG lineage and history
 %deepanalyze --dag --target df
 %deepanalyze --history
+```
+
+---
+
+### 8. Direct SQL, Runtime Invariants & Server CLI
+
+```python
+# Direct ANSI SQL against active session DataFrames (DuckDB ↔ Polars zero-copy Arrow)
+%deepanalyze --sql "SELECT region, SUM(revenue) AS total_rev FROM df GROUP BY region ORDER BY total_rev DESC" --target region_summary
+
+# Self-Generated Runtime Invariant Assertions (verifies row & column invariants)
+%deepanalyze --assert "Clean transaction amounts and normalize dates" --target df
+
+# Time-Travel Kolmogorov-Smirnov Statistical Distribution Drift HUD
+%deepanalyze --diff-stats "Winsorize extreme outliers" --target df
+
+# Multi-Step Undo: Repeatedly step backward through prior dataset states
+%deepanalyze --undo --target df
+```
+
+#### Universal Server Launcher (CLI)
+```bash
+# Start server with automatic hardware acceleration detection (macOS Metal / Linux CUDA / CPU)
+deepanalyze server start
+
+# Start server with speculative decoding (auto-detects Qwen-1.5B draft model)
+deepanalyze server start --draft-model ./models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
+
+# Check server health and latency
+deepanalyze server status
 ```

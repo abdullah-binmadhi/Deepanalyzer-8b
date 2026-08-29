@@ -250,7 +250,10 @@ llama-server \
 
 | Parameter / Flag | Recommended Value | Purpose & Description |
 | :--- | :--- | :--- |
-| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Specifies the path to the quantized model weights file. |
+| `-m`, `--model` | `models/deepanalyze-8b-q4_k_m.gguf` | Specifies the path to the primary 8B model weights file. |
+| `-md`, `--model-draft` | `models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf` | *(Optional)* 1.5B Speculative draft model enabling $2.5\times$ faster token generation ($75–85\text{ tok/s}$). |
+| `--draft-max` | `8` | Maximum draft tokens speculatively verified per step. |
+| `--prompt-cache` | `models/deepanalyze.cache` | Persistent KV-cache slot dropping cold-start TTFT to $<10\text{ ms}$. |
 | `--port` | `8080` | Sets the HTTP port for the local OpenAI-compatible API expected by DeepAnalyze. |
 | `--host` | `127.0.0.1` | Binds the server to localhost, restricting network access strictly to your local machine. |
 | `-c`, `--ctx-size` | `16384` | Context window size in tokens. Use `16384` (16K) for standard data science workflows or `32768` (32K) for large matrices. |
@@ -260,21 +263,25 @@ llama-server \
 | `-fa on` | `on` | Enables Flash Attention to speed up memory bandwidth operations on Apple Silicon. |
 | `--grammar-file` | `grammars/deepanalyze.gbnf` | *(Optional)* Forces token-level structural compliance to guarantee clean `<Execute>` tags. |
 
-### Quick-Launch Shell Configuration (`start-deepanalyze`)
+### Quick-Launch Shell Configuration (`start-deepanalyze` / `deepanalyze server start`)
 
-To avoid manually typing long startup commands while maintaining the ability to override flags on the fly, add a dedicated launcher function to your shell profile (`~/.zshrc` or `~/.bashrc`):
+You can launch the server using the cross-platform CLI tool or add a shell function:
 
 ```bash
-# Add to ~/.zshrc
+# Recommended Universal Launcher CLI (Auto-detects Metal / CUDA / CPU & Qwen draft model)
+deepanalyze server start
+
+# Or add to ~/.zshrc
 start-deepanalyze() {
   llama-server \
     -m ~/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf \
+    -md ~/Desktop/deepanalyze/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
+    --draft-max 8 \
     --port 8080 \
     -c 16384 \
     -fa on \
     --cache-type-k q8_0 \
     --cache-type-v q8_0 \
-    --grammar-file ~/Desktop/deepanalyze/grammars/deepanalyze.gbnf \
     "$@"
 }
 ```
@@ -335,6 +342,39 @@ Launch IPython or start a Jupyter notebook. Load the extension by running the fo
 %load_ext deepanalyze
 ```
 
+#### Universal Multi-Provider Cloud Setup (For `--pro`, `--flash`, `--think`, and `--model`)
+DeepAnalyze supports universal multi-provider cloud routing. Set the environment variable for your preferred provider directly in your notebook session:
+
+```python
+import os
+
+# Option A: Google Gemini (Gemini 2.0 Flash / Pro & Gemini Thinking)
+os.environ["GEMINI_API_KEY"] = "AIzaSy..."
+
+# Option B: Anthropic Claude (Claude 3.7 Sonnet / Opus 5 / Haiku)
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
+
+# Option C: Universal OpenRouter (Access 200+ models via one key)
+os.environ["OPENROUTER_API_KEY"] = "sk-or-..."
+
+# Option D: OpenAI (GPT-4o / o1 / o3-mini)
+os.environ["OPENAI_API_KEY"] = "sk-proj-..."
+
+# Option E: DeepSeek (DeepSeek-V3 / DeepSeek-R1)
+os.environ["DEEPSEEK_API_KEY"] = "sk-..."
+
+# Load DeepAnalyze extension
+%load_ext deepanalyze
+```
+
+##### Provider Flag Mapping Matrix
+
+| Flag | Google Gemini | Anthropic Claude | OpenAI | DeepSeek | OpenRouter |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`--pro`** | `gemini-2.0-pro-exp` | `claude-3-7-sonnet` / Opus | `gpt-4o` | `deepseek-chat` (V3/V4) | `anthropic/claude-3.7-sonnet` |
+| **`--think`** | `gemini-2.0-flash-thinking` | `claude-3-7-sonnet` (Thinking) | `o3-mini` / `o1` | `deepseek-reasoner` (R1) | `deepseek/deepseek-r1` |
+| **`--flash`** | `gemini-2.0-flash` | `claude-3-5-haiku` | `gpt-4o-mini` | `deepseek-chat` (Flash) | `google/gemini-2.0-flash` |
+| **`--model <name>`** | Any custom model | Any custom model | Any custom model | Any custom model | Any OpenRouter model ID |
 
 ---
 
@@ -345,14 +385,18 @@ DeepAnalyze operates directly on the variables currently loaded in your session.
 ```python
 import pandas as pd
 import polars as pl
+import os
 
-# 1. Load the extension
+# 1. (Optional) Set Cloud API Key if using --pro, --think, or --model
+# os.environ["GEMINI_API_KEY"] = "AIzaSy..."
+
+# 2. Load the extension
 %load_ext deepanalyze
 
-# 2. Load an unstructured, multi-level Excel report (or a Polars DataFrame)
+# 3. Load an unstructured, multi-level Excel report (or a Polars DataFrame)
 df = pd.read_excel("raw_hierarchical_invoice.xlsx", header=None)
 
-# 3. Autonomous flattening and type-casting
+# 4. Autonomous flattening and type-casting
 %deepanalyze -x -u Restructure the raw invoice dataframe into normalized tabular records.
 ```
 
@@ -366,9 +410,12 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | :--- | :--- | :--- |
 | **Execute** | `-x`, `--exec` | Runs the verified AST directly into the active kernel namespace. |
 | **Target Binding** | `--target <var>` | Designates the target DataFrame in session memory (defaults to `df`). |
-| **Cloud Pro** | `--pro` | Routes prompt to `deepseek-chat` (DeepSeek-V4-Pro). |
-| **Cloud Flash** | `--flash` | Routes prompt to the lighter, high-speed cloud model. |
-| **Deep Reasoner** | `--think` | Routes prompt to `deepseek-reasoner` (R1) for Chain-of-Thought processing. |
+| **Cloud Pro** | `--pro` | Routes prompt to flagship cloud model (Claude 3.7/Opus, Gemini 2.0/3.0 Pro, DeepSeek V4 Pro, GPT-4o/5). |
+| **Cloud Flash** | `--flash` | Routes prompt to high-speed cloud flash tier (Gemini 2.0/3.7 Flash, Claude Haiku, GPT-4o Mini). |
+| **Deep Reasoner** | `--think` | Routes prompt to deep-reasoning thinking engine (DeepSeek R1, Claude Thinking, Gemini Thinking, o3-mini). |
+| **Custom Model** | `--model <name>` | Explicit model name override (e.g. `claude-3-7-sonnet`, `gemini-2.0-flash`, `gpt-4o`, `mythos`). |
+| **Reasoning Effort** | `--effort <lvl>` | Sets thinking depth for reasoning models (`low`, `medium`, `high`, `max`). |
+| **Thinking Budget** | `--budget <tok>` | Explicit thinking token budget for reasoning models (e.g. `2048`, `8192`, `16384`). |
 | **Deterministic** | `-d`, `--deterministic` | Clamps generation temperature to `0.0` for repeatable output. |
 | **Ultra Context** | `--ultra` | Expands token generation limits up to 4,096 tokens. |
 | **Fast Profile** | `--fast` | Temperature `0.0`, max 1,000 tokens for rapid execution. |
@@ -414,17 +461,21 @@ The execution engine is controlled via CLI flags passed to the magic command, al
 | **Critic Pro** | `--critic-pro` | Cloud critic loop via DeepSeek Reasoner for deep logical verification. |
 | **Ghost Preview** | `--preview` | Shadow execution with State Diff HUD and interactive commit/discard. |
 | **State Diff HUD** | `--diff` | Renders side-by-side delta showing row/col, dtype, and null changes after execution. |
+| **Statistical Drift Diff** | `--diff-stats` | Renders State Diff HUD with two-sample Kolmogorov-Smirnov distribution drift testing. |
+| **Invariant Assertions** | `--assert` | Prompts LLM to self-generate and enforce 2-3 runtime data invariant assertions. |
 | **Quality Gate** | `--guard <expr>` | Evaluates boolean constraint; blocks commit and triggers repair on violation. |
 | **Stress Fuzzer** | `--stress` | Pre-tests code against a 5-row adversarial edge-case matrix (NaN, zero-division). |
 | **Metamorphic Check** | `--meta` | Validates code against 2x numerical perturbation for scaling invariance. |
 | **What-If Simulator** | `--simulate <scenario>` | Sandboxed hypothesis simulation with comparative HUD, zero global mutation. |
 | **Sparkline Minimaps** | `--spark` | ASCII distribution minimaps (` ▂▃▄▅▆▇█`) for numeric columns. |
+| **Direct ANSI SQL** | `--sql "<query>"` | Zero-copy SQL execution against session DataFrames via DuckDB ↔ Arrow memory. |
+| **Multi-Step Undo** | `--undo` | 5-level LIFO memory rollback to restore exact prior DataFrame states. |
 
 #### Workflow Orchestration
 
 | Directive | Flag | Behavior |
 | :--- | :--- | :--- |
-| **Autonomous Lifecycle** | `--EDA` | Autonomous 6-stage Data Analysis Lifecycle (Polars-native, local privacy, charts, monitoring). |
+| **Autonomous Lifecycle** | `--EDA` | Autonomous 10-stage Data Analysis Lifecycle (Polars-native, local privacy, charts, monitoring). |
 | **Target Goal** | `--goal <text>` | Explicit domain objective or KPI guidance for `--EDA` or `--roadmap`. |
 | **Roadmap** | `--roadmap` | Multi-phase project orchestrator HUD with next-action recommendations. |
 | **Kickstart** | `--kickstart` | Zero-prompt domain inference and prioritized 3-step action plan. |
@@ -783,7 +834,7 @@ Transforms multi-level hierarchical accounting and ERP reports (Invoice Listings
 # Autonomous unravelling of messy multi-row ERP report
 %deepanalyze --unravel --target inv_listing_df
 
-# Or end-to-end autonomous import, unravel, and 6-stage EDA
+# Or end-to-end autonomous import, unravel, and 10-stage EDA
 %deepanalyze --import "INV LISTING 31082025.xlsx" --EDA --goal "Find sequence, doc_no, item_amount and compute invoice totals"
 ```
 

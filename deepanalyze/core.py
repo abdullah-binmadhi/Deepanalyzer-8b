@@ -140,7 +140,10 @@ FLAGS = [
     "--brain",
     "--assert",
     "--diff-stats",
-    "--sql"
+    "--sql",
+    "--model",
+    "--effort",
+    "--budget"
 ]
 
 def deepanalyze_completer(self, event):
@@ -213,22 +216,79 @@ __version__ = "3.0.0"
 
 
 
-# --- DEEPSEEK CLOUD CONFIGURATION ---
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+# --- UNIVERSAL MULTI-PROVIDER CLOUD CONFIGURATION ---
+def _resolve_cloud_provider_info():
+    """Detects active cloud API credentials and returns provider name, base_url, api_key, and default models."""
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return {
+            "provider": "OpenRouter",
+            "base_url": os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            "api_key": os.environ["OPENROUTER_API_KEY"],
+            "pro_model": "anthropic/claude-3.7-sonnet",
+            "think_model": "deepseek/deepseek-r1",
+            "flash_model": "google/gemini-2.0-flash-001"
+        }
+    elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        return {
+            "provider": "Google Gemini",
+            "base_url": os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+            "api_key": key,
+            "pro_model": "gemini-2.0-pro-exp-02-05",
+            "think_model": "gemini-2.0-flash-thinking-exp-01-21",
+            "flash_model": "gemini-2.0-flash"
+        }
+    elif os.environ.get("ANTHROPIC_API_KEY"):
+        return {
+            "provider": "Anthropic Claude",
+            "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
+            "api_key": os.environ["ANTHROPIC_API_KEY"],
+            "pro_model": "claude-3-7-sonnet-20250219",
+            "think_model": "claude-3-7-sonnet-20250219",
+            "flash_model": "claude-3-5-haiku-20241022"
+        }
+    elif os.environ.get("OPENAI_API_KEY"):
+        return {
+            "provider": "OpenAI",
+            "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            "api_key": os.environ["OPENAI_API_KEY"],
+            "pro_model": "gpt-4o",
+            "think_model": "o3-mini",
+            "flash_model": "gpt-4o-mini"
+        }
+    elif os.environ.get("DEEPSEEK_API_KEY"):
+        return {
+            "provider": "DeepSeek",
+            "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            "api_key": os.environ["DEEPSEEK_API_KEY"],
+            "pro_model": "deepseek-chat",
+            "think_model": "deepseek-reasoner",
+            "flash_model": "deepseek-chat"
+        }
+    return None
 
-def _get_client(is_deepseek=False):
-    """Dynamic Client Router: Local Server vs DeepSeek Cloud"""
-    if is_deepseek:
-        api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("Missing DEEPSEEK_API_KEY! Run `import os; os.environ['DEEPSEEK_API_KEY'] = 'sk-...'` in your session.")
+def _get_client(target_model: str = "deepanalyze-8b", custom_base_url: str = None):
+    """Dynamic Client Router: Local Engine vs Universal Cloud Gateway"""
+    is_local = target_model in ("deepanalyze-8b", "local", "default") and not custom_base_url
+    if is_local:
         return OpenAI(
-            base_url="https://api.deepseek.com/v1",
-            api_key=api_key,
+            base_url=DEFAULT_SERVER_URL + "/v1",
+            api_key="none",
             http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
         )
+
+    provider_info = _resolve_cloud_provider_info()
+    if provider_info:
+        base_url = custom_base_url or provider_info["base_url"]
+        return OpenAI(
+            base_url=base_url,
+            api_key=provider_info["api_key"],
+            http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
+        )
+
+    # Fallback to local server if no cloud key is found
     return OpenAI(
-        base_url="http://127.0.0.1:8080/v1",
+        base_url=DEFAULT_SERVER_URL + "/v1",
         api_key="none",
         http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(180.0, connect=10.0))
     )
@@ -1137,16 +1197,25 @@ def _extract_deepanalyze_content(text: str) -> tuple[str, str]:
 
     return code, narrative
 
-def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500, target_model: str = "deepanalyze-8b", min_p: float = 0.05) -> str:
-    is_ds = target_model.startswith("deepseek")
-    engine_name = "☁️ DeepSeek Cloud" if is_ds else "💻 Local Engine"
+def _call_llm(prompt: str, system_prompt: str, temp: float = 0.0, max_tokens: int = 3500, target_model: str = "deepanalyze-8b", min_p: float = 0.05, effort: str = "medium", budget: int = None) -> str:
+    is_local = target_model in ("deepanalyze-8b", "local", "default")
+    provider_info = _resolve_cloud_provider_info() if not is_local else None
+    provider_name = provider_info["provider"] if provider_info else "Local Engine"
+    engine_name = f"☁️ {provider_name}" if not is_local else "💻 Local Engine"
     start_t = time.time()
 
     extra_body = {}
-    if not is_ds and min_p is not None:
+    if is_local and min_p is not None:
         extra_body["min_p"] = min_p
 
-    client = _get_client(is_deepseek=is_ds)
+    # Inject reasoning effort / thinking budget for modern thinking models
+    if not is_local and any(k in target_model.lower() for k in ("reasoner", "r1", "think", "o1", "o3", "sonnet-3.7", "opus-5", "claude-3-7", "gemini-2.0-flash-thinking")):
+        if effort:
+            extra_body["reasoning_effort"] = effort
+        if budget:
+            extra_body["thinking"] = {"type": "enabled", "budget_tokens": budget}
+
+    client = _get_client(target_model=target_model)
     response = client.chat.completions.create(
         model=target_model,
         messages=[
@@ -2264,7 +2333,7 @@ def _handle_export(ip, args):
 
 
 def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = ""):
-    """Executes the complete 6-stage autonomous Data Analysis Lifecycle using Polars and Local Privacy."""
+    """Executes the complete 10-stage autonomous Data Analysis Lifecycle using Polars and Local Privacy."""
     global _DF_SNAPSHOTS, _DF_SNAPSHOT_METADATA, _ACTIVE_ROADMAP
 
     t_start_eda = time.time()
@@ -2306,8 +2375,15 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     _ACTIVE_ROADMAP["target_df"] = target_name
     _ACTIVE_ROADMAP["phase"] = 1
 
+    # 0b. RESOLVE MODEL ROUTING (Hybrid Local Math + Cloud Reasoning)
+    active_reasoning_model = "deepanalyze-8b"
+    if getattr(parsed_args, "pro", False) or getattr(parsed_args, "flash", False):
+        active_reasoning_model = "deepseek-chat"
+    elif getattr(parsed_args, "think", False):
+        active_reasoning_model = "deepseek-reasoner"
+
     console.print("\n" + "="*80)
-    console.print(Panel("🚀 [bold white on blue] DEEPANALYZE AUTONOMOUS 10-STAGE INTELLIGENCE LIFECYCLE (AUTO-EDA 3.0) [/bold white on blue]", border_style="blue", expand=False))
+    console.print(Panel(f"🚀 [bold white on blue] DEEPANALYZE AUTONOMOUS 10-STAGE INTELLIGENCE LIFECYCLE (AUTO-EDA 3.0) [/bold white on blue]\n[dim]Reasoning Engine: {active_reasoning_model} | Math & Execution Engine: Polars SIMD Local[/dim]", border_style="blue", expand=False))
     console.print("="*80 + "\n")
 
     # =========================================================================
@@ -2329,7 +2405,7 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         )
         ask_sys = "You are a Chief Data Officer. Provide a concise, highly structured 3-part business problem definition."
         try:
-            domain_kpi_text = _call_llm(ask_prompt, ask_sys, temp=0.1, max_tokens=600, target_model="deepanalyze-8b")
+            domain_kpi_text = _call_llm(ask_prompt, ask_sys, temp=0.1, max_tokens=600, target_model=active_reasoning_model)
             domain_kpi_text = re.sub(r'<think>.*?</think>', '', domain_kpi_text, flags=re.DOTALL).strip()
         except Exception:
             domain_kpi_text = f"Primary business question: Optimize operational performance and discover key segment drivers for `{target_name}`."
@@ -2397,8 +2473,9 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         except Exception as e_unravel:
             console.print(f"[yellow]⚠ ERP Unraveller skipped: {e_unravel}[/yellow]")
 
-    # Auto-type and currency sanitization
+    # Auto-type, currency sanitization, and Unicode Mojibake cleaning
     try:
+        df = cleaners.sanitize_unicode_and_mojibake(df)
         df = cleaners.auto_cast_data_types(df)
     except Exception:
         pass
@@ -2623,7 +2700,11 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     console.print("\n[bold cyan][Stage 7/10] ⚔️ FALSIFY (Dialectical Debate & Skeptic Counter-Investigation)[/bold cyan]")
     debate_insights = {}
     try:
-        debate_insights = debate_router.generate_debate_analysis(df, goal=_ACTIVE_ROADMAP.get('goal', 'Strategic Growth'), prompt_llm_fn=_call_llm)
+        debate_insights = debate_router.generate_debate_analysis(
+            df,
+            goal=_ACTIVE_ROADMAP.get('goal', 'Strategic Growth'),
+            prompt_llm_fn=lambda p, s, **kw: _call_llm(p, s, target_model=active_reasoning_model, **kw)
+        )
         console.print(f"⚔️ [bold green]Growth Bull:[/bold green] {debate_insights.get('growth_bull_perspective', 'Strong market expansion upside.')}")
         console.print(f"🛡️ [bold yellow]Risk Auditor:[/bold yellow] {debate_insights.get('risk_auditor_perspective', 'Monitor tail margin compression.')}")
     except Exception as e_deb:
@@ -2838,10 +2919,13 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--deep", action="store_true")
     parser.add_argument("--ultra", action="store_true")
     
-    # CLOUD ROUTING FLAGS
-    parser.add_argument("--pro", action="store_true", help="Route prompt to DeepSeek-V4-Pro (deepseek-chat)")
-    parser.add_argument("--flash", action="store_true", help="Route prompt to DeepSeek-V4-Flash (deepseek-chat)")
-    parser.add_argument("--think", action="store_true", help="Route prompt to DeepSeek-Reasoner (deepseek-reasoner)")
+    # CLOUD ROUTING & REASONING EFFORT FLAGS
+    parser.add_argument("--pro", action="store_true", help="Route prompt to flagship cloud model (Claude 3.7/Opus 5, Gemini 3.0/2.5 Pro, DeepSeek V4 Pro, GPT-5/4o)")
+    parser.add_argument("--flash", action="store_true", help="Route prompt to high-speed cloud flash tier (Gemini 3.7 Flash, Claude Haiku, GPT-4o Mini)")
+    parser.add_argument("--think", action="store_true", help="Route prompt to deep-reasoning thinking engine (DeepSeek R1, Claude Extended Thinking, Gemini Thinking, o3-mini)")
+    parser.add_argument("--model", type=str, default=None, help="Explicit target model name (e.g. claude-3-7-sonnet, gemini-2.0-flash, gpt-4o, mythos)")
+    parser.add_argument("--effort", type=str, default="medium", choices=["low", "medium", "high", "max"], help="Reasoning effort level for thinking models (low, medium, high, max)")
+    parser.add_argument("--budget", type=int, default=None, help="Explicit reasoning token budget (e.g. 2048, 8192, 16384)")
     
     # NEW PRIVACY ENGINE FLAGS
     parser.add_argument("--privacy", type=str, default="auto", choices=["auto", "mask", "profile", "mock", "none"], help="Privacy mode")
@@ -2866,7 +2950,7 @@ def deepanalyze(line, cell=None):
 
     # WORKFLOW ORCHESTRATION & NOTEBOOK AUTOMATION FLAGS
     parser.add_argument("--roadmap", action="store_true", help="Display global multi-phase project orchestrator roadmap")
-    parser.add_argument("--EDA", "--eda", dest="eda", action="store_true", help="Autonomous 6-stage Data Analysis Lifecycle engine (Polars Native)")
+    parser.add_argument("--EDA", "--eda", dest="eda", action="store_true", help="Autonomous 10-stage Data Analysis Lifecycle engine (Polars Native)")
     parser.add_argument("--goal", type=str, default=None, help="Explicit domain objective or KPI guidance for --EDA or --roadmap")
     parser.add_argument("--kickstart", action="store_true", help="Zero-prompt analysis kickstart inferring domain & action plan")
     parser.add_argument("--interview", action="store_true", help="Stakeholder goal & constraint alignment interview")
@@ -3337,7 +3421,7 @@ def deepanalyze(line, cell=None):
             _run_eda_lifecycle(ip, target_name, parsed_args, user_prompt=prompt)
         return
 
-    # Autonomous 6-Stage EDA Lifecycle (--EDA)
+    # Autonomous 10-Stage EDA Lifecycle (--EDA)
     if parsed_args.eda:
         target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
         _run_eda_lifecycle(ip, target_name, parsed_args, user_prompt=prompt)
@@ -3350,11 +3434,19 @@ def deepanalyze(line, cell=None):
 
     active_model = "deepanalyze-8b"
     is_cloud_call = False
-    if parsed_args.pro or parsed_args.flash:
-        active_model = "deepseek-chat"
+    provider_info = _resolve_cloud_provider_info()
+
+    if getattr(parsed_args, "model", None):
+        active_model = parsed_args.model
+        is_cloud_call = active_model not in ("deepanalyze-8b", "local", "default")
+    elif parsed_args.pro:
+        active_model = provider_info["pro_model"] if provider_info else "deepseek-chat"
+        is_cloud_call = True
+    elif parsed_args.flash:
+        active_model = provider_info["flash_model"] if provider_info else "deepseek-chat"
         is_cloud_call = True
     elif parsed_args.think:
-        active_model = "deepseek-reasoner"
+        active_model = provider_info["think_model"] if provider_info else "deepseek-reasoner"
         is_cloud_call = True
 
     primary_skill = "general"
@@ -3521,7 +3613,15 @@ def deepanalyze(line, cell=None):
             token_count = 0
             console.print(Panel(f"Retrieved verified AST for query: [italic]{prompt}[/italic]", title="⚡ [bold green]DeepAnalyze 0ms Structural Cache Hit[/bold green]", border_style="green"))
         elif not parsed_args.auto_clean:
-            raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens, target_model=active_model)
+            try:
+                raw_output = _call_llm(
+                    full_prompt, system_prompt, temp=temp, max_tokens=max_tokens,
+                    target_model=active_model,
+                    effort=getattr(parsed_args, "effort", "medium"),
+                    budget=getattr(parsed_args, "budget", None)
+                )
+            except TypeError:
+                raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens, target_model=active_model)
             code, narrative = _extract_deepanalyze_content(raw_output)
             token_count = len(raw_output) // 4
         else:

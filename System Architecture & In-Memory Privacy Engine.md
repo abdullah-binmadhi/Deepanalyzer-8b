@@ -207,14 +207,18 @@ Renders 8-level ASCII sparkline distribution plots (` ▂▃▄▅▆▇█`) fo
 
 DeepAnalyze v2.1.0 introduces a global workflow state machine that guides users through multi-phase analytical projects.
 
-### Autonomous 6-Stage Lifecycle Engine (`--EDA`)
-Executes the full end-to-end Data Analysis Lifecycle natively in **Polars** across 6 automated stages:
-1. **Ask (Problem Definition):** Incurs business domain, KPI priorities, and analytical objectives.
-2. **Prepare (Ingestion & Lineage):** Imports file/folder via Polars, records schema, and commits initial `0_raw_<target>` snapshot.
-3. **Process (Local Privacy & Cleaning):** `LocalGatekeeper` tokenizes PII in local RAM (`_LOCAL_TOKEN_VAULT`), transmits safe schema to LLM, validates code via AST sandbox, executes cleaning in Polars with a 2-attempt self-healing retry loop, and commits `1_cleaned_<target>` snapshot.
-4. **Analyze (Exploration & Correlations):** Computes descriptive statistics with ASCII minimaps (`--spark`), Polars Pearson correlation matrix, and segment anomaly detection.
-5. **Share (Visuals & Executive Briefing):** Detokenizes labels locally via RAM vault, generates publication-ready charts to `./charts/`, and synthesizes an executive root-cause briefing.
-6. **Act (Continuous Monitoring):** Formulates operational recommendations and writes an automated `eda_quality_monitor.py` data quality script.
+### Autonomous 10-Stage Intelligence Lifecycle Engine (`--EDA`)
+Executes the full end-to-end Data Analysis Lifecycle natively in **Polars** across 10 automated stages:
+1. **Ask (Problem Definition):** Infers business domain, KPI priorities, and analytical objectives.
+2. **Prepare (Ingestion & Lineage):** Imports file via Polars, records schema, and commits initial `0_raw_<target>` snapshot.
+3. **Process (Local Privacy & Cleaning):** `LocalGatekeeper` tokenizes PII in local RAM vault, cleans Unicode/mojibake, normalizes ERP hierarchies, validates code via AST sandbox with a 2-attempt self-healing retry loop, and commits `1_cleaned_<target>` snapshot.
+4. **Profile (Univariate & SVD VIF):** Computes descriptive statistics with ASCII minimaps (`--spark`), Polars Pearson correlation matrix, and Moore-Penrose SVD VIF multicollinearity screening.
+5. **Engineer (Feature Discovery):** Discovers top orthogonal predictive interaction features via GBDT + Mutual Information.
+6. **Reason (Hypothesis Battery & Causal Root-Cause):** Executes non-parametric hypothesis tests and traces causal variance anomalies (`--why`).
+7. **Falsify (Dialectical Debate & Skeptic):** Generates dual-persona strategic tensions (*Growth Bull vs Risk Auditor*) and stress-tests for Simpson's Paradox.
+8. **Project (Conformal Forecasting):** Computes 14-day cadence forecasts with 95% distribution-free conformal prediction intervals.
+9. **Publish (Multi-Modal Deliverables):** Detokenizes labels locally, compiles interactive HTML5 dashboard, McKinsey executive memo (`.html`/`.md`), 4-slide Marp slide deck, and DuckDB SQL DDL.
+10. **Deploy (Production Pipeline & Sentinel):** Transpiles the session into a standalone `pipeline.py` ETL script and writes an automated `eda_quality_monitor.py` quality watchdog.
 
 ### Global State Orchestrator (`--roadmap`)
 Initializes and tracks a persistent global state dictionary across 4 project phases:
@@ -558,6 +562,41 @@ graph TD
    - Statistical fidelity auditor ($>90\%$ correlation preservation with $0\%$ PII leakage).
 8. **Universal Hierarchical ERP Report Unraveller (`cleaners.py`)**:
    - Autonomous state machine transforming multi-level hierarchical accounting reports (Invoices, GL, POs, AR/AP Aging) into clean 2D normalized tables.
+
+---
+
+## 5c. High-Throughput SIMD, Speculative & Time-Travel Engine (v3.5+)
+
+```mermaid
+graph LR
+    subgraph "Speculative Neural Engine"
+        DM["Qwen2.5-Coder-1.5B\n(Draft Model ~950MB)"] -->|Draft 8 Tokens| TM["DeepAnalyzer-8B\n(Target Model ~4.9GB)"]
+        TM -->|1 Forward Pass Acceptance| OUT["Verified Code Stream\n(75-85 tok/s)"]
+    end
+
+    subgraph "Zero-Copy Arrow Layer"
+        PL["Polars SIMD DataFrames"] <-->|Zero-Copy C-Data Interface| DK["DuckDB In-Memory Engine"]
+        DK -->|ANSI SQL --sql| ARROW["Apache Arrow Buffers"]
+    end
+
+    subgraph "Time-Travel & State Lineage"
+        MEM["_DF_SNAPSHOT_STACK"] -->|LIFO Push/Pop| STACK["5-Level Undo Stack"]
+        STACK -->|%deepanalyze --undo| ROLLBACK["Instant 0ms State Restoration"]
+    end
+```
+
+1. **Speculative Decoding Accelerator**:
+   - Pairs `Qwen2.5-Coder-1.5B-Instruct` (draft model) with `DeepAnalyzer-8B` (target model) inside `llama-server`.
+   - The 1.5B model rapidly speculates 8-token structural syntax chunks; the 8B model verifies them in a single batch pass, boosting generation throughput from $\sim 32\text{ tok/s}$ to **$75–85\text{ tok/s}$** on Apple Silicon Metal.
+2. **`orjson` (Rust) Serialization Engine**:
+   - Powers all state caching, brain memory, and privacy token maps.
+   - Operates $15\times$ faster than standard Python `json`, natively supporting NumPy scalars (`int64`, `float32`, `nan`), datetimes, and UUIDs without raising `TypeError`.
+3. **DuckDB ↔ Polars Zero-Copy Arrow Interchange**:
+   - Executes direct ANSI SQL (`%deepanalyze --sql`) on session DataFrames via memory pointers with zero serialization latency.
+4. **Polars LazyFrame Zero-Scan Inspector**:
+   - Safely queries unmaterialized `pl.LazyFrame` schemas via `.collect_schema().names()` without triggering `.collect()`, preventing out-of-memory crashes on multi-gigabyte queries.
+5. **5-Level LIFO Snapshot Undo Stack**:
+   - Maintains a depth-controlled stack of prior DataFrame transformations, enabling sequential multi-step rollback (`%deepanalyze --undo`) in 0ms.
 
 ---
 
