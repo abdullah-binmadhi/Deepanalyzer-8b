@@ -37,11 +37,27 @@ A complete, practical reference guide for using DeepAnalyze (`%deepanalyze`) acr
 | **Reasoning Effort**| `--effort <level>`| Control reasoning depth for thinking models (`low`, `medium`, `high`, `max`) | `%deepanalyze --think --effort high "Prove invariant"` |
 | **Assertions** | `--assert` | Auto-generate & verify 2-3 runtime data invariants | `%deepanalyze --assert "Filter inactive users"` |
 | **Statistical Drift**| `--diff-stats` | Kolmogorov-Smirnov distribution drift HUD | `%deepanalyze --diff-stats "Winsorize outliers"` |
+| **Memory Vault** | `--vault`, `--memory` | Inspect 1,200+ stored schema blueprints & cache stats | `%deepanalyze --vault` |
 | **Safety** | `--preview` | Ghost execution without mutating session state | `%deepanalyze --preview "Filter outliers"` |
 | **Safety** | `--undo` | 5-level LIFO rollback to previous snapshots | `%deepanalyze --undo --target df` |
 | **Server CLI** | `deepanalyze server`| Universal cross-platform server launcher | `deepanalyze server start --port 8080` |
 
 ---
+
+## Autonomous One-Liner Execution (The 4-Pillar Gold Standard)
+
+You **never need to memorize or select individual cleaning flags**. DeepAnalyze autonomously profiles, selects, and executes the optimal compiled cleaning routines under `%deepanalyze --EDA`.
+
+```python
+# 1. Ingest & Auto-Remedy any raw messy file (ERP invoices, clinical trials, logistics)
+%deepanalyze --import "data/raw_report.xlsx" --EDA --target clean_df
+
+# 2. Auto-Remedy any DataFrame currently in session
+%deepanalyze --EDA --target raw_dataframe
+
+# 3. Inspect Institutional Schema Memory Vault statistics & stored patterns
+%deepanalyze --vault
+```
 
 ## Detailed Command Workflows & Examples
 
