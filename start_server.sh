@@ -44,7 +44,7 @@ done
 SPECULATIVE_FLAGS=()
 if [ -n "$DRAFT_PATH" ]; then
   echo "⚡ Speculative Draft Model (2.5x Speedup): $DRAFT_PATH"
-  SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --draft-max 8)
+  SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --spec-draft-n-max 8)
 fi
 
 echo "🚀 Starting DeepAnalyze Inference Server..."

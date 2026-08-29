@@ -151,7 +151,7 @@ def start_server(
     speculative_flags = []
     resolved_draft = resolve_draft_model_path(draft_model_path)
     if resolved_draft:
-        speculative_flags.extend(["-md", resolved_draft, "--draft-max", str(draft_max)])
+        speculative_flags.extend(["-md", resolved_draft, "--spec-draft-n-max", str(draft_max)])
 
     cache_flags = []
     resolved_cache = prompt_cache_path or ("./models/deepanalyze.cache" if os.path.exists("./models") else None)
@@ -208,7 +208,7 @@ def cli_entrypoint():
     start_parser = server_subparsers.add_parser("start", help="Start the inference server")
     start_parser.add_argument("-m", "--model", type=str, default=None, help="Path to GGUF model")
     start_parser.add_argument("-md", "--draft-model", type=str, default=None, help="Path to speculative draft GGUF model (e.g. Qwen2.5-Coder-1.5B)")
-    start_parser.add_argument("--draft-max", type=int, default=8, help="Max speculative tokens per pass (default: 8)")
+    start_parser.add_argument("--spec-draft-n-max", "--draft-max", dest="draft_max", type=int, default=8, help="Max speculative tokens per pass (default: 8)")
     start_parser.add_argument("--prompt-cache", type=str, default=None, help="Path to persistent system prompt cache file")
     start_parser.add_argument("-p", "--port", type=int, default=8080, help="Server port (default: 8080)")
     start_parser.add_argument("-H", "--host", type=str, default="127.0.0.1", help="Server host (default: 127.0.0.1)")

@@ -143,7 +143,7 @@ DeepAnalyze's `--stats` engine computes **Singular Value Decomposition (SVD) Moo
 
 ### Q9.1: Is the Qwen-1.5B speculative draft model already installed, and how does it work?
 **Answer:** 
-* **The Architecture:** DeepAnalyze server supports native speculative decoding (`llama-server -m deepanalyze-8b.gguf -md qwen2.5-coder-1.5b.gguf --draft-max 8`).
+* **The Architecture:** DeepAnalyze server supports native speculative decoding (`llama-server -m deepanalyze-8b.gguf -md qwen2.5-coder-1.5b.gguf --spec-draft-n-max 8`).
 * **Current Status:** **Both models are fully installed and configured** in `./models/`:
   - Primary Target Model: [`models/deepanalyze-8b-q4_k_m.gguf`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/models/deepanalyze-8b-q4_k_m.gguf) ($5.02\text{ GB}$)
   - Speculative Draft Model: [`models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf) ($1.12\text{ GB}$)
