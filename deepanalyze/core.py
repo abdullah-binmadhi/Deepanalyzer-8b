@@ -498,8 +498,9 @@ def check_engine_status(server_url=DEFAULT_SERVER_URL):
     except Exception:
         pass
 
-    print(f"{'✅' if server_online else '❌'} Local Server Status : {'Online & Healthy' if server_online else 'Offline / Unreachable'}")
-    print(f"☁️ DeepSeek API Auth  : {'Configured' if DEEPSEEK_API_KEY.startswith('sk-') else 'Missing API Key'}")
+    provider_info = _resolve_cloud_provider_info()
+    cloud_status = f"Configured ({provider_info['provider']})" if provider_info else "Local-Only (No Cloud Key)"
+    print(f"☁️ Cloud Gateway Auth : {cloud_status}")
     
     interceptor_status = "🟢 Enabled (Auto-pilot on plain English cells)" if _INTERCEPTOR_ACTIVE else "⚪ Disabled (Explicit %deepanalyze calls only)"
     print(f"📡 Cell Interceptor   : {interceptor_status}")
