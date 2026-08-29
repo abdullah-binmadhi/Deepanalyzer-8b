@@ -77,6 +77,22 @@ def test_privacy_knife_structural_erp_masking():
     # Sensitive alphanumeric values must be masked
     assert masked.iloc[0, 2] == "XX-99999"
 
+def test_privacy_knife_structural_erp_masking_polars_sparse_nulls():
+    import polars as pl
+    # Simulate a Polars dataframe where early rows are null and later rows have strings/numbers
+    data = {
+        "doc_no": ["IV-11319"] + [None] * 150 + ["IV-99999"],
+        "customer_name": [None] * 150 + ["Acme Inc"] + [None],
+        "quantity": [10.0] + [None] * 150 + [5.0]
+    }
+    df = pl.DataFrame(data)
+    knife = DeepAnalyzePrivacyKnife(df)
+    masked = knife.mask_structural_erp()
+    assert masked.height == 152
+    assert masked["doc_no"][0] == "XX-99999"
+    assert masked["customer_name"][150] == "Xxxx Xxx"
+    assert masked["quantity"][0] == "99.9"
+
 def test_privacy_knife_pii_tokenization():
     df = pd.DataFrame({
         "customer_name": ["Alice Corp", "Bob LLC"],

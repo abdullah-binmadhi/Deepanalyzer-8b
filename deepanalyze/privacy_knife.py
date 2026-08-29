@@ -68,16 +68,13 @@ class DeepAnalyzePrivacyKnife:
             return self.df.map(mask_cell) if hasattr(self.df, "map") else self.df.applymap(mask_cell)
         
         elif self.engine == "polars":
-            # Very slow in Polars, but ERP masking runs on <20 rows anyway
-            rows = self.df.to_dicts()
-            masked_rows = []
-            for row_dict in rows:
-                new_row = {}
-                for k, v in row_dict.items():
-                    if v is None: new_row[k] = None
-                    else: new_row[k] = _mask_string(str(v))
-                masked_rows.append(new_row)
-            return pl.DataFrame(masked_rows)
+            # Column-wise masking with explicit pl.String type to avoid schema inference issues on sparse null rows
+            cols = []
+            for col in self.df.columns:
+                series = self.df[col].cast(pl.String).to_list()
+                masked_vals = [_mask_string(v) if v is not None else None for v in series]
+                cols.append(pl.Series(col, masked_vals, dtype=pl.String))
+            return pl.DataFrame(cols) if cols else pl.DataFrame()
 
     def tokenize_pii_columns(self, pii_cols: list):
         """Replaces sensitive PII values with de-identified positional tokens and records them in _LOCAL_TOKEN_VAULT."""
@@ -115,7 +112,7 @@ class DeepAnalyzePrivacyKnife:
                             new_vals.append(token)
                         else:
                             new_vals.append(None)
-                    df_copy = df_copy.with_columns(pl.Series(col, new_vals))
+                    df_copy = df_copy.with_columns(pl.Series(col, new_vals, dtype=pl.String))
             return df_copy
 
     @classmethod
@@ -137,7 +134,7 @@ class DeepAnalyzePrivacyKnife:
                 if df_detok[col].dtype == pl.String or df_detok[col].dtype == pl.Utf8:
                     series_vals = df_detok[col].to_list()
                     restored = [vault.get(v, v) if isinstance(v, str) else v for v in series_vals]
-                    df_detok = df_detok.with_columns(pl.Series(col, restored))
+                    df_detok = df_detok.with_columns(pl.Series(col, restored, dtype=pl.String))
             return df_detok
         return df
 
