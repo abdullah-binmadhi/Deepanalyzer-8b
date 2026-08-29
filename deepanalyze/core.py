@@ -2487,7 +2487,7 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
         "MANDATORY CLEANING DIRECTIVES:\n"
         "1. COLUMN IDENTIFIERS: Normalize all column names to clean, lowercase snake_case (e.g. `col.lower().strip().replace(' ', '_').replace('.', '_')`).\n"
         "2. ACCOUNTING & CURRENCIES: Convert parenthetical negatives `(1,234.56)` or `$(1,234.56)` to negative numbers (`-1234.56`).\n"
-        "   - Strip currency symbols (`$`, `€`, `£`, `SAR`, `AED`, `₹`, `USD`, `EUR`, `Q1`, `Q2`).\n"
+        "   - Strip currency symbols using regex strings like `.str.replace_all(r'[$€£¥₹|SAR|AED|USD|EUR|RM|Q1|Q2]', '')`.\n"
         "   - Remove thousand-separator commas.\n"
         "3. SAFE DATES: Defensively parse dates using `.str.to_datetime(strict=False)`.\n"
         "4. DEDUPLICATION: Call `df = df.unique()`.\n"

@@ -1453,8 +1453,21 @@ def test_cleaners_unravel_hierarchical_erp_report():
         assert "doc_no" in res.columns
         assert "doc_date" in res.columns
         assert "customer_code" in res.columns
+        assert "customer_name" in res.columns
         assert "Full_Description" in res.columns
         assert round(float(res["Item Amount"].sum()), 2) == 995261.44
+        # Verify 0 nulls across parent document hierarchy
+        if hasattr(res, "null_count"):
+            assert res["doc_no"].null_count() == 0
+            assert res["customer_code"].null_count() == 0
+            assert res["customer_name"].null_count() == 0
+        else:
+            assert res["doc_no"].isna().sum() == 0
+            assert res["customer_code"].isna().sum() == 0
+            assert res["customer_name"].isna().sum() == 0
+        # Verify multi-line description continuation stitching
+        desc_list = res["Full_Description"].to_list() if hasattr(res["Full_Description"], "to_list") else res["Full_Description"].tolist()
+        assert any("X 30 X 2" in str(d) for d in desc_list)
 
 
 def test_cleaners_unravel_general_ledger():
