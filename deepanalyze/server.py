@@ -129,7 +129,8 @@ def start_server(
     prompt_cache_path: Optional[str] = None,
     port: int = 8080,
     host: str = "127.0.0.1",
-    context_size: int = 8192,
+    context_size: int = 16384,
+    alias: str = "deepanalyze-8b",
     min_p: float = 0.05,
     extra_args: Optional[List[str]] = None
 ):
@@ -153,12 +154,16 @@ def start_server(
         speculative_flags.extend(["-md", resolved_draft, "--draft-max", str(draft_max)])
 
     cache_flags = []
-    if prompt_cache_path:
-        cache_flags.extend(["--prompt-cache", prompt_cache_path, "--prompt-cache-all"])
+    resolved_cache = prompt_cache_path or ("./models/deepanalyze.cache" if os.path.exists("./models") else None)
+    if resolved_cache:
+        cache_flags.extend(["--prompt-cache", resolved_cache, "--prompt-cache-all"])
+
+    alias_flags = ["-a", alias] if alias else []
 
     cmd = [
         llama_bin,
         "-m", resolved_model,
+        *alias_flags,
         "--host", host,
         "--port", str(port),
         *hw_flags,

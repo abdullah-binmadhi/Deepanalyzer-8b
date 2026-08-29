@@ -25,11 +25,33 @@ if [ -z "$MODEL_PATH" ]; then
   exit 1
 fi
 
-echo "🚀 Starting DeepAnalyze Inference Server..."
-echo "📦 Model: $MODEL_PATH"
-echo "🌐 Port: 8080"
+# 2. Resolve Speculative Draft Model (Qwen2.5-Coder-1.5B)
+DRAFT_CANDIDATES=(
+  "$DEEPANALYZE_DRAFT_MODEL_PATH"
+  "./models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+  "$HOME/Desktop/deepanalyze/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+  "$HOME/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+)
 
-# 2. Hardware-specific Flag Detection
+DRAFT_PATH=""
+for path in "${DRAFT_CANDIDATES[@]}"; do
+  if [ -n "$path" ] && [ -f "$path" ]; then
+    DRAFT_PATH="$path"
+    break
+  fi
+done
+
+SPECULATIVE_FLAGS=()
+if [ -n "$DRAFT_PATH" ]; then
+  echo "⚡ Speculative Draft Model (2.5x Speedup): $DRAFT_PATH"
+  SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --draft-max 8)
+fi
+
+echo "🚀 Starting DeepAnalyze Inference Server..."
+echo "📦 Primary Target Model: $MODEL_PATH"
+echo "🌐 Endpoint: http://127.0.0.1:8080"
+
+# 3. Hardware-specific Flag Detection
 EXTRA_FLAGS=()
 
 # Detect macOS / Apple Silicon
@@ -37,15 +59,14 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "⚡ Hardware Detected: Apple Silicon (Metal Acceleration)"
   EXTRA_FLAGS=(
     -ngl 99
-    -c 8192
+    -c 16384
     -fa on
     -t 4
-    -b 2048
-    -ub 1024
-    --mlock
     --cache-type-k q8_0
     --cache-type-v q8_0
-    --cache-reuse 256
+    --prompt-cache ./models/deepanalyze.cache
+    --prompt-cache-all
+    -a deepanalyze-8b
     --min-p 0.05
   )
 else
@@ -53,12 +74,14 @@ else
   echo "⚡ Hardware Detected: Linux/Generic (CUDA/Vulkan/CPU)"
   EXTRA_FLAGS=(
     -ngl 99
-    -c 8192
+    -c 16384
     --cache-type-k q8_0
     --cache-type-v q8_0
-    --cache-reuse 256
+    --prompt-cache ./models/deepanalyze.cache
+    --prompt-cache-all
+    -a deepanalyze-8b
     --min-p 0.05
   )
 fi
 
-exec llama-server -m "$MODEL_PATH" --port 8080 "${EXTRA_FLAGS[@]}" "$@"
+exec llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 "${SPECULATIVE_FLAGS[@]}" "${EXTRA_FLAGS[@]}" "$@"
