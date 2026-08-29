@@ -111,9 +111,8 @@ def test_context_aware_tab_completer():
 def test_sql_execution_bridge():
     """Verify %deepanalyze --sql executes ANSI queries on DataFrames via DuckDB."""
     # Build a fake IPython environment for testing
-    import sys
-    from IPython.testing.globalipapp import get_ipython as get_test_ip
-    test_ip = get_test_ip()
+    from IPython.core.interactiveshell import InteractiveShell
+    test_ip = InteractiveShell.instance()
     
     test_df = pl.DataFrame({
         "dept": ["Engineering", "Sales", "Engineering", "Marketing"],

@@ -44,8 +44,9 @@ def sanitize_unicode_string(val: str) -> str:
     if "&" in val:
         val = html.unescape(val)
 
-    # 3. Strip zero-width & non-breaking characters
+    # 3. Strip zero-width, non-breaking, and unprintable ASCII control characters
     val = re.sub(r'[\u200b\u200c\u200d\ufeff\u202a-\u202e]', '', val)
+    val = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', val)
     val = val.replace('\xa0', ' ').replace('\u202f', ' ')
 
     # 4. Unicode NFC Normalization
@@ -209,7 +210,7 @@ def explode_nested_json(df_obj):
 def unpivot_temporal_matrix(df_obj):
     """Detects wide temporal headers (months, quarters, years) and unpivots them into tidy rows."""
     temporal_pattern = re.compile(
-        r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|q[1-4]|fy\d{2,4}|\d{4}|y\d{4}|\d{4}[-_/]\d{2})',
+        r'^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|q[1-4]|fy\d{2,4}|\d{4}|y\d{4}|\d{4}[-_/]\d{2}|\d{1,2}:\d{2}|h\d{1,2}|hour_\d{1,2}|wk\d{1,2}|week_\d{1,2})',
         re.IGNORECASE
     )
     cols = df_obj.columns if hasattr(df_obj, "columns") else []
@@ -264,24 +265,90 @@ def parse_unit_value(s: str) -> float:
 
 def normalize_units_and_currencies(df_obj):
     """Normalizes columns with mixed unit or currency representations."""
+    currency_codes = r"\b(?:SAR|AED|USD|EUR|RM|MYR|SGD|GBP|JPY|CNY|INR|MW|KW|WATT|KWH|MWH|MB|GB|TB|KG|LBS|GRAM|METER|KM|MILES|PCT)\b"
+    unit_regex = re.compile(rf"[\$€£¥₹%]|{currency_codes}|\b\d+\.?\d*\s*(?:kg|lbs|g|m|cm|mm|km|in|ft|yd|mi|mw|kw|w|mb|gb|tb)\b", re.I)
+
     if pl is not None and isinstance(df_obj, pl.DataFrame):
         df = df_obj.clone()
         for col in df.columns:
             if df.schema[col] in (pl.String, pl.Utf8):
-                sample_vals = df[col].drop_nulls().head(10).to_list()
-                if any(re.search(r'[\$€£¥₹]|SAR|AED|USD|EUR|kg|lbs|gram|meter|km|miles', str(v), re.I) for v in sample_vals):
+                sample_vals = df[col].drop_nulls().head(15).to_list()
+                if sample_vals and any(unit_regex.search(str(v)) for v in sample_vals):
                     parsed_vals = [parse_unit_value(v) for v in df[col].to_list()]
-                    df = df.with_columns(pl.Series(col, parsed_vals).cast(pl.Float64))
+                    valid_ratio = sum(1 for v in parsed_vals if not np.isnan(v)) / max(len(parsed_vals), 1)
+                    if valid_ratio >= 0.5:
+                        df = df.with_columns(pl.Series(col, parsed_vals).cast(pl.Float64))
         return df
     elif isinstance(df_obj, pd.DataFrame):
         df = df_obj.copy()
         for col in df.columns:
             if df[col].dtype == object or df[col].dtype == "string":
-                sample_vals = df[col].dropna().head(10).tolist()
-                if any(re.search(r'[\$€£¥₹]|SAR|AED|USD|EUR|kg|lbs|gram|meter|km|miles', str(v), re.I) for v in sample_vals):
-                    df[col] = df[col].map(parse_unit_value).astype(float)
+                sample_vals = df[col].dropna().head(15).tolist()
+                if sample_vals and any(unit_regex.search(str(v)) for v in sample_vals):
+                    parsed_vals = [parse_unit_value(v) for v in df[col]]
+                    valid_ratio = sum(1 for v in parsed_vals if not np.isnan(v)) / max(len(parsed_vals), 1)
+                    if valid_ratio >= 0.5:
+                        df[col] = parsed_vals
+                        df[col] = df[col].astype(float)
         return df
     return df_obj
+
+
+def auto_remedy_dataset(df_obj) -> tuple[object, list[str]]:
+    """Master Autonomous Data Remediation Pipeline.
+    Orchestrates all deterministic compiled cleaning engines in optimal sequence:
+    1. Data DNA Archetype & Schema Fingerprinting (<5ms)
+    2. Institutional Memory Vault Lookup (Sub-millisecond instant hit)
+    3. Grammar-Constrained Declarative Action DSL Synthesis
+    4. Ephemeral Shadow Sandbox Execution & 5 Mathematical Invariant Assertions
+    5. Automatic Blueprint Persistence to Institutional Memory
+    """
+    from deepanalyze import data_dna
+    from deepanalyze import action_dsl
+    from deepanalyze import shadow_sandbox
+    from deepanalyze import memory_vault
+
+    # 1. Compute Data DNA
+    dna = data_dna.compute_data_dna(df_obj)
+    archetype = dna["archetype"]
+    sig = dna["schema_signature"]
+    
+    # 2. Institutional Memory Vault Lookup
+    vault = memory_vault.get_memory_vault()
+    cached_blueprint = vault.lookup_blueprint(sig)
+    
+    if cached_blueprint:
+        pipeline_plan = cached_blueprint
+        source_tag = "Institutional Memory Blueprint (Cache Hit)"
+    else:
+        pipeline_plan = action_dsl.synthesize_dsl_blueprint(archetype)
+        source_tag = f"Autonomous Data DNA Archetype Engine ({archetype})"
+
+    # 3. Shadow Sandbox Execution & 5 Mathematical Invariant Assertions
+    def execute_plan(d):
+        return action_dsl.compile_and_execute_dsl(d, pipeline_plan)
+
+    def fallback_plan(d):
+        return action_dsl.compile_and_execute_dsl(d, action_dsl.synthesize_dsl_blueprint("MESSY_DENORMALIZED_TABULAR"))
+
+    cleaned_df, passed, exec_logs = shadow_sandbox.execute_in_shadow_sandbox(
+        df_obj,
+        execute_plan,
+        fallback_fn=fallback_plan,
+        archetype=archetype
+    )
+
+    # 4. Save Verified Blueprint to Institutional Memory Vault
+    if passed and not cached_blueprint:
+        cols_list = [str(c) for c in (df_obj.columns if hasattr(df_obj, "columns") else [])]
+        vault.store_blueprint(sig, pipeline_plan, metadata={
+            "archetype": archetype,
+            "verified_invariants": True,
+            "columns": cols_list
+        })
+
+    actions = [f"Source: {source_tag}"] + exec_logs
+    return cleaned_df, actions
 
 
 # =============================================================================

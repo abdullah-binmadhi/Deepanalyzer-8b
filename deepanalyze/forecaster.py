@@ -46,7 +46,10 @@ def auto_forecast_series(df, date_col: str = None, value_col: str = None, horizo
     daily_series.index = pd.to_datetime(daily_series.index)
 
     # 3. Detect Cadence
-    inferred_freq = pd.infer_freq(daily_series.index)
+    try:
+        inferred_freq = pd.infer_freq(daily_series.index) if len(daily_series) >= 3 else "D"
+    except Exception:
+        inferred_freq = "D"
     cadence = inferred_freq if inferred_freq else "Daily (Resampled)"
     regular_series = daily_series.asfreq('D', fill_value=0.0) if len(daily_series) > 10 else daily_series
 
@@ -54,9 +57,11 @@ def auto_forecast_series(df, date_col: str = None, value_col: str = None, horizo
     history_dates = regular_series.index
     n = len(history_vals)
 
+    history_vals = np.nan_to_num(np.array(history_vals, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
+
     # 4. Multi-Model Forecast (Exponential Smoothing + Trend Regressor)
     alpha = 0.3
-    level = history_vals[0]
+    level = history_vals[0] if len(history_vals) > 0 else 0.0
     trend = 0.0
     smoothed = [level]
     for t in range(1, n):
@@ -67,8 +72,11 @@ def auto_forecast_series(df, date_col: str = None, value_col: str = None, horizo
 
     # Linear trend fallback
     x_axis = np.arange(n)
-    poly = np.polyfit(x_axis, history_vals, deg=1)
-    slope, intercept = poly[0], poly[1]
+    try:
+        poly = np.polyfit(x_axis, history_vals, deg=1)
+        slope, intercept = float(poly[0]), float(poly[1])
+    except Exception:
+        slope, intercept = 0.0, float(np.mean(history_vals)) if len(history_vals) > 0 else 0.0
 
     # Generate Forecast Horizon
     last_date = history_dates[-1]
@@ -88,8 +96,13 @@ def auto_forecast_series(df, date_col: str = None, value_col: str = None, horizo
         uncertainty = res_std * math.sqrt(h) * 1.28  # ~80%
         uncertainty_95 = res_std * math.sqrt(h) * 1.96  # ~95%
 
+        try:
+            d_val = str(forecast_dates[h - 1].date())
+        except Exception:
+            d_val = str(forecast_dates[h - 1])[:10]
+
         forecast_records.append({
-            "date": str(forecast_dates[h - 1].date()),
+            "date": d_val,
             "forecast": round(float(point_forecast), 2),
             "lower_80": round(float(max(0.0, point_forecast - uncertainty)), 2),
             "upper_80": round(float(point_forecast + uncertainty), 2),

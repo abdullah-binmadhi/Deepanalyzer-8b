@@ -1019,17 +1019,32 @@ def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
         return ""
 
     tokens = re.findall(r"\b[a-zA-Z0-9_]+\b", prompt)
+    cols_norm = [str(c).lower().replace("-", " ").replace("_", " ").strip() for c in cols]
     
     matches = []
     for t in tokens:
         t_lower = t.lower()
-        if t in cols:
+        t_norm = t_lower.replace("_", " ").replace("-", " ").strip()
+        if t in cols or t_lower.startswith(("new_", "mean_", "sum_", "total_", "avg_", "is_", "log_")):
             continue
-        close = difflib.get_close_matches(t_lower, [c.lower() for c in cols], n=1, cutoff=0.85)
+
+        # 1. Exact normalized match (e.g. unit_price -> 'Unit Price', gl_code -> 'GL-Code')
+        direct_match = None
+        for orig_col, norm_col in zip(cols, cols_norm):
+            if t_norm == norm_col:
+                direct_match = orig_col
+                break
+
+        if direct_match and direct_match != t:
+            matches.append(f"  - Term '{t}' -> EXACT Schema Column: `{direct_match}`")
+            continue
+
+        # 2. Fuzzy closeness match (e.g. typos or partial names)
+        close = difflib.get_close_matches(t_norm, cols_norm, n=1, cutoff=0.75)
         if close:
-            orig = next(c for c in cols if c.lower() == close[0])
-            if orig != t and not t.lower().startswith("new_") and not t.lower().startswith("mean_"):
-                matches.append(f"  - Typo '{t}' -> EXACT Column: `{orig}`")
+            orig = next(cols[i] for i, n in enumerate(cols_norm) if n == close[0])
+            if orig != t:
+                matches.append(f"  - Typo/Alias '{t}' -> EXACT Column: `{orig}`")
 
     if matches:
         return "\n--- PRE-FLIGHT COLUMN RESOLUTION ALIASES ---\n" + "\n".join(set(matches)) + "\n---------------------------------------------\n"
@@ -1160,6 +1175,15 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
         (r'\.groupby\(', '.group_by(') if pl is not None else (r'\.group_by\(', '.groupby('),
         (r'\.dt_year\(', '.dt.year('),
         (r'\.dt_month\(', '.dt.month('),
+        (r'\.str\.strip\(', '.str.strip_chars('),
+        (r'\.str\.lstrip\(', '.str.strip_chars_start('),
+        (r'\.str\.rstrip\(', '.str.strip_chars_end('),
+        (r'\.str\.lower\(', '.str.to_lowercase('),
+        (r'\.str\.upper\(', '.str.to_uppercase('),
+        (r'(\.col\(.*?\))\s*\.fillna\(', r'\1.fill_null('),
+        (r'(\.col\(.*?\))\s*\.dropna\(', r'\1.drop_nulls('),
+        (r'(\.col\(.*?\))\s*\.isin\(', r'\1.is_in('),
+        (r'\.applymap\(', '.map('),
         (r'\.columns\(\)', '.columns'),
         (r'\.dtypes\(\)', '.dtypes'),
         (r'\.schema\(\)', '.schema'),
@@ -2465,6 +2489,13 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     # STAGE 3: PROCESS (DEEP DATA HYGIENE & ERP RECONSTRUCTION)
     # =========================================================================
     console.print("\n[bold cyan][Stage 3/10] 🧹 PROCESS (Deep Data Hygiene & Universal ERP Reconstruction)[/bold cyan]")
+    # Master Deterministic Compiled Remediation Pipeline
+    df, remedy_actions = cleaners.auto_remedy_dataset(df)
+    if ip:
+        ip.user_ns[target_name] = df
+    for act in remedy_actions:
+        console.print(f"  ✓ [bold green]{act}[/bold green]")
+
     safe_payload, knife = LocalGatekeeper.generate_safe_payload(df, dataset_id=target_name)
     strategy = safe_payload["strategy_used"]
     pii_cols = safe_payload["meta"].get("pii_columns", [])
@@ -2472,31 +2503,6 @@ def _run_eda_lifecycle(ip, target_name: str, parsed_args, user_prompt: str = "")
     console.print(f"🛡️ [bold magenta]Local Gatekeeper Policy:[/bold magenta] Applied [bold yellow]{strategy}[/bold yellow] strategy.")
     if pii_cols:
         console.print(f"🔒 [dim]Tokenized sensitive columns in RAM vault: {pii_cols} (Zero row records sent to cloud)[/dim]")
-
-    # Autonomous Hierarchical ERP Report Unravelling
-    is_hierarchical_erp = (
-        any(str(c).startswith("__UNNAMED__") for c in df.columns) or 
-        (strategy == "ERP_STRUCTURAL_MASK") or 
-        any(k in str(user_prompt).lower() for k in ["unnamed", "unravel", "sequence", "doc_no", "invoice_total", "full_description"])
-    )
-    if is_hierarchical_erp:
-        try:
-            unravelled_df = cleaners.unravel_hierarchical_erp_report(df)
-            if hasattr(unravelled_df, "shape") and unravelled_df.shape[0] > 0 and len(unravelled_df.columns) >= 5:
-                df = unravelled_df
-                if ip:
-                    ip.user_ns[target_name] = df
-                console.print("📑 [bold green]Autonomous ERP Unraveller applied: Normalized hierarchical report into 2D table.[/bold green]")
-                safe_payload, knife = LocalGatekeeper.generate_safe_payload(df, dataset_id=target_name)
-        except Exception as e_unravel:
-            console.print(f"[yellow]⚠ ERP Unraveller skipped: {e_unravel}[/yellow]")
-
-    # Auto-type, currency sanitization, and Unicode Mojibake cleaning
-    try:
-        df = cleaners.sanitize_unicode_and_mojibake(df)
-        df = cleaners.auto_cast_data_types(df)
-    except Exception:
-        pass
 
     clean_sys = (
         "[UNIVERSAL DATA SANITIZATION & ERP NORMALIZATION PROTOCOL]:\n"
@@ -2977,6 +2983,7 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--dag", action="store_true", help="Render AST transformation flow lineage graph")
     parser.add_argument("--gui", action="store_true", help="Interactive in-notebook searchable/sortable data explorer")
     parser.add_argument("--history", action="store_true", help="Visual time-machine displaying snapshot history")
+    parser.add_argument("--vault", "--memory", dest="vault", action="store_true", help="Display Institutional Schema Memory Vault statistics & patterns")
     parser.add_argument("--next", action="store_true", help="Predictive next-action recommender")
     parser.add_argument("--auto-clean", action="store_true", help="Autonomous data sanitizer with interactive preview diff")
     parser.add_argument("--ftfy", action="store_true", help="Sanitize Unicode, fix Mojibake, and strip zero-width chars")
@@ -3084,6 +3091,20 @@ def deepanalyze(line, cell=None):
         _render_history_explorer()
         return
 
+    if getattr(parsed_args, "vault", False):
+        from deepanalyze import memory_vault
+        vault = memory_vault.get_memory_vault()
+        stats = vault.get_vault_stats()
+        table = Table(title="🧠 Institutional Schema Memory Vault", box=box.ROUNDED)
+        table.add_column("Metric", style="bold cyan")
+        table.add_column("Value", style="bold green")
+        table.add_row("Total Enterprise Patterns Stored", f"{stats['total_patterns_stored']:,}")
+        table.add_row("Cache Hits (Sub-millisecond)", f"{stats['cache_hits']:,}")
+        table.add_row("Cache Misses", f"{stats['cache_misses']:,}")
+        table.add_row("Persistence Storage File", stats['storage_file'])
+        console.print(table)
+        return
+
     if parsed_args.gui:
         target_df = ip.user_ns.get(parsed_args.target) if ip else None
         _render_gui_explorer(target_df, target_name=parsed_args.target)
@@ -3100,34 +3121,43 @@ def deepanalyze(line, cell=None):
         return
 
     # Direct ANSI SQL ↔ Arrow execution bridge (--sql)
-    if parsed_args.sql and prompt and prompt.strip().upper().startswith(("SELECT", "WITH", "PRAGMA", "SHOW", "DESCRIBE", "CREATE")):
-        sql_query = prompt.strip()
-        if ip and duckdb is not None:
-            try:
-                con = duckdb.connect(database=":memory:")
-                for k, v in list(ip.user_ns.items()):
-                    if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame)))):
-                        if pl is not None and isinstance(v, pl.DataFrame):
-                            con.register(k, v.to_arrow())
-                        elif pl is not None and isinstance(v, pl.LazyFrame):
-                            con.register(k, v.collect().to_arrow())
-                        elif isinstance(v, pd.DataFrame):
-                            con.register(k, v)
+    if parsed_args.sql:
+        sql_query = prompt.strip() if prompt else ""
+        # If line contains raw SQL, extract exact query text from line preserving quotes
+        sql_match = re.search(r'\b(SELECT|WITH|PRAGMA|SHOW|DESCRIBE|CREATE)\b.*', line, re.IGNORECASE | re.DOTALL)
+        if sql_match:
+            raw_sql = sql_match.group(0)
+            raw_sql = re.sub(r'--target\s+\S+.*$', '', raw_sql).strip()
+            if raw_sql:
+                sql_query = raw_sql
 
-                res_arrow = con.execute(sql_query).arrow()
-                if pl is not None:
-                    res_df = pl.from_arrow(res_arrow)
-                else:
-                    res_df = res_arrow.to_pandas()
+        if sql_query.upper().startswith(("SELECT", "WITH", "PRAGMA", "SHOW", "DESCRIBE", "CREATE")):
+            if ip and duckdb is not None:
+                try:
+                    con = duckdb.connect(database=":memory:")
+                    for k, v in list(ip.user_ns.items()):
+                        if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame)))):
+                            if pl is not None and isinstance(v, pl.DataFrame):
+                                con.register(k, v.to_arrow())
+                            elif pl is not None and isinstance(v, pl.LazyFrame):
+                                con.register(k, v.collect().to_arrow())
+                            elif isinstance(v, pd.DataFrame):
+                                con.register(k, v)
 
-                target_name = parsed_args.target or "df"
-                _take_snapshot(ip, target=target_name)
-                ip.user_ns[target_name] = res_df
-                print(f"⚡ [DeepAnalyze SQL Engine]: Executed SQL on Arrow buffers. Assigned result to `{target_name}` ({len(res_df)} rows).")
-                return
-            except Exception as sql_err:
-                print(f"❌ [SQL Execution Error]: {sql_err}")
-                return
+                    res_arrow = con.execute(sql_query).arrow()
+                    if pl is not None:
+                        res_df = pl.from_arrow(res_arrow)
+                    else:
+                        res_df = res_arrow.to_pandas()
+
+                    target_name = parsed_args.target or "df"
+                    _take_snapshot(ip, target=target_name)
+                    ip.user_ns[target_name] = res_df
+                    print(f"⚡ [DeepAnalyze SQL Engine]: Executed SQL on Arrow buffers. Assigned result to `{target_name}` ({len(res_df)} rows).")
+                    return
+                except Exception as sql_err:
+                    print(f"❌ [SQL Execution Error]: {sql_err}")
+                    return
 
     # --- 8-Engine Specialized Cleaning Suite Handlers ---
     if parsed_args.ftfy:
