@@ -2027,15 +2027,21 @@ def test_core_grammar_constrained_ast_linter():
     """Verify grammar auto-patching of invalid LLM method calls."""
     from deepanalyze.core import _lint_and_format_code
 
-    # Simulated 8B LLM syntax slip: .str_slice(0, 5) and .groupby('id')
+    # Simulated 8B LLM syntax slip: .str_slice(0, 5), .groupby('id'), .columns(), .register_pandas()
     hallucinated_code = """
 import pandas as pd
 import polars as pl
-df = df.with_columns(pl.col('name').str_slice(0, 3))
+import duckdb
+con = duckdb.connect()
+con.register_pandas('df', df)
+if 'Status' in df.columns():
+    df = df.with_columns(pl.col('name').str_slice(0, 3))
 """
-    is_valid, clean_code, err = _lint_and_format_code(hallucinated_code, {"df", "pl", "pd"})
+    is_valid, clean_code, err = _lint_and_format_code(hallucinated_code, {"df", "pl", "pd", "duckdb", "con"})
     assert is_valid is True
     assert ".str.slice(0, 3)" in clean_code
+    assert "df.columns" in clean_code and "df.columns()" not in clean_code
+    assert "con.register('df', df)" in clean_code
 
 
 def test_feature_forge_safe_div_and_inf_clamping():
@@ -2157,6 +2163,38 @@ def test_core_atomic_export_swap(tmp_path):
     # Ensure no lingering .tmp files
     tmp_files = [f for f in os.listdir(str(tmp_path)) if ".tmp" in f]
     assert len(tmp_files) == 0
+
+
+def test_all_standalone_flags_execution():
+    """Verify that all standalone analytical and inspection flags execute without usage errors."""
+    import io, sys
+    import pandas as pd
+    from deepanalyze.core import deepanalyze
+    from IPython.core.interactiveshell import InteractiveShell
+
+    ip = InteractiveShell.instance()
+    df = pd.DataFrame({"customer_code": ["C01", "C02"], "customer_name": ["Acme", "Beta"], "amount": [100.0, 200.0]})
+    ip.user_ns["test_flag_df"] = df
+
+    flags = [
+        "--toggle", "--status", "--roadmap", "--history", "--gui", "--undo",
+        "--ftfy", "--fuzzy-clean", "--explode", "--unpivot", "--convert-units",
+        "--winsorize", "--auto-type", "--unravel", "--stitch", "--stats",
+        "--story", "--engineer", "--forecast", "--drift", "--schema",
+        "--synthetic", "--why", "--distill", "--debate", "--falsify",
+        "--pipeline", "--report", "--causal", "--solve", "--evolve",
+        "--brain", "--radar", "--spark", "--dag", "--diff", "--diff-stats"
+    ]
+
+    for flag in flags:
+        old_stdout = sys.stdout
+        sys.stdout = buffer = io.StringIO()
+        try:
+            deepanalyze(f"{flag} --target test_flag_df")
+            out = buffer.getvalue()
+            assert "Usage:" not in out, f"Flag {flag} unexpectedly triggered Usage error: {out}"
+        finally:
+            sys.stdout = old_stdout
 
 
 

@@ -448,6 +448,14 @@ SKILL_RULEBOOKS = {
         "4. REPORTING: Print `Best Parameters:` and `Best Cross-Validation Score:` formatted clearly.\n"
         "5. Output executable code inside <Answer>```python\n...\n```</Answer>.\n"
     ),
+    "insight": (
+        "[EXECUTIVE BUSINESS INSIGHTS & STRATEGIC KPI RULEBOOK]:\n"
+        "1. STRATEGIC EXTRACTION: Extract key revenue drivers, customer concentration, top product segments, and margin/volume trends.\n"
+        "2. FAST AGGREGATION CODE: Compute key performance indicators (KPIs) in-memory using Polars or Pandas without opening external database connections.\n"
+        "   - Use `df.columns` (NOT `df.columns()`).\n"
+        "   - Group by key business dimensions and print clean executive summary tables.\n"
+        "3. Output executable analysis code inside <Answer>```python\n...\n```</Answer>.\n"
+    ),
     "explain": (
         "[MODEL INTERPRETABILITY & EXPLAINABILITY RULEBOOK]:\n"
         "1. FEATURE IMPORTANCE EXTRACTION:\n"
@@ -1151,7 +1159,13 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
         (r'\.str_upper\(', '.str.to_uppercase('),
         (r'\.groupby\(', '.group_by(') if pl is not None else (r'\.group_by\(', '.groupby('),
         (r'\.dt_year\(', '.dt.year('),
-        (r'\.dt_month\(', '.dt.month(')
+        (r'\.dt_month\(', '.dt.month('),
+        (r'\.columns\(\)', '.columns'),
+        (r'\.dtypes\(\)', '.dtypes'),
+        (r'\.schema\(\)', '.schema'),
+        (r'\.shape\(\)', '.shape'),
+        (r'\.register_pandas\(', '.register('),
+        (r'\.register_arrow\(', '.register(')
     ]
     for pattern, rep in grammar_patches:
         normalized_code = re.sub(pattern, rep, normalized_code)
@@ -1813,10 +1827,13 @@ def _render_history_explorer():
         return
 
     for var_name, df_snap in _DF_SNAPSHOTS.items():
-        if df_snap is None:
-            continue
-        meta_list = _DF_SNAPSHOT_METADATA.get(var_name, [])
-        last_meta = meta_list[-1] if meta_list else {}
+        meta_val = _DF_SNAPSHOT_METADATA.get(var_name, {})
+        if isinstance(meta_val, list):
+            last_meta = meta_val[-1] if meta_val else {}
+        elif isinstance(meta_val, dict):
+            last_meta = meta_val
+        else:
+            last_meta = {}
         ts = last_meta.get("time", "Current Session")
         shape_str = f"{df_snap.shape[0]:,} x {df_snap.shape[1]:,}" if hasattr(df_snap, "shape") else "Unknown"
         cols = list(df_snap.columns) if hasattr(df_snap, "columns") else (
@@ -3026,18 +3043,24 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--undo", action="store_true")
 
+    # Strip optional bracket notation if user typed markdown doc syntax literally (e.g. `[--flash]`, `[--target df]`)
+    cleaned_line = line
+    cleaned_line = re.sub(r'\[(-{1,2}[a-zA-Z0-9_-]+(?:\s+[^\]]+)?)\]', r'\1', cleaned_line)
+    cleaned_line = re.sub(r'\[(-{1,2}[a-zA-Z0-9_-]+)', r'\1', cleaned_line)
+    cleaned_line = re.sub(r'(-{1,2}[a-zA-Z0-9_-]+)\]', r'\1', cleaned_line)
+
     try:
         if cell is not None:
             try:
-                parsed_args, remaining_words = parser.parse_known_args(shlex.split(line))
+                parsed_args, remaining_words = parser.parse_known_args(shlex.split(cleaned_line))
             except Exception:
-                parsed_args, remaining_words = parser.parse_known_args(line.split())
+                parsed_args, remaining_words = parser.parse_known_args(cleaned_line.split())
             prompt = ((" ".join(remaining_words) + "\n") if remaining_words else "") + cell.strip()
         else:
             try:
-                tokens = shlex.split(line)
+                tokens = shlex.split(cleaned_line)
             except Exception:
-                tokens = line.split()
+                tokens = cleaned_line.split()
             parsed_args, remaining_words = parser.parse_known_args(tokens)
             prompt = " ".join(remaining_words).strip()
     except SystemExit:
@@ -3453,15 +3476,101 @@ def deepanalyze(line, cell=None):
     primary_skill = "general"
     if parsed_args.unravel: primary_skill = "unravel"
     elif parsed_args.profile: primary_skill = "profile"
+    elif parsed_args.insight: primary_skill = "insight"
     elif parsed_args.viz: primary_skill = "viz"
     elif parsed_args.sql: primary_skill = "sql"
     elif parsed_args.feat: primary_skill = "feature"
-    elif parsed_args.stat: primary_skill = "stat"
+    elif parsed_args.stat or parsed_args.stats: primary_skill = "stat"
     elif parsed_args.ml: primary_skill = "ml"
     elif parsed_args.repair: primary_skill = "repair"
     elif parsed_args.validate: primary_skill = "validate"
     elif parsed_args.tune: primary_skill = "tune"
     elif parsed_args.explain: primary_skill = "explain"
+
+    # Standalone Diagnostic & Inspection Flag Handlers
+    if parsed_args.next and not prompt:
+        env_context, _, _ = _get_deep_workspace_context(ip, target=parsed_args.target, is_cloud=is_cloud_call, privacy_mode=parsed_args.privacy)
+        _recommend_next_actions(env_context, last_prompt="Strategic next step", target_model=active_model)
+        return
+
+    if parsed_args.radar and not prompt:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_df = ip.user_ns.get(target_name) if ip else None
+        if target_df is not None:
+            anomalies = _scan_for_anomalies(_DF_SNAPSHOTS.get(target_name), target_df, target_name=target_name)
+            if anomalies:
+                alert_msg = "\n".join(f"  • {a}" for a in anomalies)
+                console.print(Panel(f"[bold red]🚨 Radar Alert: Data Anomalies Detected[/bold red]\n{alert_msg}", border_style="red", expand=False))
+            else:
+                print(f"📡 [Radar]: Clean signal for `{target_name}`. No distribution anomalies detected.")
+        else:
+            print(f"📡 [Radar Error]: Variable `{target_name}` not found in session.")
+        return
+
+    if parsed_args.spark and not prompt:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_df = ip.user_ns.get(target_name) if ip else None
+        if target_df is not None:
+            _render_sparkline_minimap(target_df, target_name=target_name)
+        else:
+            print(f"✨ [Sparklines Error]: Variable `{target_name}` not found in session.")
+        return
+
+    if parsed_args.dag and not prompt:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if _LAST_GENERATED_CODE:
+            _render_transformation_dag(_LAST_GENERATED_CODE, target_name=target_name)
+        else:
+            print("📈 [DAG]: No transformation lineage recorded in session yet.")
+        return
+
+    if (parsed_args.diff or parsed_args.diff_stats) and not prompt:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_df = ip.user_ns.get(target_name) if ip else None
+        orig_df = _DF_SNAPSHOTS.get(target_name, [target_df])[0] if isinstance(_DF_SNAPSHOTS.get(target_name), list) else target_df
+        if target_df is not None:
+            _render_state_diff_hud(orig_df, target_df, target_name=target_name, show_stats=parsed_args.diff_stats)
+        return
+
+    # Default prompts for standalone action flags when user provides no text
+    if not prompt:
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        if primary_skill == "profile":
+            prompt = f"Generate statistical summary and data profiling for `{target_name}`"
+        elif primary_skill == "insight":
+            prompt = f"Extract strategic business insights and key KPI takeaways from `{target_name}`"
+        elif primary_skill == "explain":
+            prompt = f"Explain model feature importance and predictive drivers for `{target_name}`"
+        elif primary_skill == "viz":
+            prompt = f"Generate exploratory visualization charts for key numerical and categorical distributions in `{target_name}`"
+        elif primary_skill == "sql":
+            prompt = f"Generate top analytical aggregations and summary statistics for `{target_name}` using DuckDB SQL"
+        elif primary_skill == "feature":
+            prompt = f"Perform automated feature engineering, datetime decomposition, and categorical encoding for `{target_name}`"
+        elif primary_skill == "stat":
+            prompt = f"Run statistical hypothesis testing and collinearity screening on `{target_name}`"
+        elif primary_skill == "ml":
+            prompt = f"Build and evaluate a leak-free predictive model pipeline for `{target_name}`"
+        elif primary_skill == "validate":
+            prompt = f"Run 5-fold cross-validation and validation diagnostics on `{target_name}`"
+        elif primary_skill == "tune":
+            prompt = f"Run hyperparameter tuning and model optimization pipeline for `{target_name}`"
+        elif primary_skill == "repair":
+            prompt = f"Audit and automatically repair any invalid datatypes, missing values, or dirty columns in `{target_name}`"
+        elif primary_skill == "unravel":
+            prompt = f"Flatten and normalize hierarchical ERP multi-row structures in `{target_name}`"
+        elif parsed_args.story:
+            prompt = f"Generate executive briefing memo for `{target_name}`"
+        elif parsed_args.forecast:
+            prompt = f"Generate 14-day conformal forecast projection for `{target_name}`"
+        elif parsed_args.drift:
+            prompt = f"Run Population Stability Index (PSI) drift watchdog for `{target_name}`"
+        elif parsed_args.schema:
+            prompt = f"Synthesize DuckDB / SQL DDL and dbt schema for `{target_name}`"
+        elif parsed_args.why:
+            prompt = f"Run causal root-cause analysis for `{target_name}`"
+        elif is_cloud_call or parsed_args.target != "df":
+            prompt = f"Analyze dataset schema, key distributions, and executive KPI summary for `{target_name}`"
 
     # Ensemble Intent Routing (Zero-Flag Mode)
     if primary_skill == "general" and prompt and not parsed_args.is_continuation:
@@ -3470,7 +3579,12 @@ def deepanalyze(line, cell=None):
             primary_skill = classified_skill
 
     if not prompt and primary_skill != "profile" and not parsed_args.is_continuation and not parsed_args.kickstart and not parsed_args.interview and not parsed_args.brainstorm and not parsed_args.auto_clean:
-        print("Usage: %deepanalyze [-x] [--target df] [--think|--pro] [--privacy auto|mask|profile] <task description>")
+        print("💡 [DeepAnalyze Quickstart]:")
+        print("   • Profiling & EDA:   %deepanalyze --profile --target df")
+        print("   • Business Insights:  %deepanalyze --insight --target df")
+        print("   • Autonomous EDA:     %deepanalyze --EDA --target df")
+        print("   • Next Recommender:   %deepanalyze --next --target df")
+        print("   • Cloud Routing:      %deepanalyze --pro (or --flash / --think) <prompt>")
         return
 
     _sync_duckdb(ip)
