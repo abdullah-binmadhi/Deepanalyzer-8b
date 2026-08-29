@@ -23,6 +23,7 @@ from . import pipeline_compiler
 from . import optimizer
 from . import brain
 from . import server
+from . import mole_telemetry
 
 
 def load_ipython_extension(ipython):
@@ -40,9 +41,24 @@ def load_ipython_extension(ipython):
     if deepanalyze_interceptor not in ipython.input_transformers_cleanup:
         ipython.input_transformers_cleanup.append(deepanalyze_interceptor)
     
+    # 5. Register continuous Live Host Memory HUD
+    try:
+        if hasattr(ipython, "events") and hasattr(ipython.events, "register"):
+            # Avoid duplicate registrations
+            if mole_telemetry.post_run_cell_memory_hud not in ipython.events.callbacks.get("post_run_cell", []):
+                ipython.events.register("post_run_cell", mole_telemetry.post_run_cell_memory_hud)
+    except Exception:
+        pass
+
     print(f"✅ DeepAnalyze Engine (v{__version__} - Universal Adapter) loaded successfully!")
+    print("   🦔 Live Host RAM HUD: Active after each cell (toggle with `%deepanalyze --mem-hud`)")
     print("   Tab completion active. Type %deepanalyze --status to check backend.")
 
 def unload_ipython_extension(ipython):
     if deepanalyze_interceptor in ipython.input_transformers_cleanup:
         ipython.input_transformers_cleanup.remove(deepanalyze_interceptor)
+    try:
+        if hasattr(ipython, "events") and hasattr(ipython.events, "unregister"):
+            ipython.events.unregister("post_run_cell", mole_telemetry.post_run_cell_memory_hud)
+    except Exception:
+        pass

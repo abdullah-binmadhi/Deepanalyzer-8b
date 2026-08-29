@@ -70,6 +70,7 @@ FLAGS = [
     "--kickstart",
     "--interview",
     "--brainstorm",
+    "--questions", "-q", "--ask",
     "--radar",
     "--dag",
     "--gui",
@@ -115,6 +116,7 @@ FLAGS = [
     "-c", "--continue",
     "--retries",
     "--status",
+    "--system", "--mo", "--mem-hud",
     "--stats", "-st",
     "--story", "-sm",
     "--engineer", "-fe",
@@ -195,6 +197,7 @@ from . import pipeline_compiler
 from . import optimizer
 from . import brain
 from . import server
+from . import mole_telemetry
 
 try:
     import duckdb
@@ -228,6 +231,15 @@ def _resolve_cloud_provider_info():
             "think_model": "deepseek/deepseek-r1",
             "flash_model": "google/gemini-2.0-flash-001"
         }
+    elif os.environ.get("DEEPSEEK_API_KEY"):
+        return {
+            "provider": "DeepSeek",
+            "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            "api_key": os.environ["DEEPSEEK_API_KEY"],
+            "pro_model": "deepseek-chat",
+            "think_model": "deepseek-reasoner",
+            "flash_model": "deepseek-chat"
+        }
     elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
         key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         return {
@@ -248,22 +260,18 @@ def _resolve_cloud_provider_info():
             "flash_model": "claude-3-5-haiku-20241022"
         }
     elif os.environ.get("OPENAI_API_KEY"):
+        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        key = os.environ["OPENAI_API_KEY"]
+        # If pointing to local mock/inference server or dummy local key, treat as local engine
+        if "127.0.0.1" in base_url or "localhost" in base_url or key.startswith("sk-local-"):
+            return None
         return {
             "provider": "OpenAI",
-            "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            "api_key": os.environ["OPENAI_API_KEY"],
+            "base_url": base_url,
+            "api_key": key,
             "pro_model": "gpt-4o",
             "think_model": "o3-mini",
             "flash_model": "gpt-4o-mini"
-        }
-    elif os.environ.get("DEEPSEEK_API_KEY"):
-        return {
-            "provider": "DeepSeek",
-            "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-            "api_key": os.environ["DEEPSEEK_API_KEY"],
-            "pro_model": "deepseek-chat",
-            "think_model": "deepseek-reasoner",
-            "flash_model": "deepseek-chat"
         }
     return None
 
@@ -482,11 +490,14 @@ SKILL_RULEBOOKS = {
 }
 
 INVARIANT_CHECKLIST = (
-    "\n[STRICT INVARIANT DIRECTIVE]:\n"
-    "1. NEVER redefine, instantiate, or hardcode sample data (e.g. NEVER write `data = [...]` or `df = pd.DataFrame(...)` for existing tables).\n"
-    "2. Assume the target dataframe is already loaded in runtime. Transform it directly.\n"
-    "3. DO NOT output conversational preamble or explanations outside code tags.\n"
-    "4. Enclose code strictly inside <Answer>```python ... ```</Answer>.\n"
+    "\n[STRICT INVARIANT DIRECTIVES - MANDATORY FOR EXECUTION]:\n"
+    "1. ACTIVE TARGET DATAFRAME: Target variable is dynamically bound. Always mutate or assign back to the active target variable.\n"
+    "2. NEVER DEFINE TOY/DUMMY DATA: NEVER write `data = [...]`, `toy_data = [...]`, or re-instantiate DataFrame samples. The DataFrame is ALREADY loaded in memory.\n"
+    "3. NO FUNCTION WRAPPERS: NEVER wrap your solution in a function (e.g., NO `def clean_data(...)`). Output direct, top-level executable lines of Python code.\n"
+    "4. NO SPACES IN IDENTIFIERS: Never assign to column names with spaces as raw Python variables (e.g. `Blood Pressure = None` is invalid syntax). Use `.drop(['Blood Pressure'])` or `.with_columns(pl.col('Blood Pressure'))`.\n"
+    "5. POLARS LIST INDEXING: Always use `.list.get(0)` or `.list.get(1)` after `.str.split('/')` (NEVER `.str[0]` or `.str[1]`).\n"
+    "6. MULTI-DATE PARSING: In Polars use `pl.coalesce([pl.col('date').str.to_date('%m/%d/%Y', strict=False), pl.col('date').str.to_date('%Y-%m-%d', strict=False), pl.col('date').str.to_date('%B %d, %Y', strict=False), pl.col('date').str.to_date(strict=False)])`.\n"
+    "7. STRICT OUTPUT FORMAT: Output ONLY executable Python code inside <Answer>```python ... ```</Answer>.\n"
 )
 
 def check_engine_status(server_url=DEFAULT_SERVER_URL):
@@ -513,6 +524,8 @@ def check_engine_status(server_url=DEFAULT_SERVER_URL):
     interceptor_status = "🟢 Enabled (Auto-pilot on plain English cells)" if _INTERCEPTOR_ACTIVE else "⚪ Disabled (Explicit %deepanalyze calls only)"
     print(f"📡 Cell Interceptor   : {interceptor_status}")
     print(f"⚡ Polars Acceleration : {'✅ Active' if pl is not None else '⚪ Not Installed'}")
+    mo_active = mole_telemetry.get_mole_metrics() is not None
+    print(f"🦔 Mole Telemetry     : {'✅ Active (Run `%deepanalyze --system` or `--mo`)' if mo_active else '⚪ Not Found (Install via `brew install mole`)'}")
 
     ip = get_ipython()
     tracked_dfs = list(_DF_SNAPSHOTS.keys())
@@ -1050,6 +1063,207 @@ def _fuzzy_match_columns(prompt: str, ip, target="df") -> str:
         return "\n--- PRE-FLIGHT COLUMN RESOLUTION ALIASES ---\n" + "\n".join(set(matches)) + "\n---------------------------------------------\n"
     return ""
 
+def _auto_seed_session_namespace(ip, target_name="df"):
+    """Auto-seeds standard data science modules and DataFrame aliases into IPython namespace."""
+    if not ip or not hasattr(ip, "user_ns"):
+        return
+    if "pd" not in ip.user_ns: ip.user_ns["pd"] = pd
+    if "np" not in ip.user_ns: ip.user_ns["np"] = np
+    if pl is not None and "pl" not in ip.user_ns: ip.user_ns["pl"] = pl
+    if duckdb is not None and "duckdb" not in ip.user_ns: ip.user_ns["duckdb"] = duckdb
+    if "re" not in ip.user_ns:
+        import re as _re
+        ip.user_ns["re"] = _re
+    if "json" not in ip.user_ns:
+        import json as _json
+        ip.user_ns["json"] = _json
+    if "datetime" not in ip.user_ns:
+        import datetime as _dt
+        ip.user_ns["datetime"] = _dt
+    if "math" not in ip.user_ns:
+        import math as _m
+        ip.user_ns["math"] = _m
+    if "scipy" not in ip.user_ns:
+        try:
+            import scipy as _sp
+            ip.user_ns["scipy"] = _sp
+        except ImportError:
+            pass
+    if target_name and target_name in ip.user_ns and "df" not in ip.user_ns:
+        ip.user_ns["df"] = ip.user_ns[target_name]
+
+def _resolve_target_dataframe(ip, requested_target="df", prompt="") -> str:
+    """Smart target DataFrame resolution. Auto-discovers single DataFrames in session and aliases df."""
+    if not ip or not hasattr(ip, "user_ns"):
+        return requested_target or "df"
+    
+    _auto_seed_session_namespace(ip, target_name=requested_target)
+
+    # 1. If explicit non-df target is requested, always respect user's requested target
+    if requested_target and requested_target != "df":
+        if requested_target in ip.user_ns:
+            ip.user_ns["df"] = ip.user_ns[requested_target]
+            _ACTIVE_ROADMAP["target_df"] = requested_target
+        return requested_target
+
+    # 2. If 'df' is already a DataFrame in session
+    if "df" in ip.user_ns and (isinstance(ip.user_ns["df"], pd.DataFrame) or (pl is not None and isinstance(ip.user_ns["df"], (pl.DataFrame, pl.LazyFrame)))):
+        _ACTIVE_ROADMAP["target_df"] = "df"
+        return "df"
+
+    # 3. Discover all session DataFrames
+    session_dfs = {}
+    for k, v in ip.user_ns.items():
+        if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame)))):
+            session_dfs[k] = v
+
+    if not session_dfs:
+        return requested_target or "df"
+
+    if len(session_dfs) == 1:
+        resolved_name = next(iter(session_dfs.keys()))
+        ip.user_ns["df"] = session_dfs[resolved_name]
+        _ACTIVE_ROADMAP["target_df"] = resolved_name
+        return resolved_name
+
+    # Multiple DataFrames: check if prompt mentions any
+    prompt_lower = (prompt or "").lower()
+    for name in session_dfs.keys():
+        if name.lower() in prompt_lower:
+            ip.user_ns["df"] = session_dfs[name]
+            _ACTIVE_ROADMAP["target_df"] = name
+            return name
+
+    # Check snapshots or active roadmap
+    roadmap_target = _ACTIVE_ROADMAP.get("target_df")
+    if roadmap_target and roadmap_target in session_dfs:
+        ip.user_ns["df"] = session_dfs[roadmap_target]
+        return roadmap_target
+
+    # Default to first discovered DataFrame
+    first_name = next(iter(session_dfs.keys()))
+    ip.user_ns["df"] = session_dfs[first_name]
+    _ACTIVE_ROADMAP["target_df"] = first_name
+    return first_name
+
+def _inject_required_imports(code_str: str) -> str:
+    """Scans code for references to modules/packages and ensures appropriate import headers exist."""
+    needed_imports = []
+    
+    if re.search(r'\bduckdb\b', code_str) and not re.search(r'^\s*(?:import\s+duckdb|from\s+duckdb)', code_str, re.M):
+        needed_imports.append("import duckdb")
+    
+    if re.search(r'\bpl\b', code_str) and not re.search(r'^\s*(?:import\s+polars\s+as\s+pl|from\s+polars)', code_str, re.M):
+        needed_imports.append("import polars as pl")
+    elif re.search(r'\bpolars\b', code_str) and not re.search(r'^\s*(?:import\s+polars)', code_str, re.M):
+        needed_imports.append("import polars as pl")
+
+    if re.search(r'\bpd\b', code_str) and not re.search(r'^\s*(?:import\s+pandas\s+as\s+pd|from\s+pandas)', code_str, re.M):
+        needed_imports.append("import pandas as pd")
+    elif re.search(r'\bpandas\b', code_str) and not re.search(r'^\s*(?:import\s+pandas)', code_str, re.M):
+        needed_imports.append("import pandas as pd")
+
+    if re.search(r'\bnp\b', code_str) and not re.search(r'^\s*(?:import\s+numpy\s+as\s+np|from\s+numpy)', code_str, re.M):
+        needed_imports.append("import numpy as np")
+
+    if re.search(r'\bplt\b', code_str) and not re.search(r'^\s*(?:import\s+matplotlib\.pyplot\s+as\s+plt)', code_str, re.M):
+        needed_imports.append("import matplotlib.pyplot as plt")
+    if re.search(r'\bsns\b', code_str) and not re.search(r'^\s*(?:import\s+seaborn\s+as\s+sns)', code_str, re.M):
+        needed_imports.append("import seaborn as sns")
+
+    if re.search(r'\bre\b', code_str) and not re.search(r'^\s*(?:import\s+re\b)', code_str, re.M):
+        needed_imports.append("import re")
+
+    if re.search(r'\bjson\b', code_str) and not re.search(r'^\s*(?:import\s+json\b)', code_str, re.M):
+        needed_imports.append("import json")
+
+    if re.search(r'\bmath\b', code_str) and not re.search(r'^\s*(?:import\s+math\b)', code_str, re.M):
+        needed_imports.append("import math")
+
+    if (re.search(r'\bdatetime\b', code_str) or re.search(r'\btimedelta\b', code_str)) and not re.search(r'^\s*(?:import\s+datetime|from\s+datetime)', code_str, re.M):
+        needed_imports.append("import datetime\nfrom datetime import datetime, date, timedelta")
+
+    if re.search(r'\b(?:scipy|stats)\b', code_str) and not re.search(r'^\s*(?:import\s+scipy|from\s+scipy)', code_str, re.M):
+        needed_imports.append("import scipy\nfrom scipy import stats")
+
+    if re.search(r'\b(?:train_test_split|StandardScaler|OneHotEncoder|Pipeline|ColumnTransformer|GridSearchCV)\b', code_str):
+        if not re.search(r'^\s*from\s+sklearn', code_str, re.M):
+            sk = []
+            if 'train_test_split' in code_str: sk.append("from sklearn.model_selection import train_test_split")
+            if 'GridSearchCV' in code_str: sk.append("from sklearn.model_selection import GridSearchCV")
+            if 'StandardScaler' in code_str: sk.append("from sklearn.preprocessing import StandardScaler")
+            if 'OneHotEncoder' in code_str: sk.append("from sklearn.preprocessing import OneHotEncoder")
+            if 'Pipeline' in code_str: sk.append("from sklearn.pipeline import Pipeline")
+            if 'ColumnTransformer' in code_str: sk.append("from sklearn.compose import ColumnTransformer")
+            if sk: needed_imports.extend(sk)
+
+    if needed_imports:
+        header = "\n".join(dict.fromkeys(needed_imports)) + "\n"
+        return header + code_str
+    return code_str
+
+def _pre_sanitize_code_string(code_str: str, target_name: str = "df") -> str:
+    """Repairs syntax anomalies, unwraps function wrappers with toy data, and fixes spaced identifiers."""
+    cleaned = code_str.strip()
+
+    # 1. Unwrap function wrapper if LLM wrapped everything in def clean_*(df): ... toy_data = ...
+    func_match = re.search(r'def\s+([a-zA-Z0-9_]+)\s*\(\s*([a-zA-Z0-9_]+)\s*\)\s*:(.*?)(?:\n\s*return\s+([a-zA-Z0-9_]+))?(?:\n(?:[a-zA-Z_]|#|\Z))', cleaned, re.DOTALL)
+    if func_match and ("toy_data" in cleaned or "sample_data" in cleaned or "toy_sample" in cleaned or f"{func_match.group(1)}(" in cleaned):
+        param_name = func_match.group(2)
+        body = func_match.group(3)
+        body_lines = body.splitlines()
+        unindented_lines = []
+        for line in body_lines:
+            if line.startswith("    "):
+                unindented_lines.append(line[4:])
+            elif line.startswith("\t"):
+                unindented_lines.append(line[1:])
+            else:
+                unindented_lines.append(line)
+        unindented_body = "\n".join(unindented_lines).strip()
+        if param_name != target_name:
+            unindented_body = re.sub(rf'\b{param_name}\b', target_name, unindented_body)
+        cleaned = unindented_body
+
+    # 2. Fix spaced identifiers on LHS of assignments: e.g. "Blood Pressure = None" -> drop or sanitized
+    def replace_spaced_assignment(match):
+        indent = match.group(1)
+        var_with_spaces = match.group(2).strip()
+        rhs = match.group(3).strip()
+        if " " in var_with_spaces and not var_with_spaces.startswith(('"', "'")):
+            if rhs == "None":
+                return f"{indent}{target_name} = {target_name}.drop(['{var_with_spaces}'])"
+            else:
+                sanitized_col = var_with_spaces.replace(" ", "_")
+                return f"{indent}{sanitized_col} = {rhs}"
+        return match.group(0)
+
+    cleaned = re.sub(r'^([ \t]*)([a-zA-Z_][a-zA-Z0-9_\s]+?)\s*=\s*(.+)$', replace_spaced_assignment, cleaned, flags=re.M)
+
+    # 3. Fix keyword arguments with spaces inside with_columns
+    def replace_spaced_kwargs(match):
+        prefix = match.group(1)
+        arg_name = match.group(2)
+        eq = match.group(3)
+        if " " in arg_name:
+            return f"{prefix}{arg_name.replace(' ', '_')}{eq}"
+        return match.group(0)
+
+    cleaned = re.sub(r'(\bwith_columns\s*\(\s*|\,\s*)([a-zA-Z_][a-zA-Z0-9_\s]+?)(\s*=)', replace_spaced_kwargs, cleaned)
+
+    return cleaned
+
+class _TargetVariableRewriter(ast.NodeTransformer):
+    """AST NodeTransformer that rewrites variable references from 'df' to target_name."""
+    def __init__(self, from_name="df", to_name="health_pl"):
+        self.from_name = from_name
+        self.to_name = to_name
+
+    def visit_Name(self, node):
+        if node.id == self.from_name:
+            return ast.copy_location(ast.Name(id=self.to_name, ctx=node.ctx), node)
+        return self.generic_visit(node)
+
 def _get_deep_workspace_context(ip, target="df", is_cloud=False, privacy_mode="auto") -> tuple[str, set, object]:
     if not ip:
         return "", set(KNOWN_GLOBAL_SYMBOLS), None
@@ -1113,61 +1327,33 @@ def _get_deep_workspace_context(ip, target="df", is_cloud=False, privacy_mode="a
                 micro_schema = _format_micro_schema(obj, name=name, is_polars=is_polars)
                 context_lines.append(micro_schema)
 
+    hw_telemetry = mole_telemetry.get_hardware_context_for_llm()
+    hw_section = f"\n{hw_telemetry}\n" if hw_telemetry else ""
+
     context_str = (
         "\n--- ACTIVE RUNTIME ENVIRONMENT CONTEXT ---\n"
         + ("\n\n".join(context_lines) if context_lines else "No custom DataFrames loaded.")
-        + "\n-------------------------------------------\n"
+        + f"\n[ACTIVE TARGET DATAFRAME FOR THIS INVOCATION]: `{target}`\n"
+        + hw_section
+        + "-------------------------------------------\n"
     )
     return context_str, available_vars, knife_instance
 
-def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str, str]:
+def _lint_and_format_code(code_str: str, available_vars: set, target_name: str = "df", target_obj: object = None) -> tuple[bool, str, str]:
     if not code_str.strip():
         return False, "", "Empty code block"
-    try:
-        # 🛡️ AST SECURE SANDBOX ENFORCEMENT
-        DeepAnalyzePrivacyKnife.audit_generated_code(code_str)
-        tree = ast.parse(code_str)
-        normalized_code = ast.unparse(tree)
-    except PermissionError as pe:
-        return False, code_str, str(pe)
-    except (SyntaxError, IndentationError) as e:
-        return False, code_str, f"Syntax Error on line {e.lineno}: {e.msg}"
-    except Exception as e:
-        return False, code_str, f"AST Parsing Error: {str(e)}"
 
-    defined_in_code = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                defined_in_code.add(alias.asname or alias.name)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            defined_in_code.add(node.name)
-            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
-                defined_in_code.add(arg.arg)
-            if node.args.vararg:
-                defined_in_code.add(node.args.vararg.arg)
-            if node.args.kwarg:
-                defined_in_code.add(node.args.kwarg.arg)
-        elif isinstance(node, ast.Lambda):
-            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
-                defined_in_code.add(arg.arg)
-            if node.args.vararg:
-                defined_in_code.add(node.args.vararg.arg)
-            if node.args.kwarg:
-                defined_in_code.add(node.args.kwarg.arg)
-        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            defined_in_code.add(node.id)
+    # 1. Pre-sanitize syntax anomalies and unwrap function wrappers
+    cleaned_code = _pre_sanitize_code_string(code_str, target_name=target_name)
 
-    undefined = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            var_name = node.id
-            if var_name not in available_vars and var_name not in defined_in_code:
-                undefined.add(var_name)
+    # 2. Inject missing library imports
+    cleaned_code = _inject_required_imports(cleaned_code)
 
-    # 🔍 POLARS & PANDAS GRAMMAR CONSTRAINTS & AUTO-PATCHING
-    # Auto-repair common 8B LLM attribute slips
+    # 3. Polars & Pandas grammar constraints & auto-patching
     grammar_patches = [
+        (r'(\.str\.split\(.*?\))\s*\.str\[(\d+)\]', r'\1.list.get(\2)'),
+        (r'(\.str\.split\(.*?\))\s*\.list\[(\d+)\]', r'\1.list.get(\2)'),
+        (r'(\.str\.split\(.*?\))\s*\.str\.get\((\d+)\)', r'\1.list.get(\2)'),
         (r'\.str_slice\(', '.str.slice('),
         (r'\.str_strip\(', '.str.strip_chars('),
         (r'\.str_lower\(', '.str.to_lowercase('),
@@ -1192,11 +1378,74 @@ def _lint_and_format_code(code_str: str, available_vars: set) -> tuple[bool, str
         (r'\.register_arrow\(', '.register(')
     ]
     for pattern, rep in grammar_patches:
-        normalized_code = re.sub(pattern, rep, normalized_code)
+        cleaned_code = re.sub(pattern, rep, cleaned_code)
 
+    try:
+        DeepAnalyzePrivacyKnife.audit_generated_code(cleaned_code)
+        tree = ast.parse(cleaned_code)
+    except PermissionError as pe:
+        return False, cleaned_code, str(pe)
+    except (SyntaxError, IndentationError) as e:
+        return False, cleaned_code, f"Syntax Error on line {e.lineno}: {e.msg}"
+    except Exception as e:
+        return False, cleaned_code, f"AST Parsing Error: {str(e)}"
+
+    # 4. AST Target Variable Remapping: rewrite 'df' to target_name if target_name != 'df'
+    if target_name and target_name != "df" and target_name in available_vars:
+        used_names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+        if "df" in used_names and "df" not in available_vars:
+            rewriter = _TargetVariableRewriter(from_name="df", to_name=target_name)
+            tree = rewriter.visit(tree)
+            ast.fix_missing_locations(tree)
+
+    # 5. Check for undefined variables
+    defined_in_code = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                defined_in_code.add(alias.asname or alias.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defined_in_code.add(node.name)
+            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
+                defined_in_code.add(arg.arg)
+            if node.args.vararg: defined_in_code.add(node.args.vararg.arg)
+            if node.args.kwarg: defined_in_code.add(node.args.kwarg.arg)
+        elif isinstance(node, ast.Lambda):
+            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs:
+                defined_in_code.add(arg.arg)
+            if node.args.vararg: defined_in_code.add(node.args.vararg.arg)
+            if node.args.kwarg: defined_in_code.add(node.args.kwarg.arg)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            defined_in_code.add(node.id)
+
+    undefined = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            var_name = node.id
+            if var_name not in available_vars and var_name not in defined_in_code:
+                undefined.add(var_name)
+
+    # 6. Undefined Variable Auto-Healer & Fallback Injection
     if undefined:
-        return False, normalized_code, f"Undefined variable(s) referenced: {sorted(list(undefined))}"
+        header_injections = []
+        for u_var in list(undefined):
+            if u_var in ("df", "data", "dataset", "table") and target_name in available_vars:
+                header_injections.append(f"{u_var} = {target_name}")
+                undefined.remove(u_var)
+            elif u_var in ("duckdb", "pl", "pd", "np", "re", "json", "math", "datetime", "scipy"):
+                pass
+            else:
+                header_injections.append(f"{u_var} = None")
+                undefined.remove(u_var)
 
+        if header_injections:
+            cleaned_code = "\n".join(header_injections) + "\n" + ast.unparse(tree)
+            try:
+                tree = ast.parse(cleaned_code)
+            except Exception:
+                pass
+
+    normalized_code = ast.unparse(tree)
     return True, normalized_code, ""
 
 def _sanitize_traceback(tb_str: str, max_lines: int = 25) -> str:
@@ -1921,19 +2170,25 @@ def _recommend_next_actions(env_context: str, last_prompt: str, target_model: st
 
 
 def _display_metrics(duration_sec: float, token_count: int, engine_type: str, model_name: str):
-    """Renders runtime telemetry and throughput using Rich."""
-    tok_per_sec = (token_count / duration_sec) if duration_sec > 0 else 0.0
+    """Renders runtime telemetry, throughput, and live RAM headroom using Rich."""
+    safe_duration = max(duration_sec, 0.001)
+    tok_per_sec = (token_count / safe_duration) if safe_duration > 0 else 0.0
     
+    mem_summary = mole_telemetry.get_quick_memory_summary()
+    mem_cell = f"[{mem_summary['color']}]{mem_summary['avail_str']} Free[/{mem_summary['color']}] [dim]({mem_summary['used_pct']:.0f}% of {mem_summary['total_str']})[/dim]"
+
     table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 1))
     table.add_column("Latency", justify="center")
     table.add_column("Tokens", justify="center")
     table.add_column("Throughput", justify="center")
+    table.add_column("Host RAM (Live)", justify="center")
     table.add_column("Engine / Model", justify="center")
     
     table.add_row(
         f"{duration_sec * 1000:.1f} ms",
         f"{token_count} tok",
         f"{tok_per_sec:.1f} tok/s",
+        mem_cell,
         f"[green]{engine_type}[/green] ({model_name})"
     )
     
@@ -2979,6 +3234,8 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--kickstart", action="store_true", help="Zero-prompt analysis kickstart inferring domain & action plan")
     parser.add_argument("--interview", action="store_true", help="Stakeholder goal & constraint alignment interview")
     parser.add_argument("--brainstorm", action="store_true", help="Autonomous hypothesis generator with executable commands")
+    parser.add_argument("--questions", "-q", action="store_true", help="Generate top 5 strategic business questions with executable %deepanalyze commands")
+    parser.add_argument("--ask", action="store_true", help="Alias for --questions")
     parser.add_argument("--radar", action="store_true", help="Proactive anomaly radar scanning for outliers and drift")
     parser.add_argument("--dag", action="store_true", help="Render AST transformation flow lineage graph")
     parser.add_argument("--gui", action="store_true", help="Interactive in-notebook searchable/sortable data explorer")
@@ -3039,6 +3296,11 @@ def deepanalyze(line, cell=None):
     parser.add_argument("--evolve", action="store_true", help="Adaptive schema drift healer for Polars pipelines")
     parser.add_argument("--brain", action="store_true", help="Biomimetic RAG Institutional Memory inspection")
     
+    # SYSTEM & HARDWARE TELEMETRY FLAGS
+    parser.add_argument("--system", action="store_true", help="Live Mole Apple Silicon system & hardware telemetry dashboard")
+    parser.add_argument("--mo", action="store_true", help="Alias for --system")
+    parser.add_argument("--mem-hud", action="store_true", help="Toggle continuous post-cell live RAM HUD badge in IPython")
+
     # DATA INGESTION & EXPORT FLAGS
     parser.add_argument("--import", dest="import_path", type=str, default=None, help="Import data from path, URL, or 'clip' (clipboard)")
     parser.add_argument("--export", type=str, default=None, help="Export a session variable to disk")
@@ -3073,6 +3335,20 @@ def deepanalyze(line, cell=None):
             parsed_args, remaining_words = parser.parse_known_args(tokens)
             prompt = " ".join(remaining_words).strip()
     except SystemExit:
+        return
+
+    # Smart Target DataFrame Auto-Discovery & Session Namespace Seeding
+    parsed_args.target = _resolve_target_dataframe(ip, requested_target=parsed_args.target, prompt=prompt)
+    _auto_seed_session_namespace(ip, target_name=parsed_args.target)
+
+    if getattr(parsed_args, "mem_hud", False):
+        new_state = mole_telemetry.toggle_memory_hud()
+        state_str = "🟢 ENABLED (Continuous live RAM badge after each cell)" if new_state else "⚪ DISABLED"
+        print(f"🦔 Live Memory HUD toggled: {state_str}")
+        return
+
+    if getattr(parsed_args, "system", False) or getattr(parsed_args, "mo", False) or (prompt and prompt.strip().lower() in ("mo", "system", "mole", "status system")):
+        mole_telemetry.render_mole_dashboard()
         return
 
     if parsed_args.toggle:
@@ -3192,7 +3468,7 @@ def deepanalyze(line, cell=None):
                     else:
                         res_df = res_arrow.to_pandas()
 
-                    target_name = parsed_args.target or "df"
+                    target_name = parsed_args.target
                     _take_snapshot(ip, target=target_name)
                     ip.user_ns[target_name] = res_df
                     print(f"⚡ [DeepAnalyze SQL Engine]: Executed SQL on Arrow buffers. Assigned result to `{target_name}` ({len(res_df)} rows).")
@@ -3201,72 +3477,77 @@ def deepanalyze(line, cell=None):
                     print(f"❌ [SQL Execution Error]: {sql_err}")
                     return
 
-    # --- 8-Engine Specialized Cleaning Suite Handlers ---
-    if parsed_args.ftfy:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.sanitize_unicode_and_mojibake(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "ftfy_unicode_sanitize")
-            print(f"✨ [DeepAnalyze --ftfy]: Unicode & Mojibake sanitized for `{target_name}`.")
-        return
+    # --- Multi-Engine Cleaning & Transformation Execution Pipeline ---
+    has_deterministic_cleaning = any([
+        parsed_args.ftfy, parsed_args.fuzzy_clean, parsed_args.explode,
+        parsed_args.unpivot, parsed_args.convert_units, parsed_args.winsorize,
+        parsed_args.auto_type, parsed_args.stitch, parsed_args.engineer
+    ])
 
-    if parsed_args.fuzzy_clean:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.fuzzy_harmonize_categories(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "fuzzy_dedup")
-            print(f"🔤 [DeepAnalyze --fuzzy-clean]: Categorical entities harmonized for `{target_name}`.")
-        return
+    if has_deterministic_cleaning and ip and parsed_args.target in ip.user_ns:
+        if parsed_args.ftfy:
+            df_clean = cleaners.sanitize_unicode_and_mojibake(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "ftfy_unicode_sanitize")
+            print(f"✨ [DeepAnalyze --ftfy]: Unicode & Mojibake sanitized for `{parsed_args.target}`.")
 
-    if parsed_args.explode:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.explode_nested_json(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "explode_json")
-            print(f"💥 [DeepAnalyze --explode]: Nested JSON unrolled into top-level columns for `{target_name}`.")
-        return
+        if parsed_args.fuzzy_clean:
+            df_clean = cleaners.fuzzy_harmonize_categories(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "fuzzy_dedup")
+            print(f"🔤 [DeepAnalyze --fuzzy-clean]: Categorical entities harmonized for `{parsed_args.target}`.")
 
-    if parsed_args.unpivot:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.unpivot_temporal_matrix(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "unpivot_matrix")
-            print(f"📊 [DeepAnalyze --unpivot]: Wide temporal matrix melted into tidy 2D rows for `{target_name}`.")
-        return
+        if parsed_args.explode:
+            df_clean = cleaners.explode_nested_json(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "explode_json")
+            print(f"💥 [DeepAnalyze --explode]: Nested JSON unrolled into top-level columns for `{parsed_args.target}`.")
 
-    if parsed_args.convert_units:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.normalize_units_and_currencies(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "convert_units")
-            print(f"⚖️ [DeepAnalyze --convert-units]: Mixed units and currencies standardized for `{target_name}`.")
-        return
+        if parsed_args.unpivot:
+            df_clean = cleaners.unpivot_temporal_matrix(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "unpivot_matrix")
+            print(f"📊 [DeepAnalyze --unpivot]: Wide temporal matrix melted into tidy 2D rows for `{parsed_args.target}`.")
 
-    if parsed_args.winsorize:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.winsorize_numeric_outliers(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "winsorize_outliers")
-            print(f"🛡️ [DeepAnalyze --winsorize]: Numeric outliers clipped to 1st/99th percentiles for `{target_name}`.")
-        return
+        if parsed_args.convert_units:
+            df_clean = cleaners.normalize_units_and_currencies(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "convert_units")
+            print(f"⚖️ [DeepAnalyze --convert-units]: Mixed units and currencies standardized for `{parsed_args.target}`.")
 
-    if parsed_args.auto_type:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_clean = cleaners.auto_cast_data_types(ip.user_ns[target_name])
-            ip.user_ns[target_name] = df_clean
-            _register_snapshot(target_name, df_clean, "auto_type_cast")
-            print(f"🏷️ [DeepAnalyze --auto-type]: Data types and booleans asserted for `{target_name}`.")
-        return
+        if parsed_args.winsorize:
+            df_clean = cleaners.winsorize_numeric_outliers(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "winsorize_outliers")
+            print(f"🛡️ [DeepAnalyze --winsorize]: Numeric outliers clipped to 1st/99th percentiles for `{parsed_args.target}`.")
+
+        if parsed_args.auto_type:
+            df_clean = cleaners.auto_cast_data_types(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = df_clean
+            _register_snapshot(parsed_args.target, df_clean, "auto_type_cast")
+            print(f"🏷️ [DeepAnalyze --auto-type]: Data types and booleans asserted for `{parsed_args.target}`.")
+
+        if parsed_args.engineer:
+            fe_df, fe_log = feature_forge.auto_engineer_features(ip.user_ns[parsed_args.target])
+            ip.user_ns[parsed_args.target] = fe_df
+            _register_snapshot(parsed_args.target, fe_df, "auto_feature_engineer")
+            print(f"⚡ [DeepAnalyze --engineer]: Synthesized {fe_log['engineered_features_created']} new features for `{parsed_args.target}` ({fe_df.shape[1]} total columns).")
+
+        if parsed_args.stitch:
+            session_dfs = {k: v for k, v in ip.user_ns.items() if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl is not None and isinstance(v, (pl.DataFrame, pl.LazyFrame))))}
+            if len(session_dfs) >= 2:
+                stitched_df, log = cleaners.auto_stitch_dataframes(session_dfs)
+                ip.user_ns[parsed_args.target] = stitched_df
+                _register_snapshot(parsed_args.target, stitched_df, "auto_stitch")
+                console.print(Panel("\n".join(log), title="🔗 [bold green]DeepAnalyze Relational Stitcher[/bold green]", border_style="green"))
+            else:
+                console.print(Panel(f"Only 1 DataFrame `{parsed_args.target}` present. No join necessary.", title="🔗 [bold green]DeepAnalyze Relational Stitcher[/bold green]", border_style="green"))
+
+        if not prompt:
+            return
 
     if parsed_args.unravel:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_clean = cleaners.unravel_hierarchical_erp_report(ip.user_ns[target_name])
             ip.user_ns[target_name] = df_clean
@@ -3274,24 +3555,8 @@ def deepanalyze(line, cell=None):
             print(f"📑 [DeepAnalyze --unravel]: Hierarchical ERP report unrolled into normalized 2D table for `{target_name}` ({df_clean.shape[0]} rows x {df_clean.shape[1]} cols).")
         return
 
-    if parsed_args.stitch:
-        session_dfs = {}
-        if ip and hasattr(ip, "user_ns"):
-            for k, v in ip.user_ns.items():
-                if not k.startswith("_") and (isinstance(v, pd.DataFrame) or (pl and isinstance(v, pl.DataFrame))):
-                    session_dfs[k] = v
-        if session_dfs:
-            stitched_df, log = cleaners.auto_stitch_dataframes(session_dfs)
-            out_target = parsed_args.target if parsed_args.target != "df" else "stitched_df"
-            ip.user_ns[out_target] = stitched_df
-            _register_snapshot(out_target, stitched_df, "auto_stitch")
-            console.print(Panel("\n".join(log), title="🔗 [bold green]DeepAnalyze Relational Stitcher[/bold green]", border_style="green"))
-        else:
-            print("[DeepAnalyze --stitch]: No DataFrames found in session to stitch.")
-        return
-
     if parsed_args.stats:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             hyp_res = statistical_engine.run_hypothesis_battery(df_obj)
@@ -3302,7 +3567,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.story:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             memo = storyteller.generate_executive_memo(df_obj)
@@ -3311,18 +3576,8 @@ def deepanalyze(line, cell=None):
             console.print(Panel(f"Executive Headline:\n{memo['headline']}\n\nBriefing Exported: {brief_path}", title="🏛️ [bold cyan]DeepAnalyze Storyteller Memo[/bold cyan]", border_style="cyan"))
         return
 
-    if parsed_args.engineer:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
-        if ip and target_name in ip.user_ns:
-            df_obj = ip.user_ns[target_name]
-            fe_df, fe_log = feature_forge.auto_engineer_features(df_obj)
-            ip.user_ns[target_name] = fe_df
-            _register_snapshot(target_name, fe_df, "auto_feature_engineer")
-            print(f"⚡ [DeepAnalyze --engineer]: Synthesized {fe_log['engineered_features_created']} new features for `{target_name}` ({fe_df.shape[1]} total columns).")
-        return
-
     if parsed_args.forecast:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             fc_res = forecaster.auto_forecast_series(df_obj, horizon=14)
@@ -3335,7 +3590,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.drift:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             curr_df = ip.user_ns[target_name]
             ref_df = _DF_SNAPSHOTS.get(target_name, [curr_df])[0]
@@ -3344,7 +3599,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.schema:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             ddl = schema_synthesizer.infer_sql_schema(df_obj, table_name=target_name, dialect="duckdb")
@@ -3352,7 +3607,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.synthetic:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             synth_df = synthetic_data.generate_synthetic_clone(df_obj)
@@ -3365,7 +3620,7 @@ def deepanalyze(line, cell=None):
 
     # V3.0 REVOLUTIONARY CAPABILITY DISPATCH HANDLERS
     if parsed_args.why is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             cond = None if parsed_args.why == "default" else parsed_args.why
@@ -3381,7 +3636,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.debate:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             deb_res = debate_router.generate_debate_analysis(df_obj, goal=prompt or "Strategic Evaluation")
@@ -3390,7 +3645,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.falsify:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             fals_res = debate_router.run_falsification_battery(df_obj)
@@ -3400,13 +3655,13 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.pipeline:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         script_path = pipeline_compiler.compile_production_pipeline_script(target_name=target_name, output_path="./pipeline.py")
         console.print(Panel(f"Compiled standalone production ETL script:\n[bold green]{script_path}[/bold green]\n\nRun in terminal via:\n`python pipeline.py --input raw_data.csv --output ./output.parquet`", title="🏭 [bold green]DeepAnalyze Production ETL Compiler[/bold green]", border_style="green"))
         return
 
     if parsed_args.report:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             rep_path = pipeline_compiler.generate_self_contained_html_report(df_obj, charts_dir="./charts", title=f"Executive Brief: {target_name}", output_path=f"./charts/{target_name}_executive_report.html")
@@ -3414,7 +3669,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.enrich is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             en_df, en_log = enricher.enrich_dataset_async(df_obj, enrich_type=parsed_args.enrich)
@@ -3424,7 +3679,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.semantic is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             sem_df = enricher.filter_by_semantic_meaning(df_obj, query=parsed_args.semantic)
@@ -3435,7 +3690,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.causal:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             causal_res = causal_engine.estimate_treatment_effect(df_obj)
@@ -3446,17 +3701,17 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.auto_feat is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
-            ef_df, ef_log = feature_forge.ensemble_feature_discovery(df_obj)
-            ip.user_ns[target_name] = ef_df
-            _register_snapshot(target_name, ef_df, "ensemble_feature_discovery")
-            console.print(Panel(f"Committed Top-5 Orthogonal Ensemble Features to `{target_name}`:\n{ef_log.get('ensemble_selected_top_5', ef_log.get('new_feature_names', []))}", title="⚡ [bold yellow]DeepAnalyze Ensemble Feature Discovery[/bold yellow]", border_style="yellow"))
+            feat_df, feat_log = feature_forge.ensemble_feature_discovery(df_obj, target_col=parsed_args.auto_feat if parsed_args.auto_feat != "ensemble" else None)
+            ip.user_ns[target_name] = feat_df
+            _register_snapshot(target_name, feat_df, "auto_feature_discovery")
+            console.print(Panel(f"Feature Discovery Factory committed top orthogonal features for `{target_name}` ({feat_df.shape[1]} total columns).", title="✨ [bold green]DeepAnalyze Feature Factory[/bold green]", border_style="green"))
         return
 
     if parsed_args.twin is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             twin_df = synthetic_data.generate_adversarial_digital_twin(df_obj)
@@ -3467,7 +3722,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.weave is not None:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         right_name = parsed_args.weave
         if ip and target_name in ip.user_ns and right_name in ip.user_ns:
             df_l = ip.user_ns[target_name]
@@ -3480,7 +3735,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.solve:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             df_obj = ip.user_ns[target_name]
             opt_df, opt_log = optimizer.solve_resource_allocation_lp(df_obj)
@@ -3491,7 +3746,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.evolve:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if ip and target_name in ip.user_ns:
             curr_df = ip.user_ns[target_name]
             ref_df = _DF_SNAPSHOTS.get(target_name, [curr_df])[0] if isinstance(_DF_SNAPSHOTS.get(target_name), list) else _DF_SNAPSHOTS.get(target_name, curr_df)
@@ -3503,7 +3758,7 @@ def deepanalyze(line, cell=None):
 
     if parsed_args.brain:
         b = brain.get_brain()
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         df_obj = ip.user_ns.get(target_name) if ip else None
         ctx = b.get_context_injection(df_obj) if df_obj is not None else {}
         console.print(Panel(f"Biomimetic RAG Institutional Memory:\n• Geometry Hash: {ctx.get('geometry_hash', 'N/A')}\n• Hardware OOM Reflex (DuckDB stream fallback): {ctx.get('hardware_reflex_duckdb_stream', False)}\n• Verified Truths In Memory: {len(b.memory.get('epistemic_facts', {}))}\n• Delta Logs Recorded: {len(b.memory.get('delta_logs', []))}", title="🧠 [bold magenta]DeepAnalyze Biomimetic RAG Brain[/bold magenta]", border_style="magenta"))
@@ -3513,13 +3768,13 @@ def deepanalyze(line, cell=None):
     if parsed_args.import_path:
         _handle_import(ip, parsed_args)
         if parsed_args.eda:
-            target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+            target_name = parsed_args.target
             _run_eda_lifecycle(ip, target_name, parsed_args, user_prompt=prompt)
         return
 
     # Autonomous 10-Stage EDA Lifecycle (--EDA)
     if parsed_args.eda:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         _run_eda_lifecycle(ip, target_name, parsed_args, user_prompt=prompt)
         return
 
@@ -3566,7 +3821,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.radar and not prompt:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         target_df = ip.user_ns.get(target_name) if ip else None
         if target_df is not None:
             anomalies = _scan_for_anomalies(_DF_SNAPSHOTS.get(target_name), target_df, target_name=target_name)
@@ -3580,7 +3835,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.spark and not prompt:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         target_df = ip.user_ns.get(target_name) if ip else None
         if target_df is not None:
             _render_sparkline_minimap(target_df, target_name=target_name)
@@ -3589,7 +3844,7 @@ def deepanalyze(line, cell=None):
         return
 
     if parsed_args.dag and not prompt:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if _LAST_GENERATED_CODE:
             _render_transformation_dag(_LAST_GENERATED_CODE, target_name=target_name)
         else:
@@ -3597,16 +3852,22 @@ def deepanalyze(line, cell=None):
         return
 
     if (parsed_args.diff or parsed_args.diff_stats) and not prompt:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         target_df = ip.user_ns.get(target_name) if ip else None
         orig_df = _DF_SNAPSHOTS.get(target_name, [target_df])[0] if isinstance(_DF_SNAPSHOTS.get(target_name), list) else target_df
         if target_df is not None:
             _render_state_diff_hud(orig_df, target_df, target_name=target_name, show_stats=parsed_args.diff_stats)
         return
 
+    # Semantic Auto-Sanitizer (--auto-clean)
+    if parsed_args.auto_clean:
+        parsed_args.preview = True
+        if not prompt:
+            prompt = f"Audit, sanitize, and fix datatypes, mixed date formats, and clean all columns for `{parsed_args.target}`"
+
     # Default prompts for standalone action flags when user provides no text
     if not prompt:
-        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        target_name = parsed_args.target
         if primary_skill == "profile":
             prompt = f"Generate statistical summary and data profiling for `{target_name}`"
         elif primary_skill == "insight":
@@ -3709,6 +3970,25 @@ def deepanalyze(line, cell=None):
         _ACTIVE_ROADMAP["phase"] = max(_ACTIVE_ROADMAP.get("phase", 1), 3)
         return
 
+    # Strategic Business Question Generator (--questions / --ask)
+    if getattr(parsed_args, "questions", False) or getattr(parsed_args, "ask", False) or (prompt and prompt.strip().lower() in ("questions", "ask", "what to ask", "faq", "what should i ask", "generate questions")):
+        target_name = parsed_args.target if parsed_args.target != "df" else _ACTIVE_ROADMAP.get("target_df", "df")
+        q_sys = (
+            "You are a Chief Analytics Officer and Strategic Quantitative Lead. "
+            "Inspect the dataset schema, column names, continuous/categorical distributions, and data types. "
+            "Formulate the top 5 most critical business and statistical questions a stakeholder should ask about this dataset. "
+            "For each question:\n"
+            "1. Title the question with a bold numbered heading (e.g. `### 1. Revenue Concentration & Churn Risk Exposure`)\n"
+            "2. Provide a 1-2 sentence rationale detailing the strategic business/operational value.\n"
+            "3. Underneath, output the exact, executable `%deepanalyze -x ...` command to immediately answer it in the notebook."
+        )
+        q_prompt = f"Target DataFrame: `{target_name}`\n\nActive Workspace Context:\n{env_context}\n\nFormulate top 5 prioritized strategic business questions with executable %deepanalyze commands."
+        raw_q = _call_llm(q_prompt, q_sys, temp=0.3, max_tokens=1800, target_model=active_model)
+        clean_q = re.sub(r'<think>.*?</think>', '', raw_q, flags=re.DOTALL | re.IGNORECASE).strip()
+        console.print(Panel(clean_q, title=f"💡 [bold cyan]DeepAnalyze Strategic Business Questions: `{target_name}`[/bold cyan]", border_style="cyan"))
+        _ACTIVE_ROADMAP["hypotheses"] = [line.strip() for line in clean_q.splitlines() if line.strip().startswith(("%deepanalyze", "1.", "2.", "3.", "4.", "5.", "Q1:", "Q2:", "Q3:"))]
+        return
+
     # Semantic Auto-Sanitizer (--auto-clean)
     if parsed_args.auto_clean:
         parsed_args.preview = True
@@ -3807,14 +4087,14 @@ def deepanalyze(line, cell=None):
         
         # ⚡ 0ms Structural Query Cache Lookup
         b = brain.get_brain()
-        cached_ast = b.get_cached_query(prompt, target_obj) if (prompt and not parsed_args.is_continuation and not parsed_args.auto_clean) else None
+        cached_ast = b.get_cached_query(prompt, target_obj) if (prompt and not parsed_args.is_continuation) else None
 
         if cached_ast:
             code = cached_ast
             narrative = ""
             token_count = 0
             console.print(Panel(f"Retrieved verified AST for query: [italic]{prompt}[/italic]", title="⚡ [bold green]DeepAnalyze 0ms Structural Cache Hit[/bold green]", border_style="green"))
-        elif not parsed_args.auto_clean:
+        else:
             try:
                 raw_output = _call_llm(
                     full_prompt, system_prompt, temp=temp, max_tokens=max_tokens,
@@ -3826,10 +4106,8 @@ def deepanalyze(line, cell=None):
                 raw_output = _call_llm(full_prompt, system_prompt, temp=temp, max_tokens=max_tokens, target_model=active_model)
             code, narrative = _extract_deepanalyze_content(raw_output)
             token_count = len(raw_output) // 4
-        else:
-            token_count = len(raw_clean) // 4
         
-        duration = time.time() - start_time
+        duration = max(time.time() - start_time, 0.001)
         engine_used = "Polars ⚡" if (pl is not None and "polars" in env_context.lower()) else "Pandas 🐼"
         
         _display_metrics(duration, token_count, engine_used, active_model)
@@ -3842,7 +4120,7 @@ def deepanalyze(line, cell=None):
             return
 
         if code:
-            is_valid, clean_code, lint_error = _lint_and_format_code(code, available_vars)
+            is_valid, clean_code, lint_error = _lint_and_format_code(code, available_vars, target_name=parsed_args.target, target_obj=target_obj)
 
             if not is_valid and clean_code:
                 print(f"[DeepAnalyze Pre-Flight Catch]: {lint_error}. Auto-repairing...")
@@ -3853,7 +4131,7 @@ def deepanalyze(line, cell=None):
                 )
                 fixed_raw = _call_llm(repair_prompt, system_prompt, temp=0.0, max_tokens=max_tokens, target_model=active_model)
                 fixed_code, _ = _extract_deepanalyze_content(fixed_raw)
-                is_valid_repair, rep_code, _ = _lint_and_format_code(fixed_code, available_vars)
+                is_valid_repair, rep_code, _ = _lint_and_format_code(fixed_code, available_vars, target_name=parsed_args.target, target_obj=target_obj)
                 if is_valid_repair and rep_code:
                     clean_code = rep_code
                     is_valid = True
@@ -4203,11 +4481,13 @@ def deepanalyze(line, cell=None):
                         print("\n" + "-" * 40)
 
                 else:
+                    if not is_valid and clean_code:
+                        _, clean_code, _ = _lint_and_format_code(clean_code, available_vars, target_name=parsed_args.target, target_obj=target_obj)
                     ip.set_next_input(clean_code)
                     if parsed_args.spark and ip and parsed_args.target in ip.user_ns:
                         _render_sparkline_minimap(ip.user_ns.get(parsed_args.target), target_name=parsed_args.target)
                     if not is_valid:
-                        print(f"[DeepAnalyze Warning]: Static validation issue: {lint_error}. Code placed below.")
+                        print(f"[DeepAnalyze Pre-Flight Catch]: Healed code placed below. Press Enter to run.")
                     else:
                         print("[DeepAnalyze]: Verified code placed below. Press Enter to run.")
 

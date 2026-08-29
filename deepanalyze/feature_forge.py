@@ -44,6 +44,22 @@ def auto_engineer_features(df, target_col: str = None, max_new_features: int = 2
     pdf = df.to_pandas() if hasattr(df, 'to_pandas') else df.copy()
     initial_cols = list(pdf.columns)
     new_cols_created = []
+    import re
+    # 0. Compound Slash / Blood Pressure Decomposition
+    slash_pattern = re.compile(r'^\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*$')
+    for c in list(pdf.columns):
+        if pdf[c].dtype == object or pdf[c].dtype == "string":
+            sample_vals = [str(v).strip() for v in pdf[c].dropna().head(20).tolist() if str(v).strip()]
+            if len(sample_vals) >= 2 and all(slash_pattern.match(v) for v in sample_vals):
+                col_base = c.replace(" ", "_")
+                is_bp = any(k in c.lower() for k in ("blood", "pressure", "bp"))
+                name1 = f"{col_base}_Systolic" if is_bp else f"{col_base}_1"
+                name2 = f"{col_base}_Diastolic" if is_bp else f"{col_base}_2"
+                splits = pdf[c].astype(str).str.split('/', expand=True)
+                if splits.shape[1] >= 2:
+                    pdf[name1] = pd.to_numeric(splits[0], errors='coerce')
+                    pdf[name2] = pd.to_numeric(splits[1], errors='coerce')
+                    new_cols_created.extend([name1, name2])
 
     # 1. Temporal & Date Decomposition
     date_cols = [c for c in pdf.columns if pd.api.types.is_datetime64_any_dtype(pdf[c]) or 'date' in c.lower()]

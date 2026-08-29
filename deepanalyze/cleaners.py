@@ -412,18 +412,59 @@ def parse_mixed_datetime_series(s_series) -> pd.Series:
 
 
 # =============================================================================
+def split_compound_slash_columns(df_obj):
+    """Splits compound slash ratio columns (e.g. '120/80' Blood Pressure) into distinct numeric columns."""
+    slash_pattern = re.compile(r'^\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*$')
+    
+    if pl is not None and isinstance(df_obj, pl.DataFrame):
+        df = df_obj.clone()
+        for col in df.columns:
+            if df.schema[col] in (pl.String, pl.Utf8, pl.Categorical):
+                sample_vals = [str(v).strip() for v in df[col].drop_nulls().head(20).to_list() if v]
+                if len(sample_vals) >= 2 and all(slash_pattern.match(v) for v in sample_vals):
+                    col_base = col.replace(" ", "_")
+                    is_bp = any(k in col.lower() for k in ("blood", "pressure", "bp"))
+                    name1 = f"{col_base}_Systolic" if is_bp else f"{col_base}_1"
+                    name2 = f"{col_base}_Diastolic" if is_bp else f"{col_base}_2"
+                    df = df.with_columns(
+                        pl.col(col).str.split("/").list.get(0).cast(pl.Float64, strict=False).alias(name1),
+                        pl.col(col).str.split("/").list.get(1).cast(pl.Float64, strict=False).alias(name2)
+                    )
+        return df
+    elif isinstance(df_obj, pd.DataFrame):
+        df = df_obj.copy()
+        for col in df.columns:
+            if df[col].dtype == object or df[col].dtype == "string":
+                sample_vals = [str(v).strip() for v in df[col].dropna().head(20).tolist() if v]
+                if len(sample_vals) >= 2 and all(slash_pattern.match(v) for v in sample_vals):
+                    col_base = col.replace(" ", "_")
+                    is_bp = any(k in col.lower() for k in ("blood", "pressure", "bp"))
+                    name1 = f"{col_base}_Systolic" if is_bp else f"{col_base}_1"
+                    name2 = f"{col_base}_Diastolic" if is_bp else f"{col_base}_2"
+                    splits = df[col].astype(str).str.split('/', expand=True)
+                    if splits.shape[1] >= 2:
+                        df[name1] = pd.to_numeric(splits[0], errors='coerce')
+                        df[name2] = pd.to_numeric(splits[1], errors='coerce')
+        return df
+    return df_obj
+
+
+# =============================================================================
 # 7. AUTOMATIC DATA TYPE & BOOLEAN ASSERTER (--auto-type)
 # =============================================================================
 def auto_cast_data_types(df_obj):
     """Coerces string columns to booleans, floats, integers, or datetimes without losing data."""
     bool_true = {"true", "t", "yes", "y", "1"}
     bool_false = {"false", "f", "no", "n", "0"}
+    slash_pattern = re.compile(r'^\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*$')
 
     if pl is not None and isinstance(df_obj, pl.DataFrame):
+        # 1. First split any compound slash columns like Blood Pressure
+        df_obj = split_compound_slash_columns(df_obj)
         pdf = df_obj.to_pandas()
         for col in pdf.columns:
             if not pd.api.types.is_numeric_dtype(pdf[col]) and not pd.api.types.is_datetime64_any_dtype(pdf[col]):
-                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist()]
+                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist() if str(v).strip()]
                 if not sample_vals:
                     continue
                 # 1. Check Boolean
@@ -434,9 +475,12 @@ def auto_cast_data_types(df_obj):
                     coerced = pdf[col].map(sanitize_dirty_numeric_series)
                     if coerced.notna().sum() >= len(pdf) * 0.5:
                         pdf[col] = pd.to_numeric(coerced, errors='coerce')
-                # 3. Check Datetime
-                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}', str(v)) for v in sample_vals):
-                    parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
+                # 3. Check Datetime (supports ISO, US, EU, and full month names)
+                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|[a-zA-Z]+\s+\d{1,2},\s*\d{4}', str(v)) for v in sample_vals):
+                    try:
+                        parsed_dt = pd.to_datetime(pdf[col], errors='coerce', format='mixed')
+                    except Exception:
+                        parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
                     if parsed_dt.notna().sum() >= len(pdf) * 0.5:
                         pdf[col] = parsed_dt
                 # 4. Standard float/int cast
@@ -449,10 +493,10 @@ def auto_cast_data_types(df_obj):
                         pass
         return pl.from_pandas(pdf)
     elif isinstance(df_obj, pd.DataFrame):
-        pdf = df_obj.copy()
+        pdf = split_compound_slash_columns(df_obj)
         for col in pdf.columns:
             if not pd.api.types.is_numeric_dtype(pdf[col]) and not pd.api.types.is_datetime64_any_dtype(pdf[col]):
-                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist()]
+                sample_vals = [str(v).strip() for v in pdf[col].dropna().head(20).tolist() if str(v).strip()]
                 if not sample_vals:
                     continue
                 if set(v.lower() for v in sample_vals).issubset(bool_true | bool_false):
@@ -461,8 +505,11 @@ def auto_cast_data_types(df_obj):
                     coerced = pdf[col].map(sanitize_dirty_numeric_series)
                     if coerced.notna().sum() >= len(pdf) * 0.5:
                         pdf[col] = pd.to_numeric(coerced, errors='coerce')
-                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}', str(v)) for v in sample_vals):
-                    parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
+                elif any(re.search(r'\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|[a-zA-Z]+\s+\d{1,2},\s*\d{4}', str(v)) for v in sample_vals):
+                    try:
+                        parsed_dt = pd.to_datetime(pdf[col], errors='coerce', format='mixed')
+                    except Exception:
+                        parsed_dt = pd.to_datetime(pdf[col], errors='coerce')
                     if parsed_dt.notna().sum() >= len(pdf) * 0.5:
                         pdf[col] = parsed_dt
                 else:

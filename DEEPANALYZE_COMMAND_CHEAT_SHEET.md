@@ -40,6 +40,9 @@ A complete, practical reference guide for using DeepAnalyze (`%deepanalyze`) acr
 | **Dual Memory Vault**| `--vault`, `--memory` | Inspect 1,200+ schema blueprints & 500K knowledge recipes | `%deepanalyze --vault` |
 | **Vault Search** | `--vault-search "<q>"` | Search 500,000 data science solution recipes | `%deepanalyze --vault-search "clean driver tables"` |
 | **Vault Ingestion** | `--vault-build` | Index JSON trajectory datasets from `memorey_vault/` | `%deepanalyze --vault-build` |
+| **Questions** | `--questions`, `--ask`, `-q` | Strategic Business Question Generator formulating top 5 inquiries | `%deepanalyze --questions --target health_pl` |
+| **Mole Dashboard**| `--system`, `--mo` | Live Rich TUI Apple Silicon & hardware dashboard in IPython | `%deepanalyze --system` |
+| **Live RAM HUD** | `--mem-hud` | Toggle continuous live post-cell RAM badge in IPython | `%deepanalyze --mem-hud` |
 | **Safety** | `--preview` | Ghost execution without mutating session state | `%deepanalyze --preview "Filter outliers"` |
 | **Safety** | `--undo` | 5-level LIFO rollback to previous snapshots | `%deepanalyze --undo --target df` |
 | **Server CLI** | `deepanalyze server`| Universal cross-platform server launcher | `deepanalyze server start --port 8080` |
@@ -105,6 +108,14 @@ You **never need to memorize or select individual cleaning flags**. DeepAnalyze 
 
 # Autonomous hypothesis generator
 %deepanalyze --brainstorm --target sales_df
+
+# Strategic Business Question Generator (formulates top 5 prioritized inquiries with executable commands)
+%deepanalyze --questions --target customer_df
+# or %deepanalyze --ask
+
+# Live Mole Apple Silicon & host hardware TUI dashboard
+%deepanalyze --system
+# or %deepanalyze --mo
 ```
 
 ---

@@ -52,6 +52,7 @@ def test_openai_provider_detection(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-fake123")
 
     info = _resolve_cloud_provider_info()
@@ -68,6 +69,28 @@ def test_openrouter_provider_detection(monkeypatch):
     assert info is not None
     assert info["provider"] == "OpenRouter"
     assert "openrouter.ai" in info["base_url"]
+
+
+def test_deepseek_provider_detection(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-fake123")
+
+    info = _resolve_cloud_provider_info()
+    assert info is not None
+    assert info["provider"] == "DeepSeek"
+    assert "deepseek.com" in info["base_url"]
+    assert info["pro_model"] == "deepseek-chat"
+    assert info["think_model"] == "deepseek-reasoner"
+
+
+def test_openai_localhost_bypass(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-local-dummy-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+
+    info = _resolve_cloud_provider_info()
+    assert info is None  # Should bypass and use local engine
 
 
 def test_flags_registered():

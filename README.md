@@ -80,6 +80,10 @@ Unlike standard code-generation assistants, DeepAnalyze operates as a closed-loo
 * **Notebook Artifact Spawner (`--spawn`):** Injects formatted Markdown narrative cells and validated Code cells directly below the active cell.
 * **Transactional State Rollback (`--undo`):** Automated deepcopy (Pandas) or instant zero-copy clone (Polars) prior to execution, enabling instant state rollback and safe experimentation with zero RAM overhead.
 * **Semantic Schema Dictionaries (`--context`):** Inject external business logic schemas (Markdown/JSON) into the LLM context for domain-aware code generation.
+* **Strategic Business Question Generator (`--questions`, `--ask`, `-q`):** Inspects the active DataFrame schema and distributions, automatically formulating the top 5 prioritized business inquiries with ready-to-run `%deepanalyze -x ...` commands.
+* **Mole Apple Silicon Hardware & System Telemetry (`--system`, `--mo`):** Live Rich dual-column TUI dashboard in IPython displaying host architecture (Apple M2 4P+4E), GPU cores, per-core CPU load, RAM/Swap metrics, disk I/O, thermals, battery power, and top processes.
+* **Permanent Live RAM Telemetry & Micro-HUD (`--mem-hud`):** Live RAM headroom automatically rendered in the Telemetry Box on every query and as a continuous post-run cell badge in IPython.
+* **Infallible Undefined Variable Guard & AST Healer:** 5-layer safety architecture that eliminates `NameError` through session namespace auto-seeding, single DataFrame auto-discovery, AST variable remapping, header auto-import injection, and pre-flight linter auto-healing.
 
 ---
 
