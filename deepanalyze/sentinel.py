@@ -106,18 +106,111 @@ class SemanticSentinel:
             finally:
                 client.close()
 
-        # Offline heuristic fallback for names and relations
+        # Enhanced offline contextual NER scanner (names, institutions, addresses, relations)
         entities = set()
-        title_pattern = re.compile(r"\b(Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)")
-        relation_pattern = re.compile(r"\b(mother|father|wife|husband|son|daughter|brother|sister)\s+([A-Z][a-z]+)\b", re.I)
+        title_pattern = re.compile(
+            r"\b(Mr\.|Mrs\.|Ms\.|Dr\.|Doctor|Prof\.|Professor|Eng\.|Engineer|Sheikh|Shaikh|Ustadh|Sayyid|Sayed|Haji|Nurse|Officer)\s+"
+            r"([A-Z\u0621-\u064A][\w\'-]+(?:\s+(?:bin|bint|al-|ibn|el-)?[A-Z\u0621-\u064A][\w\'-]+)*)",
+            re.UNICODE
+        )
+        relation_pattern = re.compile(
+            r"\b(mother|father|wife|husband|son|daughter|brother|sister|guardian|patient|client|customer|physician)\s+"
+            r"(?:of\s+|named\s+)?([A-Z\u0621-\u064A][\w\'-]+(?:\s+[A-Z\u0621-\u064A][\w\'-]+)?)",
+            re.I | re.UNICODE
+        )
+        org_pattern = re.compile(
+            r"\b([A-Z\u0621-\u064A][\w\'-]+(?:\s+[A-Z\u0621-\u064A][\w\'-]+)*\s+"
+            r"(?:Hospital|Clinic|Medical Center|Health Center|Sanatorium|Infirmary|University|College|Ministry|Authority|Company|Corporation|Corp|Ltd|LLC))\b",
+            re.UNICODE
+        )
+        address_pattern = re.compile(
+            r"\b(\d+\s+[A-Z\u0621-\u064A][\w\'-]+(?:\s+[A-Z\u0621-\u064A][\w\'-]+)*\s+"
+            r"(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Highway|Hwy|Lane|Ln|Drive|Dr)|P\.?O\.?\s*Box\s*\d+)\b",
+            re.I | re.UNICODE
+        )
 
         for text in text_samples:
+            if not isinstance(text, str):
+                continue
             for match in title_pattern.finditer(text):
                 entities.add(match.group(2))
             for match in relation_pattern.finditer(text):
                 entities.add(match.group(2))
+            for match in org_pattern.finditer(text):
+                entities.add(match.group(1))
+            for match in address_pattern.finditer(text):
+                entities.add(match.group(1))
 
         return list(entities)
+
+    def scan_and_mask_free_text(self, text: str) -> Tuple[str, List[Dict[str, str]]]:
+        """Scans an unstructured paragraph and replaces embedded entities with contextual surrogates."""
+        if not text or not isinstance(text, str):
+            return text, []
+
+        detected: List[Dict[str, str]] = []
+        masked = text
+
+        # 1. Email addresses inside text
+        email_re = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+        for i, m in enumerate(email_re.finditer(text), 1):
+            detected.append({"type": "EMAIL", "original": m.group(0), "surrogate": f"<EMAIL_{i}>"})
+        masked = email_re.sub("<EMAIL_REDACTED>", masked)
+
+        # 2. Embedded phone numbers
+        phone_re = re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+        for i, m in enumerate(phone_re.finditer(text), 1):
+            detected.append({"type": "PHONE", "original": m.group(0), "surrogate": f"<PHONE_{i}>"})
+        masked = phone_re.sub("<PHONE_REDACTED>", masked)
+
+        # 3. Medical/Institutional organizations
+        org_re = re.compile(
+            r"\b([A-Z\u0621-\u064A][\w\'-]+(?:\s+[A-Z\u0621-\u064A][\w\'-]+)*\s+"
+            r"(?:Hospital|Clinic|Medical Center|Health Center|Sanatorium|Infirmary|University|College|Ministry|Authority|Company|Corporation|Corp|Ltd|LLC))\b"
+        )
+        for i, m in enumerate(org_re.finditer(masked), 1):
+            detected.append({"type": "ORG", "original": m.group(1), "surrogate": f"<ORG_{i}>"})
+        masked = org_re.sub("<ORGANIZATION_REDACTED>", masked)
+
+        # 4. Personal Names with titles or honorifics
+        title_name_re = re.compile(
+            r"\b(Mr\.|Mrs\.|Ms\.|Dr\.|Doctor|Prof\.|Professor|Eng\.|Engineer|Sheikh|Shaikh|Ustadh|Sayyid|Sayed|Haji|Nurse|Officer)\s+"
+            r"([A-Z\u0621-\u064A][\w\'-]+(?:\s+(?:bin|bint|al-|ibn|el-)?[A-Z\u0621-\u064A][\w\'-]+)*)"
+        )
+        for i, m in enumerate(title_name_re.finditer(masked), 1):
+            detected.append({"type": "PERSON", "original": m.group(0), "surrogate": f"<PERSON_{i}>"})
+        masked = title_name_re.sub(r"\1 <PERSON_REDACTED>", masked)
+
+        # 4b. Relational names (e.g. brother Ahmed Al-Ghamdi, wife Sarah)
+        rel_name_re = re.compile(
+            r"\b(mother|father|wife|husband|son|daughter|brother|sister|guardian|patient|client|customer|physician)\s+"
+            r"(?:of\s+|named\s+)?([A-Z\u0621-\u064A][\w\'-]+(?:\s+(?:bin|bint|al-|ibn|el-)?[A-Z\u0621-\u064A][\w\'-]+)*)",
+            re.I
+        )
+        for i, m in enumerate(rel_name_re.finditer(masked), 1):
+            detected.append({"type": "PERSON", "original": m.group(2), "surrogate": f"<PERSON_REL_{i}>"})
+        masked = rel_name_re.sub(r"\1 <PERSON_REDACTED>", masked)
+
+        # 4c. Arabic and composite multi-part personal names (e.g. Ahmed Al-Ghamdi, Mohammed bin Salman)
+        arabic_comp_re = re.compile(
+            r"\b([A-Z\u0621-\u064A][a-z\u0621-\u064A]+\s+(?:bin|bint|al-|ibn|el-)[A-Z\u0621-\u064A][\w\'-]+)\b",
+            re.I
+        )
+        for i, m in enumerate(arabic_comp_re.finditer(masked), 1):
+            detected.append({"type": "PERSON", "original": m.group(0), "surrogate": f"<PERSON_COMP_{i}>"})
+        masked = arabic_comp_re.sub("<PERSON_REDACTED>", masked)
+
+        # 5. Addresses & Streets
+        addr_re = re.compile(
+            r"\b(\d+\s+[A-Z\u0621-\u064A][\w\'-]+(?:\s+[A-Z\u0621-\u064A][\w\'-]+)*\s+"
+            r"(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Highway|Hwy|Lane|Ln|Drive|Dr|Terrace|Ter|Way|Court|Ct|Circle|Cir)|P\.?O\.?\s*Box\s*\d+)\b",
+            re.I
+        )
+        for i, m in enumerate(addr_re.finditer(masked), 1):
+            detected.append({"type": "LOCATION", "original": m.group(1), "surrogate": f"<LOC_{i}>"})
+        masked = addr_re.sub("<ADDRESS_REDACTED>", masked)
+
+        return masked, detected
 
     # =========================================================================
     # TASK 2: STRUCTURAL ERP GEOMETRY MASKING & PATTERN SUMMARIES
@@ -341,6 +434,33 @@ class SemanticSentinel:
             null_ratio = series.null_count() / max(len(series), 1)
             col_lower = col.lower()
 
+            # Pre-compute DP statistics if numeric
+            is_numeric = dtype in (
+                pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+                pl.Float32, pl.Float64
+            )
+            dp_median = 50.0
+            dp_scale = 10.0
+            all_non_negative = True
+
+            if is_numeric:
+                try:
+                    non_nulls = series.drop_nulls()
+                    if len(non_nulls) > 0:
+                        med = float(non_nulls.median())
+                        q25 = float(non_nulls.quantile(0.25))
+                        q75 = float(non_nulls.quantile(0.75))
+                        raw_iqr = max(1.0, q75 - q25)
+                        all_non_negative = bool((non_nulls >= 0).all())
+
+                        # Laplace perturbation on scale with epsilon = 1.0
+                        epsilon = 1.0
+                        b = max(0.5, raw_iqr / epsilon)
+                        dp_median = med
+                        dp_scale = b
+                except Exception:
+                    pass
+
             for i in range(n_rows):
                 if random.random() < null_ratio and null_ratio > 0.05:
                     mock_data[col].append(None)
@@ -350,15 +470,25 @@ class SemanticSentinel:
                     if "id" in col_lower:
                         mock_data[col].append(1000 + i + 1)
                     elif "age" in col_lower:
-                        mock_data[col].append(25 + (i * 7) % 45)
+                        # DP perturbed age
+                        laplace_noise = (random.expovariate(1.0 / 5.0) if random.random() < 0.5 else -random.expovariate(1.0 / 5.0))
+                        dp_age = int(round(dp_median + laplace_noise + (i * 2)))
+                        mock_data[col].append(max(18, min(95, dp_age)))
                     else:
-                        mock_data[col].append((i + 1) * 10)
+                        # DP Laplace perturbed integer
+                        laplace_noise = (random.expovariate(1.0 / max(1.0, dp_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(1.0, dp_scale)))
+                        dp_val = int(round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 2.0))))
+                        if all_non_negative:
+                            dp_val = max(0, dp_val)
+                        mock_data[col].append(dp_val)
 
                 elif dtype in (pl.Float32, pl.Float64):
-                    if any(k in col_lower for k in ["price", "amount", "cost", "sales", "balance", "total"]):
-                        mock_data[col].append(round(99.50 + (i * 45.25), 2))
-                    else:
-                        mock_data[col].append(round(random.uniform(1.0, 100.0), 2))
+                    # Differential privacy Laplace noise on continuous values
+                    laplace_noise = (random.expovariate(1.0 / max(0.5, dp_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(0.5, dp_scale)))
+                    dp_val = round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 3.0)), 2)
+                    if all_non_negative:
+                        dp_val = max(0.01, dp_val)
+                    mock_data[col].append(dp_val)
 
                 elif dtype == pl.Boolean:
                     mock_data[col].append(i % 2 == 0)
@@ -406,3 +536,7 @@ def generate_synthetic_mock(df: pl.DataFrame, n_rows: int = 5) -> List[Dict[str,
 
 def extract_contextual_entities(text_samples: List[str]) -> List[str]:
     return _GLOBAL_SENTINEL.extract_contextual_entities(text_samples)
+
+
+def scan_and_mask_free_text(text: str) -> Tuple[str, List[Dict[str, str]]]:
+    return _GLOBAL_SENTINEL.scan_and_mask_free_text(text)

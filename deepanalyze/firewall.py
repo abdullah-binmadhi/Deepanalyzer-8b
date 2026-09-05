@@ -46,9 +46,26 @@ class ASTFirewallVisitor(ast.NodeVisitor):
         "__subclasses__", "__globals__", "__code__", "__builtins__", "__dict__", "__class__"
     }
 
+    SENSITIVE_PATHS: Set[str] = {
+        "/etc/passwd", "/etc/shadow", "/etc/sudoers", "~/.ssh", "~/.aws",
+        "~/.gemini", "~/.bashrc", "~/.zshrc", "/root", "/var/log"
+    }
+
+    FORBIDDEN_PATHLIB_METHODS: Set[str] = {
+        "write_text", "write_bytes", "unlink", "rmdir", "chmod", "lchmod"
+    }
+
     def __init__(self):
         super().__init__()
         self.violations: List[str] = []
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str):
+            val_lower = node.value.lower()
+            for path in self.SENSITIVE_PATHS:
+                if path in val_lower:
+                    self.violations.append(f"Forbidden sensitive path access in script constant: '{node.value}'")
+        self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
@@ -77,6 +94,12 @@ class ASTFirewallVisitor(ast.NodeVisitor):
             attr_name = node.func.attr
             if attr_name in self.FORBIDDEN_DUNDERS:
                 self.violations.append(f"Forbidden dunder attribute invocation: `.{attr_name}`")
+            if attr_name in self.FORBIDDEN_PATHLIB_METHODS:
+                self.violations.append(f"Forbidden filesystem alteration via pathlib: `.{attr_name}()`")
+            if attr_name == "sleep" and isinstance(node.func.value, ast.Name) and node.func.value.id == "time":
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, (int, float)):
+                    if node.args[0].value > 1.0:
+                        self.violations.append(f"Forbidden side-channel timing delay: `time.sleep({node.args[0].value})` exceeds 1.0s limit")
             if isinstance(node.func.value, ast.Name) and node.func.value.id == "os":
                 if attr_name in self.FORBIDDEN_OS_ATTRS:
                     self.violations.append(f"Forbidden OS call: `os.{attr_name}()`")

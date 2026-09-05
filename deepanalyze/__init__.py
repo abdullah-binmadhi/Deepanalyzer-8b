@@ -9,17 +9,21 @@ from .firewall import (
     pop_snapshot,
     push_snapshot,
 )
+from .kanonymity import KAnonymityReport, analyze_kanonymity, detect_quasi_identifiers
 from .magics import deepanalyze_magic_handler
 from .policies import (
     CompliancePolicy,
     classify_dataframe_columns,
     resolve_policy,
 )
+from .scorecard import QualityScorecard, generate_quality_scorecard
 from .sentinel import (
     extract_contextual_entities,
     generate_synthetic_mock,
     mask_structural_erp,
+    scan_and_mask_free_text,
 )
+from .testgen import generate_pipeline_test_code, write_pipeline_test_file
 from .vault import (
     detokenize_dataframe,
     detokenize_text,
@@ -54,6 +58,13 @@ __all__ = [
     "generate_synthetic_mock",
     "mask_structural_erp",
     "extract_contextual_entities",
+    "scan_and_mask_free_text",
+    "analyze_kanonymity",
+    "KAnonymityReport",
+    "generate_quality_scorecard",
+    "QualityScorecard",
+    "generate_pipeline_test_code",
+    "write_pipeline_test_file",
     "AirGapWizard",
     "generate_airgap_payload",
     "create_compliance_audit_certificate",

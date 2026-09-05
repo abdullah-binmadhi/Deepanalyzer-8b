@@ -256,18 +256,19 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
   * Currency Balances & Amounts $->$ `9,999.00`
   * Timestamps $->$ `9999-99-99 00:00:00`
 
-### Step 6: Unique Masked Pattern Snippet Display
+### Step 6: Unique Masked Pattern Snippet Display & k-Anonymity Audit
 * Renders a Rich table displaying detected patterns, sample original values, sanitized surrogates, and column associations for visual verification.
+* **k-Anonymity & Re-Identification Risk Audit:** Evaluates combinations of Quasi-Identifiers (Age, Gender, Dates, Postal Codes, Departments). Calculates minimum equivalence class size ($k$) and displays risk alerts if outlier records ($k < 3$) are vulnerable to linkage attacks.
 
 ### Step 7: Interactive Value Teaching & Disambiguation Loop
 * Asks: *"Are there more columns or data elements you want me to encrypt? [y/N]"*
 * If **Yes**: Enter column names and an example value (e.g. `Seq` $->$ `10000`, `GL Code` $->$ `500-000`).
 * DeepAnalyze infers regex rules on the fly and re-masks all matching values across the entire dataset.
 
-### Step 8: Encrypted Duplicate Export vs. Clipboard Payload
+### Step 8: Encrypted Duplicate Export vs. Clipboard Payload (Differential Privacy)
 * Asks: *"Do you want to download an encrypted duplicate file to disk? [y/N]"*
   * **Option A (Encrypted File):** Exports `[filename]_anonymized.xlsx` in the same directory. Retains 100% of row and column geometry, but replaces all PII and monetary figures with surrogates. **Safe to upload directly to ChatGPT, Claude, or Cursor.**
-  * **Option B (Clipboard Payload):** Copies a sanitized 5-row synthetic schema mock and prompt guidelines directly to your clipboard for quick pasting.
+  * **Option B (Clipboard Payload):** Copies a sanitized 5-row synthetic schema mock and prompt guidelines directly to your clipboard. Numeric and financial metrics are perturbed with **Differential Privacy Laplace noise** ($\epsilon=1.0$) to guarantee mathematical impossibility of boundary reconstruction.
 
 ### Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
 * Asks: *"Will code be provided to clean/transform the data? [y/N]"*
@@ -278,10 +279,14 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
 * **Intelligent Auto-Harvesting:** Automatically binds dataset variables (`df`, `data`, `INPUT_FILE`, `OUTPUT_FILE`), executes `__name__ == '__main__'` blocks, and extracts transformed DataFrames from variables, functions, or saved outputs into local memory.
 * **Pandas & NumPy Native:** Automatically pre-injects `import pandas as pd`, `import numpy as np`, and `import polars as pl` into scope.
 
-### Step 10: Syntax Preview & AST Security Check
+### Step 10: Syntax Preview & AST Security Sandbox
 * Renders the pasted code with syntax highlighting.
-* Scans the syntax tree with the **AST Security Firewall**. Blocks network requests, socket connections, environment variables, and unauthorized OS commands.
-* User presses Enter to execute against the genuine dataset in RAM.
+* Scans the syntax tree with the **AST Security Firewall & Sandbox**:
+  * Blocks network libraries (`socket`, `requests`, `urllib`, `httpx`).
+  * Blocks side-channel timing leaks (`time.sleep` exfiltration).
+  * Blocks path smuggling into sensitive system directories (`/etc/`, `~/.ssh/`, `~/.aws/`).
+  * Blocks reflection attacks, dunders, and unauthorized filesystem modifications.
+* User presses Enter to execute safely against the genuine dataset in RAM.
 
 ### Step 11: Execution Error Self-Healing Loop
 * If the AI code raises a syntax or runtime error:
@@ -290,16 +295,20 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
   * Prompts: *"Would you like to paste the corrected code? [y/N]"*.
   * Allows you to paste the AI's fix and re-run immediately.
 
-### Step 12: Automatic Detokenization & Clean Dataset Export
-* Automatically detokenizes surrogate tokens in RAM, restoring genuine names, invoice numbers, and figures with 100.00% character fidelity.
-* Prompts for output file name (e.g. `Clean_file.xlsx` or `Clean_file.csv`). Saves clean, relational data to disk directly without requiring manual bash script execution.
+### Step 12: Real-Time Quality Scorecard, Export & Test Suite Generation
+* **Real-Time Quality & Diff Scorecard:** Renders an interactive side-by-side scorecard comparing raw vs cleaned data (row deduplication, missing value reduction %, column standard hygiene, and composite 0-100 Cleanliness Score).
+* **Automatic Detokenization:** Automatically detokenizes surrogate tokens in RAM, restoring genuine names, invoice numbers, and figures with 100.00% character fidelity.
+* **Clean Dataset Export:** Prompts for output file name (e.g. `Clean_file.xlsx` or `Clean_file.csv`). Saves clean data to disk without requiring manual terminal commands.
+* **Automated Pytest Pipeline Generator:** Writes a companion `test_clean_pipeline.py` with automated regression tests (schema integrity, domain bounds, null constraints, idempotency).
 * When **Power Query [3]** is chosen, writes the accompanying step-by-step UI guide (`powerquery_guide.md`) and saves the M-script (`powerquery_script.m`).
 
 ### Step 13: Statutory Compliance Audit Certificate
 * Outputs a verifiable `compliance_audit.md` certificate documenting:
   * Timestamp and SHA-256 session hash.
   * Governing statute enforced.
-  * Number of protected tokens held in volatile memory.
+  * Protected tokens held in volatile memory.
+  * k-Anonymity re-identification risk metrics and equivalence classes.
+  * Data Quality Scorecard metrics (cleanliness score, null reduction %).
   * Verification of zero cross-border plaintext leakage.
 
 ---
@@ -474,9 +483,12 @@ deepanalyze/
 ├── __init__.py      # Public API exports & IPython extension lifecycle
 ├── wizard.py        # Zero-Code Interactive 13-Step Air-Gap Wizard
 ├── policies.py      # Jurisdictional Compliance Engine & "Not Sure" Statute Resolver
-├── sentinel.py      # Full-File Deep Scanner, ERP Geometric Masker & Mock Synthesizer
+├── sentinel.py      # Full-File Deep Scanner, ERP Masker, NER Scanner & DP Mock Generator
 ├── vault.py         # In-Memory Token Vault with Dynamic Pattern Learning
-├── firewall.py      # AST Security Firewall, Watchdog Guard & Execution Airlock
+├── firewall.py      # AST Security Firewall, Path Sandbox, Watchdog Guard & Airlock
+├── kanonymity.py    # Quasi-Identifier Re-ID Defense (k-Anonymity & l-Diversity)
+├── scorecard.py     # Real-Time Data Diff & Quality Scorecard Engine
+├── testgen.py       # Automated Pytest Pipeline Generator (Schema/Domain/Nulls)
 ├── powerquery.py    # Excel Power Query M-Code & Step-by-Step UI Guide Generator
 ├── transformer.py   # High-Performance Deterministic ERP Flattening Engines
 ├── magics.py        # IPython Directives (%deepanalyze, --airgap, --run, --undo, --audit)
@@ -484,14 +496,21 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 25 rigorous security and performance tests:
+Every release is validated against 37 rigorous security and performance tests:
 ```bash
 pytest
 ```
 * `tests/test_vault_speed.py`: Validates 100,000 rows tokenized in < 50 ms.
 * `tests/test_leakage.py`: Proves 0% plaintext leakage across international identifiers.
-* `tests/test_firewall.py`: Verifies 100% of forbidden calls, env vars, and reflection are blocked.
+* `tests/test_firewall.py`: Verifies 100% of forbidden calls, env vars, sensitive filepaths, timing attacks, and reflection are blocked.
+* `tests/test_kanonymity.py`: Validates quasi-identifier detection, equivalence class analysis ($k \ge 5$), and $l$-diversity checks.
+* `tests/test_scorecard.py`: Validates tabular diff calculations, null reduction tracking, and 0-100 quality scoring.
+* `tests/test_testgen.py`: Validates automated generation and execution of pipeline validation pytest suites.
+* `tests/test_freetext_ner.py`: Validates contextual scanner redaction of names, titles, organizations, and addresses in clinical notes.
+* `tests/test_differential_privacy.py`: Validates $\epsilon$-Laplace differential privacy perturbation on numeric mock distributions.
 * `tests/test_reconciliation.py`: Confirms 100.00% character fidelity restored across transformations.
 * `tests/test_memory_footprint.py`: Enforces memory overhead remains strictly under 250 MB.
 * `tests/test_policies.py`: Tests dynamic country resolution and "Not Sure" auto-detection.
+* `tests/test_pandas_numpy_airlock.py`: Validates native execution of Pandas and NumPy data wrangling code without Polars conversion errors.
+* `tests/test_erp_airlock.py`: Validates multi-column ERP flattening, header promotion, and automated sanitization.
 * `tests/test_powerquery_and_ingest.py`: Validates full 16-column Excel preservation, Power Query M-code parsing, and 100% ERP transformation fidelity.
