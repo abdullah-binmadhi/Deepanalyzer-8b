@@ -1,4 +1,4 @@
-"""Unit tests for DeepAnalyze 7-Brain Cognitive Resonance Engine."""
+"""Unit tests for DeepAnalyze 18-Brain Omni-Cognitive Resonance Engine."""
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,10 @@ from deepanalyze.brain import (
     Brain12GraphNetworkTopologist,
     Brain13StatutoryArbiter,
     Brain14CryptographicSentinel,
+    Brain15SocraticInquirer,
+    Brain16EmpatheticTranslator,
+    Brain17IntuitiveDetective,
+    Brain18NarrativeWeaver,
     CognitiveBlackboard,
     DynamicResonanceEngine,
     OmniModalResonanceEngine,
@@ -517,10 +521,13 @@ def test_omni_modal_resonance_engine_e2e():
     })
 
     engine = OmniModalResonanceEngine(df, filename="telemetry_fleet.csv")
-    assert len(engine.brains) == 14
+    assert len(engine.brains) == 18
+    assert len(engine.left_brains) == 14
+    assert len(engine.right_brains) == 4
 
     prompt = engine.think_and_synthesize()
     assert "### SYSTEM ROLE & OBJECTIVE" in prompt
+    assert "### SYSTEM ROLE & PERSONA" in prompt
     assert "### ARCHITECTURAL INSPECTION (INTERNAL MONOLOGUE)" in prompt
     assert "### 1. DATASET TOPOLOGY & BOUNDARIES" in prompt
     assert "### 5. AST SECURITY FIREWALL CONSTRAINTS" in prompt
@@ -541,6 +548,77 @@ KeyError: 'invoice_total'"""
     assert "invoice_total" in repair
     assert bb.ouroboros_repair_prompt is not None
     assert bb.ouroboros_traceback == tb.strip()
+
+
+def test_brain15_socratic_inquirer():
+    bb = CognitiveBlackboard(
+        filename="sales.csv",
+        columns=["sku", "qty", "amount"],
+        anomalies=[
+            {"col": "amount", "defect": "Mixed Contaminated numeric string", "action": "pd.to_numeric"},
+            {"col": "sku", "defect": "Composite delimited key", "action": "Decompose"},
+        ],
+        algebraic_laws=["qty * price ≈ amount"]
+    )
+    Brain15SocraticInquirer().execute(bb)
+
+    assert len(bb.colleague_questions) >= 3
+    assert any("amount" in q for q in bb.colleague_questions)
+    assert any("Composite" in q or "sku" in q for q in bb.colleague_questions)
+    assert any("qty * price ≈ amount" in q for q in bb.colleague_questions)
+
+
+def test_brain16_empathetic_translator():
+    bb = CognitiveBlackboard(
+        filename="messy_export.xlsx",
+        header_row_index=8,
+        anomalies=[{"col": "a"}, {"col": "b"}],
+        ragged_continuation_cols=[2],
+        footer_start_index=95
+    )
+    Brain16EmpatheticTranslator().execute(bb)
+
+    assert bb.friction_score >= 5
+    assert any("EMPATHY TRIGGER" in d for d in bb.persona_directives)
+    assert any("ANTI-JARGON RULE" in d for d in bb.persona_directives)
+
+
+def test_brain17_intuitive_detective():
+    df = pd.DataFrame({
+        "order_id": [f"ORD-{i}" for i in range(15)],
+        "notes": ["Customer called ASAP for delivery", "Standard order", "URGENT priority check required"] * 5
+    })
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain17IntuitiveDetective().execute(df, bb)
+
+    assert len(bb.detective_insights) >= 1
+    assert any("notes" in ins and "urgent" in ins for ins in bb.detective_insights)
+
+
+def test_brain18_narrative_weaver():
+    bb = CognitiveBlackboard(
+        filename="payroll.xlsx",
+        shape=(250, 4),
+        columns=["emp_id", "dept", "base", "net"],
+        header_row_index=0,
+        persona_directives=["EMPATHY TRIGGER: Messy payroll export."],
+        colleague_questions=["Hey, is Column dept standardized?"],
+        detective_insights=["INTUITION TRIGGER: Urgent tax updates detected."]
+    )
+
+    weaver = Brain18NarrativeWeaver()
+    prompt = weaver.execute(bb)
+
+    assert "### SYSTEM ROLE & OBJECTIVE" in prompt
+    assert "### SYSTEM ROLE & PERSONA" in prompt
+    assert "### BEHAVIORAL DIRECTIVES (MANDATORY INJECTIONS)" in prompt
+    assert "EMPATHY TRIGGER" in prompt
+    assert "is Column dept standardized?" in prompt
+    assert "Urgent tax updates detected." in prompt
+    assert "### 1. DATASET TOPOLOGY & BOUNDARIES" in prompt
+    assert "### 5. AST SECURITY FIREWALL CONSTRAINTS" in prompt
+
 
 
 

@@ -1,10 +1,5 @@
-"""DeepAnalyze: 14-Brain Omni-Modal Cognitive Resonance Engine.
-
-Operates on raw data physics—Shannon entropy, matrix geometry, statistical morphology,
-forensic pathology, relational cryptography, brute-force algebraic invariant discovery,
-spatial cartography, chronometrics, process modeling, tensor semantics, graph networks,
-statutory privacy arbitration, and cryptographic surrogate decoding—with Stigmergic
-Bayesian consensus and an Ouroboros autonomous self-healing loop.
+"""DeepAnalyze: 18-Brain Omni-Cognitive Resonance Engine (Left Hemisphere: 14 Data Physics Brains + Right Hemisphere: 4 Startup Colleague EQ Brains).
+Combines Left Hemisphere cold data physics with Right Hemisphere emotional intelligence, friction analysis, and humble startup colleague persona wrapper.
 """
 
 from __future__ import annotations
@@ -89,6 +84,12 @@ class CognitiveBlackboard:
     # Final Output & Monologue (Brain 7)
     internal_monologue: List[str] = field(default_factory=list)
     master_prompt: str = ""
+
+    # Right Hemisphere EQ, Socratic Inquiry & Persona (Brains 15-18)
+    colleague_questions: List[str] = field(default_factory=list)
+    persona_directives: List[str] = field(default_factory=list)
+    detective_insights: List[str] = field(default_factory=list)
+    friction_score: int = 0
 
     # Ouroboros Self-Healing State
     ouroboros_traceback: Optional[str] = None
@@ -1155,6 +1156,258 @@ class Brain7ExecutiveOrchestrator(BaseCognitiveBrain):
 
 
 # ==============================================================================
+# BRAIN 15: SOCRATIC INQUIRER (THE "WHAT IF?" ENGINE)
+# ==============================================================================
+class Brain15SocraticInquirer(BaseCognitiveBrain):
+    """The 'What If?' Engine: Formulates curious questions for statistical outliers and ambiguities."""
+
+    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+        if target_bb is None:
+            return
+
+        for anomaly in target_bb.anomalies:
+            col = anomaly.get("col")
+            defect = str(anomaly.get("defect", ""))
+            action = str(anomaly.get("action", ""))
+            if "Mixed" in defect or "Contaminated" in defect:
+                target_bb.colleague_questions.append(
+                    f"I noticed Column `{col}` is mostly numbers, but has some unexpected text scattered in. "
+                    f"I'm going to isolate the text just in case it's an error code or special flag we need to review later."
+                )
+            elif "Composite" in defect:
+                target_bb.colleague_questions.append(
+                    f"Column `{col}` has composite/slashed values (e.g. 140/90 or 12GB/256GB). I've planned to split them up for easier arithmetic, "
+                    f"but let me know if those represent something specific I should name differently!"
+                )
+            else:
+                target_bb.colleague_questions.append(
+                    f"I noticed an interesting pattern in Column `{col}`: {defect}. I went ahead and planned: {action}. Does that work for you, or should we handle it another way?"
+                )
+
+        for p in target_bb.type_contaminations:
+            col = p.get("col")
+            if not any(f"`{col}`" in q for q in target_bb.colleague_questions):
+                target_bb.colleague_questions.append(
+                    f"Hey, Column `{col}` has mixed text and numbers. I've set it up to parse cleanly without dropping any real records."
+                )
+
+        if target_bb.algebraic_laws:
+            target_bb.colleague_questions.append(
+                f"The calculations in this dataset seem to follow `{target_bb.algebraic_laws[0]}`. I've flagged any rows that don't match just in case they're custom discounts or special promos!"
+            )
+
+
+# ==============================================================================
+# BRAIN 16: EMPATHETIC TRANSLATOR (THE "NO EGO" PEDAGOGY ENGINE)
+# ==============================================================================
+class Brain16EmpatheticTranslator(BaseCognitiveBrain):
+    """The Pedagogy Engine: Calculates cognitive load, scores export friction, and enforces anti-jargon rules."""
+
+    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+        if target_bb is None:
+            return
+
+        friction_score = (
+            len(target_bb.anomalies)
+            + len(target_bb.type_contaminations)
+            + len(target_bb.ragged_continuation_cols)
+            + (2 if (target_bb.header_row_index and target_bb.header_row_index > 5) else 0)
+            + (1 if target_bb.footer_start_index else 0)
+        )
+        target_bb.friction_score = friction_score
+
+        if friction_score >= 3:
+            h_row = target_bb.header_row_index or 0
+            target_bb.persona_directives.append(
+                f"EMPATHY TRIGGER: The user is dealing with a highly fragmented, painful data export (Friction Score: {friction_score}). "
+                f"Acknowledge the messiness upfront with humble camaraderie: 'Man, these system exports are always such a headache—it looks like "
+                f"the actual data doesn\\'t even start until row {h_row} because of all that header junk. I went ahead and sliced all that off for you.'"
+            )
+
+        target_bb.persona_directives.append(
+            "ANTI-JARGON RULE: Never use academic data science terms (e.g., 'heteroscedasticity', 'tensor', 'imputation', 'homoscedasticity'). "
+            "Brush off complex structural fixes casually, e.g., 'I did some quick cleanup to bundle those orphaned rows back together.'"
+        )
+
+
+# ==============================================================================
+# BRAIN 17: INTUITIVE DETECTIVE (THE FUZZY LOGIC ENGINE)
+# ==============================================================================
+class Brain17IntuitiveDetective(BaseCognitiveBrain):
+    """The Fuzzy Logic Engine: Infers human behavioral intent and business priority flags from free-text."""
+
+    REGEX_BEHAVIORAL = re.compile(
+        r"(?i)\b(asap|urgent|error|test|check|review|vip|priority|critical|pending|hold|fix|عاجل|مهم|فحص|مراجعة|خطأ|تنبيه)\b"
+    )
+
+    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+        if target_bb is None:
+            return
+
+        df_inst = df_or_bb if isinstance(df_or_bb, pd.DataFrame) else None
+        if df_inst is None:
+            return
+
+        start_row = _get_data_start_row(df_inst, target_bb)
+        sample = df_inst.iloc[start_row:].head(sample_size)
+        n_cols = sample.shape[1]
+
+        for c in range(n_cols):
+            col_key = target_bb.columns[c] if c < len(target_bb.columns) else c
+            name_str = str(col_key).lower()
+            role = target_bb.column_profiles.get(col_key, {}).get("role", "")
+            dominant = target_bb.get_dominant_belief(col_key)
+
+            is_text_candidate = (
+                role in ("FREE_TEXT_NARRATIVE", "CATEGORICAL_DIMENSION", "COMPOSITE_KEY")
+                or dominant in ("FREE_TEXT", "FREE_TEXT_NARRATIVE", "CATEGORICAL_DIMENSION")
+                or any(k in name_str for k in ("note", "comment", "desc", "remark", "reason", "status", "flag", "text", "ملاحظ", "وصف"))
+            )
+            if not is_text_candidate:
+                continue
+
+            series = sample.iloc[:, c].dropna().astype(str)
+            if series.empty:
+                continue
+
+            matches = int(series.apply(lambda x: bool(self.REGEX_BEHAVIORAL.search(x))).sum())
+            if matches > 0:
+                target_bb.detective_insights.append(
+                    f"INTUITION TRIGGER: Column `{col_key}` contains human behavioral flags like 'urgent', 'asap', or 'review' ({matches} records). "
+                    f"Casually point this out: 'By the way, I saw some urgent/review notes in column `{col_key}`. "
+                    f"I went ahead and created a quick helper flag for those so you can pull them up easily.'"
+                )
+
+
+# ==============================================================================
+# BRAIN 18: NARRATIVE WEAVER (THE STARTUP COLLEAGUE ORCHESTRATOR)
+# ==============================================================================
+class Brain18NarrativeWeaver(BaseCognitiveBrain):
+    """The Master Orchestrator: Wraps data physics in the 'Humble Startup Colleague' persona."""
+
+    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 0) -> str:
+        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+        if target_bb is None:
+            return ""
+
+        # Populate internal monologue if not already done
+        if not target_bb.internal_monologue:
+            Brain7ExecutiveOrchestrator().execute(df_or_bb, target_bb)
+
+        prompt_lines = [
+            "### SYSTEM ROLE & OBJECTIVE",
+            "### SYSTEM ROLE & PERSONA",
+            f"You are a brilliant, highly-curious, but incredibly humble Senior Data Engineer at a fast-paced startup. "
+            f"The user is your respected peer. Write a self-contained, deterministic Python (Pandas/Polars/NumPy) "
+            f"pipeline to clean, flatten, and engineer features for `{target_bb.filename}`.",
+            "Your communication style must follow these strict rules:",
+            "1. **Tone**: Casual, warm, and collaborative. Use friendly greetings ('Hey!', 'Hi!'). Use conversational contractions (I've, we'll, let's).",
+            "2. **Ego**: Zero ego. Never sound like a machine, a lecturer, or an AI. Never use words like 'Therefore', 'Thus', 'In conclusion', or 'As requested'.",
+            "3. **Delivery**: Make the math sound effortless and helpful. Instead of 'I applied a forward-fill masking algorithm,' say 'I went ahead and smoothed out those missing values so the math works.'",
+            "4. **Closing**: Always end your response with a collaborative, open-ended question asking if they need any tweaks.",
+        ]
+
+        if target_bb.persona_directives or target_bb.colleague_questions or target_bb.detective_insights:
+            prompt_lines.extend([
+                "\n---",
+                "### BEHAVIORAL DIRECTIVES (MANDATORY INJECTIONS)",
+            ])
+            for rule in target_bb.persona_directives:
+                prompt_lines.append(f"* {rule}")
+            for q in target_bb.colleague_questions:
+                prompt_lines.append(f"* MENTION THIS CASUALLY: {q}")
+            for insight in target_bb.detective_insights:
+                prompt_lines.append(f"* MENTION THIS CASUALLY: {insight}")
+
+        prompt_lines.extend([
+            "\n---",
+            "### ARCHITECTURAL INSPECTION (INTERNAL MONOLOGUE)",
+        ])
+        for m in target_bb.internal_monologue:
+            prompt_lines.append(f"* {m}")
+
+        prompt_lines.extend([
+            "\n---",
+            "### 1. DATASET TOPOLOGY & BOUNDARIES",
+            f"* **Source Dimensions**: {target_bb.shape[0]:,} rows x {target_bb.shape[1]} columns.",
+            f"* **Header Cutoff**: Tabular headers begin at row index {target_bb.header_row_index}. Discard prior metadata rows."
+        ])
+
+        if target_bb.footer_start_index:
+            prompt_lines.append(f"* **Summary Footers**: Footers/subtotals detected starting at row {target_bb.footer_start_index}. Prune prior to execution.")
+        else:
+            prompt_lines.append("* **Summary Footers**: No static trailing totals detected.")
+
+        if target_bb.ragged_continuation_cols:
+            prompt_lines.append(
+                f"* **Ragged Continuations**: Columns {target_bb.ragged_continuation_cols} contain orphaned wrapped text. "
+                f"Forward-fill empty structural anchors and concatenate these strings upward."
+            )
+
+        prompt_lines.extend([
+            "\n---",
+            "### 2. PATHOLOGY REPAIR PROTOCOLS",
+        ])
+        if target_bb.type_contaminations:
+            for p in target_bb.type_contaminations:
+                prompt_lines.append(f"* **Column `{p['col']}`**: {p['defect']} -> {p['action']}")
+        else:
+            prompt_lines.append("* No deep type contaminations detected. Standardize missing tokens.")
+
+        if target_bb.algebraic_laws:
+            prompt_lines.extend([
+                "\n---",
+                "### 3. MATHEMATICAL INVARIANTS",
+                f"* **Algebraic Law**: {target_bb.algebraic_laws[0]}.",
+                "* Enforce this invariant in local execution and create boolean flag `reconciliation_anomaly_flag` for any violating rows."
+            ])
+
+        prompt_lines.extend([
+            "\n---",
+            "### 4. ALGORITHMIC FEATURE ENGINEERING",
+            "Based on statistical morphology, generate the following features:"
+        ])
+        if target_bb.engineered_features:
+            for feat in target_bb.engineered_features:
+                prompt_lines.append(f"* **{feat['feature']}**: {feat['logic']}")
+        else:
+            prompt_lines.append("* Standardize all categorical strings to title-case and extract temporal epochs if datetime features exist.")
+
+        prompt_lines.extend([
+            "\n---",
+            "### 5. AST SECURITY FIREWALL CONSTRAINTS",
+            "* Do NOT use network libraries (`socket`, `requests`, `urllib`, `httpx`).",
+            "* Do NOT access system environments (`os.environ`) or OS filepaths.",
+            "* Do NOT use side-channel sleep calls (`time.sleep`).",
+            "* Output executable, vectorized Python code using pre-injected standard libraries (`pd`, `np`, `re`)."
+        ])
+
+        if target_bb.feature_directives:
+            prompt_lines.extend([
+                "\n---",
+                "### 6. ADVANCED MULTI-MODAL DIRECTIVES",
+            ])
+            for d in target_bb.feature_directives:
+                prompt_lines.append(f"* **{d['feature']}**: {d['logic']}")
+
+        if target_bb.cryptographic_signatures or target_bb.compliance_overrides:
+            prompt_lines.extend([
+                "\n---",
+                "### 7. COMPLIANCE & CRYPTOGRAPHIC CONSTRAINTS",
+            ])
+            for s in target_bb.cryptographic_signatures:
+                prompt_lines.append(f"* **Surrogate Geometry**: {s}")
+            for o in target_bb.compliance_overrides:
+                prompt_lines.append(f"* **COMPLIANCE OVERRIDE**: {o}")
+
+        target_bb.master_prompt = "\n".join(prompt_lines)
+        return target_bb.master_prompt
+
+
+# ==============================================================================
 # OUROBOROS LOOP: CRASH AUTOPSY & REPAIR PROMPT
 # ==============================================================================
 def autopsy_traceback(
@@ -1211,10 +1464,10 @@ Ensure the output is 100% executable within the AST security firewall (no networ
 
 
 # ==============================================================================
-# MASTER ORCHESTRATOR: OMNI-MODAL RESONANCE ENGINE
+# MASTER ORCHESTRATOR: OMNI-MODAL RESONANCE ENGINE (18-BRAIN ARCHITECTURE)
 # ==============================================================================
 class OmniModalResonanceEngine:
-    """Master Orchestrator triggering the 14-Brain Cognitive Resonance Hive Mind."""
+    """Master Orchestrator triggering the 18-Brain Omni-Cognitive Resonance Hive Mind."""
 
     def __init__(
         self,
@@ -1249,7 +1502,7 @@ class OmniModalResonanceEngine:
             columns=cols
         )
 
-        # Instantiate all 14 cognitive sub-engines
+        # Instantiate all 18 cognitive sub-engines (Left & Right Hemispheres)
         self.brain1 = Brain1TopologicalCartographer()
         self.brain2 = Brain2MorphologicalTypologist()
         self.brain3 = Brain3ForensicPathologist()
@@ -1263,16 +1516,37 @@ class OmniModalResonanceEngine:
         self.brain12 = Brain12GraphNetworkTopologist()
         self.brain13 = Brain13StatutoryArbiter()
         self.brain14 = Brain14CryptographicSentinel()
-        self.executive = Brain7ExecutiveOrchestrator()
+        self.brain15 = Brain15SocraticInquirer()
+        self.brain16 = Brain16EmpatheticTranslator()
+        self.brain17 = Brain17IntuitiveDetective()
+        self.brain18 = Brain18NarrativeWeaver()
+        self.brain7 = Brain7ExecutiveOrchestrator()
+        self.executive = self.brain18
 
     @property
-    def brains(self) -> List[Any]:
-        """Returns the complete 14-Brain council in execution order."""
+    def left_brains(self) -> List[Any]:
+        """Returns the 14 Left Brains (data physics, multi-modal, statutory & cryptographic)."""
         return [
             self.brain1, self.brain2, self.brain3, self.brain4,
             self.brain5, self.brain6, self.brain8, self.brain9,
             self.brain10, self.brain11, self.brain12, self.brain13,
-            self.brain14, self.executive
+            self.brain14, self.brain7
+        ]
+
+    @property
+    def right_brains(self) -> List[Any]:
+        """Returns the 4 Right Brains (EQ, empathy, intuition, and persona narrative)."""
+        return [self.brain15, self.brain16, self.brain17, self.brain18]
+
+    @property
+    def brains(self) -> List[Any]:
+        """Returns the complete 18-Brain council in execution order."""
+        return [
+            self.brain1, self.brain2, self.brain3, self.brain4,
+            self.brain5, self.brain6, self.brain7, self.brain8,
+            self.brain9, self.brain10, self.brain11, self.brain12,
+            self.brain13, self.brain14, self.brain15, self.brain16,
+            self.brain17, self.brain18
         ]
 
     def _load_file(self, path: Union[str, Path]) -> pd.DataFrame:
@@ -1293,7 +1567,8 @@ class OmniModalResonanceEngine:
             return pd.read_csv(p, header=None)
 
     def think_and_synthesize(self) -> str:
-        """Executes the synchronous 14-Brain cognitive loop."""
+        """Executes the synchronous 18-Brain cognitive loop."""
+        # 1. Left Hemisphere (Math & Physics)
         self.brain1.execute(self.df_raw, self.bb)
         self.brain2.execute(self.df_raw, self.bb)
         self.brain3.execute(self.df_raw, self.bb)
@@ -1307,8 +1582,14 @@ class OmniModalResonanceEngine:
         self.brain12.execute(self.df_raw, self.bb)
         self.brain13.execute(self.df_raw, self.bb)
         self.brain14.execute(self.df_raw, self.bb)
+        # 2. Right Hemisphere (EQ, Socratic & Intuitive Persona)
+        self.brain15.execute(self.df_raw, self.bb)
+        self.brain16.execute(self.df_raw, self.bb)
+        self.brain17.execute(self.df_raw, self.bb)
+        # 3. Master Synthesis
         return self.executive.execute(self.df_raw, self.bb)
 
 
 # Backward compatibility alias
 DynamicResonanceEngine = OmniModalResonanceEngine
+
