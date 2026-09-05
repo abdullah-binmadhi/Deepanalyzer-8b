@@ -139,7 +139,7 @@ def read_multiline_input(console_instance: Console, prompt_msg: str) -> str:
                 console_instance.print(f"[INFO] Loaded script from `[bold]{script_path}[/bold]`.")
                 return content
 
-            if line.strip() in ("EOF", "END"):
+            if line.strip().strip("'\"") in ("EOF", "END"):
                 break
             lines.append(line)
         except (EOFError, KeyboardInterrupt):
@@ -828,9 +828,12 @@ class AirGapWizard:
 
                         # Step 10: Execution Error Self-Healing Loop
                         try:
-                            push_snapshot(df_name, exec_scope.get(df_name, df))
+                            target_df = exec_scope.get(df_name)
+                            if target_df is None:
+                                target_df = exec_scope.get("df", df)
+                            push_snapshot(df_name, target_df)
                             from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
-                            df_prepared, _ = prepare_dataframe_for_code(exec_scope.get(df_name, df), code_text)
+                            df_prepared, _ = prepare_dataframe_for_code(target_df, code_text)
                             exec_scope[df_name] = df_prepared
                             exec_scope["df"] = df_prepared
                             exec_scope["data"] = df_prepared
@@ -886,9 +889,12 @@ class AirGapWizard:
                         block_success = False
                         while True:
                             try:
-                                push_snapshot(df_name, exec_scope.get(df_name, df))
+                                target_df = exec_scope.get(df_name)
+                                if target_df is None:
+                                    target_df = exec_scope.get("df", df)
+                                push_snapshot(df_name, target_df)
                                 from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
-                                df_prepared, _ = prepare_dataframe_for_code(exec_scope.get(df_name, df), block_text)
+                                df_prepared, _ = prepare_dataframe_for_code(target_df, block_text)
                                 exec_scope[df_name] = df_prepared
                                 exec_scope["df"] = df_prepared
                                 exec_scope["data"] = df_prepared

@@ -32,7 +32,7 @@ The composite score of **8.8 / 10** reflects an honest, balanced engineering tra
 | **Operational RAM Footprint** | **< 210 MB** (CLI) / **~5.2 GB** (with local 8B GGUF) | **~5.5 GB - 8.2 GB** (8B Q4/Q8 quantization) | **~1.2 GB - 2.5 GB** (Python env + dependencies) | **~1.5 GB - 3.0 GB** | **~750 MB - 1.2 GB** (Loaded NER models) |
 | **Non-Programmer Deliverables** | **Power Query M-Script + UI Guide** | None (Code snippets only) | None | None | None |
 | **Automated CI/CD Validation** | **Auto-Generated Pytest Suite** | None | None | None | None |
-| **Pre-Commit Verification Suite** | **88 Automated Tests** (< 3 sec execution) | None | Unit tests only | Unit tests only | Unit tests only |
+| **Pre-Commit Verification Suite** | **90 Automated Tests** (< 3 sec execution) | None | Unit tests only | Unit tests only | Unit tests only |
 
 ### Scorecard Breakdown
 
@@ -706,7 +706,7 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 88 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 90 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```

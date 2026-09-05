@@ -89,8 +89,38 @@ def test_resolve_transformed_dataframe_all_modes(tmp_path):
     assert resolved3["c"].tolist() == [100, 200, 300]
 
 
+def test_push_snapshot_resilience():
+    """Validates that push_snapshot handles None, custom objects, and dicts without NameError on copy."""
+    from deepanalyze.firewall import push_snapshot, pop_snapshot
+
+    # None should be safely ignored
+    push_snapshot("test_none", None)
+    assert pop_snapshot("test_none") is None
+
+    # Arbitrary object should be copied with copy.deepcopy without error
+    custom_obj = {"sample": [1, 2, 3]}
+    push_snapshot("test_dict", custom_obj)
+    restored = pop_snapshot("test_dict")
+    assert restored == custom_obj
+    assert restored is not custom_obj
+
+
+def test_execute_code_safely_preinjected_copy_and_re():
+    """Validates that copy and re are pre-injected into execution scope."""
+    code = """
+matched = bool(re.search(r"\\d+", "Model 123"))
+cloned = copy.deepcopy([1, 2, 3])
+"""
+    scope = {}
+    execute_code_safely(code, scope)
+    assert scope["matched"] is True
+    assert scope["cloned"] == [1, 2, 3]
+
+
 if __name__ == "__main__":
     test_firewall_blocks_forbidden_imports()
     test_firewall_allows_safe_polars_code()
     test_execute_code_safely_main_block()
+    test_push_snapshot_resilience()
+    test_execute_code_safely_preinjected_copy_and_re()
     print("test_firewall.py passed!")

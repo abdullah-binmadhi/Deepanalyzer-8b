@@ -9,6 +9,7 @@ Provides pipeline file generation for .py and .ipynb airlock runs.
 
 import ast
 from collections import defaultdict
+import copy
 import json
 import os
 import signal
@@ -194,7 +195,10 @@ def execute_code_safely(
     # Set __name__ to __main__ so cloud AI 'if __name__ == "__main__":' blocks execute
     global_scope.setdefault("__name__", "__main__")
 
-    # Pre-inject core data science libraries expected by cloud AI code
+    # Pre-inject core data science and utility libraries expected by cloud AI code
+    global_scope.setdefault("copy", copy)
+    import re
+    global_scope.setdefault("re", re)
     global_scope.setdefault("pl", pl)
     try:
         import pandas as pd
@@ -401,16 +405,27 @@ class RollbackManager:
 
     def push(self, target_name: str, df: Any) -> None:
         """Pushes a clone/copy of the DataFrame (Polars or Pandas) onto the rollback stack."""
+        if df is None:
+            return
         stack = self._stacks[target_name]
         if len(stack) >= self.max_depth:
             stack.pop(0)
 
         if hasattr(df, "clone"):
-            snapshot = df.clone()
+            try:
+                snapshot = df.clone()
+            except Exception:
+                snapshot = copy.deepcopy(df)
         elif hasattr(df, "copy"):
-            snapshot = df.copy(deep=True)
+            try:
+                snapshot = df.copy(deep=True)
+            except Exception:
+                snapshot = copy.deepcopy(df)
         else:
-            snapshot = copy.deepcopy(df)
+            try:
+                snapshot = copy.deepcopy(df)
+            except Exception:
+                snapshot = df
 
         stack.append(snapshot)
 
