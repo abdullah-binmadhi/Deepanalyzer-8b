@@ -48,7 +48,7 @@ DeepAnalyze v4.0 solves this by functioning as a zero-code local security airloc
 * Dynamically presents relevant frameworks based on Question 1.
 * Includes a prominent **"Not Sure" (Auto-Detect)** option.
 * If "Not Sure" is chosen, the engine automatically resolves the governing statute and outputs explicit feedback:
-  `"✔ System Analysis: Detected best framework for [Country] is '[Statute Name]'. Enforcing this framework."`
+  `"[System Analysis] Detected best framework for [Country] is '[Statute Name]'. Enforcing this framework."`
 
 ### Step 4: Dataset Architecture & Geometry Discovery (Question 3)
 * Asks user for data structure type:
@@ -58,7 +58,7 @@ DeepAnalyze v4.0 solves this by functioning as a zero-code local security airloc
   `[4] Not Sure (Auto-Detect)`
 * If "Not Sure" is chosen, the engine inspects column headers, colon delimiters (`:`), unnamed columns, and header offsets.
 * If ragged ERP patterns are found, it announces:
-  `"✔ System Analysis: Detected 'Hierarchical / Ragged ERP Report'. Activating Structural Geometric Masking."`
+  `"[System Analysis] Detected 'Hierarchical / Ragged ERP Report'. Activating Structural Geometric Masking."`
 
 ### Step 5: Full-File Deep Scan & Pattern Categorization
 * Scans every row and cell across the entire file (not just headers).
