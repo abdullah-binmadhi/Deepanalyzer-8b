@@ -158,6 +158,9 @@ DeepAnalyze acts as a zero-code local security airlock between your confidential
 * **AST Security Firewall & Sandbox:** Before any AI-generated Python code executes, DeepAnalyze parses its Abstract Syntax Tree. It strictly forbids network libraries (`requests`, `socket`, `urllib`), environment variable access (`os.environ`), sensitive filesystem paths (`/etc/`, `~/.ssh/`, `~/.aws/`), unauthorized file deletion, and side-channel timing delays (`time.sleep` > 1.0s).
 * **Dual-Engine Execution Airlock:** Cloud LLMs overwhelmingly write data cleaning scripts using `pandas` (`pd`) and `numpy` (`np`). DeepAnalyze pre-injects Pandas, NumPy, and Polars into the execution environment, automatically detects Pandas idioms (`df.iloc`, `df.apply`, `df['col']`, `pd.to_datetime`), and handles format reconciliation without conversion errors.
 * **Interactive Error Self-Healing:** If cloud AI code raises a syntax or runtime exception, DeepAnalyze catches it in memory, displays the error message, and provides an in-place retry prompt. You can paste the AI's corrected snippet immediately without losing session state.
+* **Deep Data Exploration & Multi-Sheet Topology Discovery:** Automatically profiles multi-sheet workbooks across all tabs without loading heavy NLP weights. Identifies individual sheet roles (`TRANSACTION_LEDGER`, `PIVOT_TABLE`, `LOOKUP_DIMENSION`, `METADATA_BLOCK`), discovers relational foreign key join candidates with value overlap percentages, detects summary/subtotal rows, uncovers ragged top metadata offsets, and flags column-level anomalies (mixed date formats, accounting negative brackets `(1,000.00)`, and dirty currency symbols).
+* **Autonomous Data Engineering Briefing & Prompt Synthesis:** Converts complex structural topology findings into an automated Zero-PII Data Engineering Briefing embedded directly into the cloud payload. Instructs external LLMs (ChatGPT, Claude, Cursor) on exact unpivoting steps, foreign key joins, subtotal filtering, and format casting, ensuring cloud models write 100% accurate cleaning code on the first attempt without guessing.
+* **Synchronized Cross-Sheet Tokenization:** When tokenizing multi-sheet datasets, DeepAnalyze utilizes a shared session-scoped TokenVault across all sheets. This guarantees that relational foreign keys (e.g. `customer_id`, `dept_code`) receive identical surrogate tokens across both transaction ledgers and lookup dimensions, preserving cross-sheet referential join integrity.
 * **Real-Time Quality Scorecard & Automated Pytest Generator:** In Step 12, DeepAnalyze displays an ANSI/Rich tabular diff comparing raw vs. cleaned datasets (row count changes, null reduction %, column standard hygiene, and a composite 0-100 Quality Score). It simultaneously generates a runnable `test_clean_pipeline.py` script containing automated schema, null constraint, and domain validity tests for CI/CD workflows.
 * **Excel Power Query Companion (Dual-Track):** For finance and accounting teams who prefer working natively in Microsoft Excel, DeepAnalyze generates validated Power Query M-code (`powerquery_script.m`) and an explicit click-by-click UI guide (`powerquery_guide.md`). Future monthly files can be refreshed inside Excel with a single click.
 
@@ -290,10 +293,10 @@ final_df = detokenize_dataframe(transformed_df)
 
 When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the following 13-step pipeline:
 
-### Step 1: Resilient Ingestion & Multi-Column Excel Preservation
+### Step 1: Resilient Ingestion & Multi-Sheet Architecture Discovery
 * Prompts for file path (`CSV`, `XLSX`, `TSV`, `Parquet`, `JSON`) or variable name.
 * **Auto-Sanitization:** Strips drag-and-drop surrounding quotes (`'`, `"`), unescapes shell spaces (`\ `), and expands home paths (`~`).
-* **Multi-Column Preservation:** Uses a specialized non-truncating engine (`header=None`) to preserve all 16+ columns, preventing the loss of columns caused by top metadata rows in unflattened ERP spreadsheets.
+* **Multi-Sheet Workbook Inspection:** For Excel workbooks, instantly inspects all tabs and sheets without heavy overhead. Preserves all 16+ columns and detects unflattened metadata offsets.
 
 ### Step 2: Country of Origin (Question 1)
 * Asks user's operational location: `[1] Saudi Arabia (KSA)`, `[2] Poland (EU)`, `[3] United States (US)`, `[4] United Kingdom (UK)`, `[5] Universal / Other`.
@@ -302,16 +305,18 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
 * Dynamically presents statutes tailored to your country.
 * **"Not Sure" (Auto-Detect):** Automatically binds the governing regulation (e.g. Saudi Arabia $->$ Saudi PDPL & NDMO Data Standards; Poland $->$ GDPR & UODO).
 
-### Step 4: Dataset Architecture & Geometry Discovery (Question 3)
-* Asks for structure type:
-  * `[1] Clean Relational / Tabular (Standard Columns)`
-  * `[2] Hierarchical / Ragged ERP Report (Invoices, GL Ledgers, Multi-Row Headers)`
-  * `[3] Healthcare EHR / Clinical Notes`
-  * `[4] Not Sure (Auto-Detect)`
-* **"Not Sure" Inspection:** Analyzes colon frequencies (`:`), empty header counts, and ragged offsets to determine if the file is an unflattened ERP matrix.
+### Step 4: Dataset Architecture & Multi-Sheet Topology Discovery (Question 3)
+* For multi-sheet workbooks, automatically displays the **Workbook Topology Card**:
+  * Individual sheet roles: `TRANSACTION_LEDGER`, `PIVOT_TABLE` (with month headers), `LOOKUP_DIMENSION`, or `METADATA_BLOCK`.
+  * Candidate relational join keys linking sheets (with % key overlap and name matching).
+  * Detected summary/subtotal rows and unflattened header offsets.
+  * Column-level formatting variations: mixed date formats (ISO vs. UK vs. US), accounting negative brackets `(1,000.00)`, and dirty currency strings.
+* Provides a 1-click prompt: *"Would you like DeepAnalyze to handle all sheets together? [Y/n]"*.
+* For single-sheet datasets, prompts for structure type (`Clean Relational`, `Hierarchical / Ragged ERP`, `Healthcare EHR`, or `Not Sure (Auto-Detect)`).
 
 ### Step 5: Full-File Deep Scan & Pattern Categorization
 * Evaluates **every single row and cell** (not just headers).
+* Synchronizes tokenization across all sheets using a shared session-scoped `TokenVault`, ensuring foreign keys match across both transaction ledgers and lookup sheets.
 * Categorizes entities into geometric patterns:
   * Company & Personal Names $->$ `XXXX XXXXXX`
   * Document / Invoice IDs $->$ `XX-99999`
@@ -320,19 +325,30 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
   * Currency Balances & Amounts $->$ `9,999.00`
   * Timestamps $->$ `9999-99-99 00:00:00`
 
-### Step 6: Unique Masked Pattern Snippet Display & k-Anonymity Audit
-* Renders a Rich table displaying detected patterns, sample original values, sanitized surrogates, and column associations for visual verification.
+### Step 6: Dataset Inventory Catalog & Analytical Profile Exploration
+* Renders a comprehensive Rich inventory table of all columns:
+  * Column index, name, inferred role, data type, null count and rate (%), and cardinality.
+  * 3 distinct formatted raw sample values (e.g. `₹54,999`, `12 GB RAM`, `140/90`).
+  * Explicit privacy status: `MUST_ENCRYPT` (red), `RECOMMENDED_TO_MASK` (yellow), or `SAFE` (green).
 * **k-Anonymity & Re-Identification Risk Audit:** Evaluates combinations of Quasi-Identifiers (Age, Gender, Dates, Postal Codes, Departments). Calculates minimum equivalence class size ($k$) and displays risk alerts if outlier records ($k < 3$) are vulnerable to linkage attacks.
 
-### Step 7: Interactive Value Teaching & Disambiguation Loop
+### Step 7: Informed Value Teaching & Disambiguation Loop
 * Asks: *"Are there more columns or data elements you want me to encrypt? [y/N]"*
-* If **Yes**: Enter column names and an example value (e.g. `Seq` $->$ `10000`, `GL Code` $->$ `500-000`).
-* DeepAnalyze infers regex rules on the fly and re-masks all matching values across the entire dataset.
+* Users can reference the Step 6 inventory table directly above to select columns by name or 1-based numeric index (e.g. `4`, `card`, `Seq` $->$ `10000`, `GL Code` $->$ `500-000`).
+* DeepAnalyze infers regex rules on the fly and re-masks all matching values across the entire dataset in volatile memory.
 
-### Step 8: Encrypted Duplicate Export vs. Clipboard Payload (Differential Privacy)
-* Asks: *"Do you want to download an encrypted duplicate file to disk? [y/N]"*
-  * **Option A (Encrypted File):** Exports `[filename]_anonymized.xlsx` in the same directory. Retains 100% of row and column geometry, but replaces all PII and monetary figures with surrogates. **Safe to upload directly to ChatGPT, Claude, or Cursor.**
-  * **Option B (Clipboard Payload):** Copies a sanitized 5-row synthetic schema mock and prompt guidelines directly to your clipboard. Numeric and financial metrics are perturbed with **Differential Privacy Laplace noise** ($\epsilon=1.0$) to guarantee mathematical impossibility of boundary reconstruction.
+### Step 7.5: Human Intuition & Custom Objectives Hook
+* Asks: *"Do you have special business requests or column extraction rules for the cloud AI? [y/N]"*
+* Users can input custom domain logic, requested calculated fields, or metric extractions (e.g. *"Extract RAM into ram_gb and storage into storage_gb"*, *"Calculate line discount and flag discrepancies"*).
+
+### Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
+* **7-Brain Cognitive Resonance Engine Integration:** Invokes all 7 data physics sub-engines (Topological Cartographer, Morphological Typologist, Forensic Pathologist, Relational Cryptographer, Mathematical Physicist, Autonomous Feature Alchemist, and Executive Orchestrator) to generate an authoritative architectural inspection monologue, forensic pathology protocols, and discovered algebraic invariants ($A \times B \approx C$).
+* **Native Bilingual & Cultural Polymorphism:** Automatically normalizes Eastern Arabic (Indic) numerals (`٠-٩`), strips invisible BiDi Unicode markers, detects Arabic report titles and subtotal footers, parses Hijri calendars (`1446-08-15`, `15 رمضان 1445 هـ`), discovers statutory 15% ZATCA and 5% GCC VAT invariants, and finger-prints regional identifiers (ZATCA VAT ID, Saudi CR, Iqama).
+* **Autonomous Master Prompt Compilation:** DeepAnalyze synthesizes an industrial-grade 8-section Data Engineering Briefing combining topology, field anomalies, automated spec extractions, user custom instructions, and a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
+* **Local Inference Acceleration (Optional):** If the local 8B GGUF model server is active, it enriches the prompt with automated feature engineering suggestions; if offline, deterministic templates compile instantly with zero latency.
+* **Interactive Terminal Review & Multi-Turn Refinement:** Renders the full prompt in the terminal and asks: *"Would you like to modify or add instructions to this prompt? [y/N]"*. Users can append rules, edit sections, or launch their system editor (`$EDITOR` / nano / notepad) repeatedly until fully satisfied.
+* **Automatic Disk Export & Clipboard Delivery:** Automatically saves the finalized prompt to disk as `[dataset_name]_cleaning_prompt.md` and copies it to the system clipboard for immediate use with ChatGPT, Claude, Cursor, or external APIs.
+* **Optional Duplicate File Export:** Offers optional download of `[filename]_anonymized.xlsx` retaining 100% layout coordinates with 0% PII.
 
 ### Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
 * Asks: *"Will code be provided to clean/transform the data? [y/N]"*
@@ -340,7 +356,7 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
   * `[1] Single Script (.py)`: Paste the entire Python transformation script generated by cloud AI.
   * `[2] Multiple Blocks (.ipynb)`: Paste and test code cell-by-cell.
   * `[3] Power Query (M-Code)`: Paste Power Query M-code generated from cloud AI for native Microsoft Excel execution.
-* **Intelligent Auto-Harvesting:** Automatically binds dataset variables (`df`, `data`, `INPUT_FILE`, `OUTPUT_FILE`), executes `__name__ == '__main__'` blocks, and extracts transformed DataFrames from variables, functions, or saved outputs into local memory.
+* **Pre-Loaded Execution Scope:** For multi-sheet workbooks, automatically provides the `sheets` dictionary (`sheets['Transactions']`, `sheets['Monthly_Pivot']`, `sheets['Dim_Customer']`) and individual DataFrames (`df_transactions`, `df_monthly_pivot`, `df_dim_customer`) alongside `df`.
 * **Pandas & NumPy Native:** Automatically pre-injects `import pandas as pd`, `import numpy as np`, and `import polars as pl` into scope.
 
 ### Step 10: Syntax Preview & AST Security Sandbox
@@ -546,6 +562,9 @@ All scripts generated by DeepAnalyze now use fully validated expression syntax w
 deepanalyze/
 ├── __init__.py      # Public API exports & IPython extension lifecycle
 ├── wizard.py        # Zero-Code Interactive 13-Step Air-Gap Wizard
+├── brain.py         # 7-Brain Cognitive Resonance Engine (Data Physics & Blackboard)
+├── profiler.py      # Deep Exploration, Topology Discovery & Autonomous Briefing
+├── promptgen.py     # Prompt Synthesis Engine, Human Intuition & Interactive Review Loop
 ├── policies.py      # Jurisdictional Compliance Engine & "Not Sure" Statute Resolver
 ├── sentinel.py      # Full-File Deep Scanner, ERP Masker, NER Scanner & DP Mock Generator
 ├── vault.py         # In-Memory Token Vault with Dynamic Pattern Learning
@@ -560,10 +579,14 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 37 rigorous security and performance tests:
+Every release is validated against 74 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```
+* `tests/test_brain.py`: Validates all 7 cognitive sub-engines with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, and Eastern Arabic numeral / BiDi character normalization.
+* `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
+* `tests/test_multisheet.py`: Validates multi-sheet workbook topology profiling, relational foreign key candidate inference, synchronized multi-sheet tokenization preserving join integrity, multi-sheet DP mock generation, and multi-sheet airlock code execution.
+* `tests/test_promptgen.py`: Validates domain tech spec extraction (RAM/ROM/Battery/Processor), clinical healthcare instructions, ERP multi-tier ledger transformations, custom business logic injection, differential privacy mock integration, disk prompt export, and offline graceful degradation.
 * `tests/test_vault_speed.py`: Validates 100,000 rows tokenized in < 50 ms.
 * `tests/test_leakage.py`: Proves 0% plaintext leakage across international identifiers.
 * `tests/test_firewall.py`: Verifies 100% of forbidden calls, env vars, sensitive filepaths, timing attacks, and reflection are blocked.

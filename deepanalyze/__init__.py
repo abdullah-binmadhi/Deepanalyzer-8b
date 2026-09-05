@@ -2,6 +2,18 @@
 
 from typing import Any
 
+from .brain import (
+    Brain1TopologicalCartographer,
+    Brain2MorphologicalTypologist,
+    Brain3ForensicPathologist,
+    Brain4RelationalCryptographer,
+    Brain5MathematicalPhysicist,
+    Brain6AutonomousFeatureAlchemist,
+    Brain7ExecutiveOrchestrator,
+    CognitiveBlackboard,
+    DynamicResonanceEngine,
+    calculate_entropy,
+)
 from .firewall import (
     ASTSecurityViolation,
     audit_code,
@@ -15,6 +27,22 @@ from .policies import (
     CompliancePolicy,
     classify_dataframe_columns,
     resolve_policy,
+)
+from .profiler import (
+    ColumnProfile,
+    ForeignKeyCandidate,
+    SheetProfile,
+    SheetRole,
+    WorkbookTopology,
+    generate_engineering_briefing,
+    profile_dataframe,
+    profile_workbook,
+)
+from .promptgen import (
+    build_master_prompt,
+    enrich_prompt_with_local_model,
+    interactive_prompt_editor,
+    save_prompt_to_disk,
 )
 from .scorecard import QualityScorecard, generate_quality_scorecard
 from .sentinel import (
@@ -65,6 +93,27 @@ __all__ = [
     "QualityScorecard",
     "generate_pipeline_test_code",
     "write_pipeline_test_file",
+    "profile_dataframe",
+    "profile_workbook",
+    "generate_engineering_briefing",
+    "WorkbookTopology",
+    "SheetRole",
+    "SheetProfile",
+    "ColumnProfile",
+    "CognitiveBlackboard",
+    "DynamicResonanceEngine",
+    "Brain1TopologicalCartographer",
+    "Brain2MorphologicalTypologist",
+    "Brain3ForensicPathologist",
+    "Brain4RelationalCryptographer",
+    "Brain5MathematicalPhysicist",
+    "Brain6AutonomousFeatureAlchemist",
+    "Brain7ExecutiveOrchestrator",
+    "calculate_entropy",
+    "build_master_prompt",
+    "save_prompt_to_disk",
+    "interactive_prompt_editor",
+    "enrich_prompt_with_local_model",
     "AirGapWizard",
     "generate_airgap_payload",
     "create_compliance_audit_certificate",

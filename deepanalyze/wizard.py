@@ -39,6 +39,19 @@ from .policies import (
     get_statute_options_for_country,
     resolve_policy,
 )
+from .profiler import (
+    SheetRole,
+    WorkbookTopology,
+    generate_engineering_briefing,
+    profile_dataframe,
+    profile_workbook,
+)
+from .promptgen import (
+    build_master_prompt,
+    enrich_prompt_with_local_model,
+    interactive_prompt_editor,
+    save_prompt_to_disk,
+)
 from .sentinel import (
     extract_contextual_entities,
     generate_synthetic_mock,
@@ -173,9 +186,29 @@ def ingest_file(file_path: str) -> pl.DataFrame:
         return pl.read_parquet(clean_path)
 
     elif ext == ".json":
-        return pl.read_json(clean_path)
+        try:
+            with open(clean_path, "r", encoding="utf-8") as f:
+                raw_json = json.load(f)
 
-    raise ValueError(f"Unsupported dataset format `{ext}`. Supported: CSV, TSV, XLSX, Parquet, JSON.")
+            if isinstance(raw_json, list) and len(raw_json) == 1 and isinstance(raw_json[0], dict):
+                raw_json = raw_json[0]
+
+            if isinstance(raw_json, dict) and len(raw_json) > 0:
+                first_val = next(iter(raw_json.values()))
+                if isinstance(first_val, dict):
+                    import pandas as pd
+                    records = [{"item_key": k, **v} for k, v in raw_json.items()]
+                    pdf = pd.DataFrame(records)
+                    for c in pdf.columns:
+                        if pdf[c].dtype == "object":
+                            pdf[c] = pdf[c].map(lambda x: str(x) if pd.notna(x) else None)
+                    return pl.from_pandas(pdf)
+
+            return pl.read_json(clean_path)
+        except Exception:
+            return pl.read_json(clean_path)
+
+    raise ValueError(f"Unsupported dataset format `{ext}`. Supported: CSV, TSV, XLSX, XLS, Parquet, JSON.")
 
 
 def generate_airgap_payload(
@@ -183,35 +216,66 @@ def generate_airgap_payload(
     origin_country: str,
     target_jurisdiction: str,
     user_prompt: str,
-    target_df_name: str = "df"
+    target_df_name: str = "df",
+    topology: Optional[WorkbookTopology] = None,
+    multi_sheets: Optional[Dict[str, pl.DataFrame]] = None,
 ) -> Tuple[str, CompliancePolicy, Dict[str, str]]:
-    """Generates zero-risk sanitized prompt payload containing a 5-row differential synthetic mock."""
+    """Generates zero-risk sanitized prompt payload containing deep data briefing and differential synthetic mocks."""
     policy = resolve_policy(origin_country, target_jurisdiction)
     classified_cols = classify_dataframe_columns(df.columns, policy)
 
-    mock_rows = generate_synthetic_mock(df, n_rows=5)
-    mock_json = json.dumps(mock_rows, indent=2, default=str)
+    if topology is None:
+        single_profile = profile_dataframe(df, name=target_df_name)
+        topology = WorkbookTopology(
+            file_path="",
+            sheets={target_df_name: single_profile},
+            primary_sheet=target_df_name,
+            foreign_keys=[],
+            recommended_pipeline_steps=[]
+        )
+
+    briefing = generate_engineering_briefing(topology, user_prompt=user_prompt)
+
+    if multi_sheets and len(multi_sheets) > 1:
+        mock_payload_dict = {}
+        for sname, sdf in multi_sheets.items():
+            mock_payload_dict[sname] = generate_synthetic_mock(sdf, n_rows=5)
+        mock_json = json.dumps(mock_payload_dict, indent=2, default=str)
+        sheet_vars = [f"`df_{re.sub(r'[^a-zA-Z0-9_]', '_', s.lower()).strip('_')}`" for s in multi_sheets.keys()]
+        multi_sheet_guidance = f"""
+### MULTI-SHEET EXECUTION CONTEXT:
+The following DataFrames are pre-loaded in memory:
+- `sheets` dictionary: `{{"sheet_name": DataFrame, ...}}`
+- Primary DataFrame: `{target_df_name}` (from sheet '{topology.primary_sheet}')
+- Individual sheet DataFrames: {', '.join(sheet_vars)}
+Make sure to unpivot any pivot sheets, strip subtotal rows, and merge lookup sheets into `{target_df_name}`. Return the final cleaned DataFrame assigned to `df`.
+"""
+    else:
+        mock_rows = generate_synthetic_mock(df, n_rows=5)
+        mock_json = json.dumps(mock_rows, indent=2, default=str)
+        multi_sheet_guidance = ""
 
     payload = f"""# DEEPANALYZE AIR-GAP ZERO-RISK PAYLOAD
 # Target Jurisdiction: {policy.target_jurisdiction} ({policy.statute_name})
 # Privacy Guarantee: 100% Retained in Local RAM (0 production records transferred)
 
-## TASK DESCRIPTION:
+## TASK OBJECTIVE:
 {user_prompt}
 
-## TARGET DATAFRAME SCHEMA:
-DataFrame Name: `{target_df_name}` (available in memory as Pandas `pd.DataFrame` or Polars `pl.DataFrame`)
-Total Dimensions: {df.height} rows x {df.width} columns
+{briefing}
 
-## 5-ROW SYNTHETIC SCHEMA MOCK (0% Real Records):
+{multi_sheet_guidance}
+
+## SYNTHETIC SCHEMA MOCK (0% Real Records, Differential Privacy Injected):
 ```json
 {mock_json}
 ```
 
 ## CODING & EXCEL POWER QUERY INSTRUCTIONS:
-1. Write clean, idiomatic Python code transforming `{target_df_name}` using **Pandas (`pd`)** and **NumPy (`np`)** (or Polars `pl`).
-2. If this is an unflattened ERP spreadsheet, also provide the exact **Excel Power Query M-code** and step-by-step formula guide so business users can execute or refresh the transformation directly in Microsoft Excel.
-3. Return the executable Python script inside a ```python block, and the Power Query M-code inside a ```powerquery block.
+1. Write clean, idiomatic Python code transforming the data using **Pandas (`pd`)** and **NumPy (`np`)** (or Polars `pl`).
+2. Adhere strictly to the findings in the Data Engineering Briefing above (handle mixed date formats, strip currency symbols, parse accounting negatives, and unpivot/merge sheets as specified).
+3. If this dataset is from an Excel workbook, also provide the exact **Excel Power Query M-code** and step-by-step formula guide so business users can execute or refresh the transformation directly in Microsoft Excel.
+4. Return the executable Python script inside a ```python block, and the Power Query M-code inside a ```powerquery block.
 """
     return payload, policy, classified_cols
 
@@ -348,6 +412,18 @@ class AirGapWizard:
             if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
                 df = pl.from_pandas(df)
 
+        workbook_topology = None
+        multi_sheets = None
+        if cleaned_input and os.path.isfile(cleaned_input):
+            ext = os.path.splitext(cleaned_input)[1].lower()
+            if ext in (".xlsx", ".xls", ".xlsm"):
+                try:
+                    workbook_topology = profile_workbook(cleaned_input)
+                    if len(workbook_topology.sheets) > 1:
+                        multi_sheets = {s: p.df for s, p in workbook_topology.sheets.items() if p.df is not None}
+                except Exception:
+                    workbook_topology = None
+
         # Step 2: Country of Origin (Question 1)
         self.console.print("\n[bold cyan]Step 2: Country of Origin (Question 1)[/bold cyan]")
         self.console.print("  [1] Saudi Arabia (KSA)")
@@ -397,6 +473,69 @@ class AirGapWizard:
 
         # Step 4: Dataset Architecture & Geometry Discovery (Question 3)
         self.console.print("\n[bold cyan]Step 4: Dataset Architecture & Geometry Discovery (Question 3)[/bold cyan]")
+
+        # Multi-sheet workbook detection & interaction
+        if workbook_topology and len(workbook_topology.sheets) > 1:
+            sheet_rows_text = "\n".join([f"  • Sheet '[bold]{sname}[/bold]' ({sp.row_count:,} rows x {sp.col_count} cols) -> Role: [yellow]{sp.role.value}[/yellow]" for sname, sp in workbook_topology.sheets.items()])
+            links_text = ("\n\n[bold cyan]Inferred Relational Keys:[/bold cyan]\n" + "\n".join([f"  • `{fk.from_sheet}.{fk.from_col}` <-> `{fk.to_sheet}.{fk.to_col}` ({fk.overlap_pct}% match)" for fk in workbook_topology.foreign_keys])) if workbook_topology.foreign_keys else ""
+            self.console.print(Panel(
+                f"[bold cyan]Multi-Sheet Workbook Architecture Detected ({len(workbook_topology.sheets)} Sheets):[/bold cyan]\n" +
+                sheet_rows_text + links_text,
+                border_style="cyan"
+            ))
+            self.console.print("\nHow would you like to process this multi-sheet workbook?")
+            self.console.print("  [1] Automatically consolidate and clean all sheets together (Recommended)")
+            self.console.print(f"  [2] Process primary sheet '{workbook_topology.primary_sheet}' only")
+            self.console.print("  [3] Choose a specific sheet to process")
+            ms_choice = Prompt.ask("Select multi-sheet mode [1-3]", default="1")
+
+            if ms_choice.strip() == "2":
+                multi_sheets = None
+                df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
+            elif ms_choice.strip() == "3":
+                s_names = list(workbook_topology.sheets.keys())
+                for idx, sn in enumerate(s_names, 1):
+                    self.console.print(f"  [{idx}] {sn}")
+                chosen_s = Prompt.ask(f"Select sheet [1-{len(s_names)}]", default="1")
+                try:
+                    chosen_name = s_names[int(chosen_s) - 1]
+                except Exception:
+                    chosen_name = s_names[0]
+                multi_sheets = None
+                df = workbook_topology.sheets[chosen_name].df
+                df_name = re.sub(r"[^a-zA-Z0-9_]", "_", chosen_name).strip("_").lower() or "df"
+            else:
+                df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
+                self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
+        else:
+            single_prof = profile_dataframe(df, name=df_name)
+            workbook_topology = WorkbookTopology(
+                file_path=cleaned_input or "",
+                sheets={df_name: single_prof},
+                primary_sheet=df_name,
+                foreign_keys=[],
+                recommended_pipeline_steps=[]
+            )
+            diagnostics = []
+            for col in single_prof.columns:
+                if len(col.date_formats) > 1:
+                    diagnostics.append(f"`{col.name}`: mixed date formats ({', '.join(col.date_formats)})")
+                if col.has_accounting_negatives:
+                    diagnostics.append(f"`{col.name}`: accounting negative brackets `(1,000.00)`")
+                if col.has_dirty_currency:
+                    diagnostics.append(f"`{col.name}`: currency symbols needing stripping")
+            if single_prof.subtotal_rows:
+                diagnostics.append(f"{len(single_prof.subtotal_rows)} subtotal/summary row(s) identified")
+            if single_prof.header_row_offset > 0:
+                diagnostics.append(f"top {single_prof.header_row_offset} metadata rows preceding true table headers")
+
+            if diagnostics:
+                self.console.print(f"[bold cyan][Data Intelligence Diagnostics][/bold cyan] Found {len(diagnostics)} data anomalies:")
+                for diag in diagnostics[:5]:
+                    self.console.print(f"  • {diag}")
+
         arch_options = [
             "Clean Relational / Tabular (Standard Columns)",
             "Hierarchical / Ragged ERP Report (Invoices, GL Ledgers, Multi-Row Headers)",
@@ -425,18 +564,69 @@ class AirGapWizard:
 
         # Step 5: Full-File Deep Scan & Pattern Categorization
         self.console.print("\n[bold cyan]Step 5: Full-File Deep Scan & Pattern Categorization[/bold cyan]")
-        if arch_key == "ERP_RAGGED":
-            masked_df = mask_structural_erp(df)
-            self.console.print(f"[INFO] Executed Structural Geometric Masking across all {df.height} rows and {df.width} columns.")
+        masked_multi_sheets = {}
+        if multi_sheets and len(multi_sheets) > 1:
+            self.console.print(f"[INFO] Executing synchronized tokenization across all {len(multi_sheets)} sheets...")
+            for sname, sdf in multi_sheets.items():
+                if arch_key == "ERP_RAGGED":
+                    masked_multi_sheets[sname] = mask_structural_erp(sdf)
+                else:
+                    masked_multi_sheets[sname] = tokenize_dataframe(sdf, policy)
+            masked_df = masked_multi_sheets[workbook_topology.primary_sheet]
+            self.console.print(f"[INFO] Completed synchronized tokenization across all {len(multi_sheets)} sheets.")
         else:
-            masked_df = tokenize_dataframe(df, policy)
-            self.console.print(f"[INFO] Executed SIMD Volatile Tokenization across all {df.height} rows and {df.width} columns.")
+            if arch_key == "ERP_RAGGED":
+                masked_df = mask_structural_erp(df)
+                self.console.print(f"[INFO] Executed Structural Geometric Masking across all {df.height} rows and {df.width} columns.")
+            else:
+                masked_df = tokenize_dataframe(df, policy)
+                self.console.print(f"[INFO] Executed SIMD Volatile Tokenization across all {df.height} rows and {df.width} columns.")
 
-        # Step 6: Unique Masking Snippet Display
-        self.console.print("\n[bold cyan]Step 6: Unique Masked Pattern Snippet Display[/bold cyan]")
+        # Step 6: Dataset Inventory Catalog & Analytical Profile Exploration
+        self.console.print("\n[bold cyan]Step 6: Dataset Inventory Catalog & Analytical Profile Exploration[/bold cyan]")
+        classified = classify_dataframe_columns(df.columns, policy)
+        cat_table = Table(title=f"Dataset Inventory Catalog ({df.width} Columns, {df.height:,} Rows)", border_style="cyan")
+        cat_table.add_column("#", style="dim", justify="right", width=4)
+        cat_table.add_column("Column Name", style="bold")
+        cat_table.add_column("Inferred Role", style="cyan")
+        cat_table.add_column("Dtype", style="magenta")
+        cat_table.add_column("Nulls (%)", justify="right")
+        cat_table.add_column("Unique", justify="right")
+        cat_table.add_column("Sample Raw Values", style="yellow", max_width=35)
+        cat_table.add_column("Privacy Tier", style="bold")
+
+        primary_prof = workbook_topology.sheets.get(workbook_topology.primary_sheet) if workbook_topology else None
+        col_prof_map = {cp.name: cp for cp in primary_prof.columns} if primary_prof else {}
+
+        for idx, col in enumerate(df.columns, 1):
+            col_prof = col_prof_map.get(col)
+            role = col_prof.inferred_role if col_prof else "Attribute"
+            dtype_str = str(df[col].dtype)
+            null_count = df[col].null_count()
+            null_pct = round((null_count / max(df.height, 1)) * 100, 1)
+            null_str = f"{null_count} ({null_pct}%)" if null_count > 0 else "0 (0%)"
+            card = df[col].drop_nulls().n_unique()
+
+            non_null_samples = df[col].drop_nulls().head(3).to_list()
+            sample_str = ", ".join(repr(str(x)[:20]) for x in non_null_samples)
+            if len(sample_str) > 35:
+                sample_str = sample_str[:32] + "..."
+
+            tier = classified.get(col, "SAFE")
+            if tier == "MUST_ENCRYPT":
+                tier_styled = "[bold red]MUST_ENCRYPT[/bold red]"
+            elif tier == "RECOMMENDED_TO_MASK":
+                tier_styled = "[bold yellow]REC_MASK[/bold yellow]"
+            else:
+                tier_styled = "[green]SAFE[/green]"
+
+            cat_table.add_row(str(idx), col, role, dtype_str, null_str, str(card), sample_str, tier_styled)
+
+        self.console.print(cat_table)
+
         pattern_summary = get_masked_pattern_summary(df, masked_df)
         if pattern_summary:
-            pat_table = Table(title="Protected Pattern Categorization", border_style="cyan")
+            pat_table = Table(title="Protected Pattern Categorization", border_style="dim")
             pat_table.add_column("Pattern Category", style="bold cyan")
             pat_table.add_column("Example Raw Value", style="yellow")
             pat_table.add_column("Masked Format", style="green")
@@ -444,19 +634,6 @@ class AirGapWizard:
             for item in pattern_summary:
                 pat_table.add_row(item["category"], item["raw_example"], item["masked_format"], item["detected_in"])
             self.console.print(pat_table)
-        else:
-            # Fallback table for standard tabular columns
-            classified = classify_dataframe_columns(df.columns, policy)
-            risk_table = Table(title="Dataset Column Classification", border_style="dim")
-            risk_table.add_column("Column Name", style="bold")
-            risk_table.add_column("Risk Tier", style="bold")
-            risk_table.add_column("Action Taken", style="dim")
-            for col in df.columns:
-                tier = classified.get(col, "SAFE")
-                color = "red" if tier == "MUST_ENCRYPT" else ("yellow" if tier == "RECOMMENDED_TO_MASK" else "green")
-                action = "Tokenized" if tier == "MUST_ENCRYPT" else ("Masked" if tier == "RECOMMENDED_TO_MASK" else "Preserved")
-                risk_table.add_row(col, f"[{color}]{tier}[/{color}]", action)
-            self.console.print(risk_table)
 
         # k-Anonymity & Re-Identification Risk Assessment
         from .kanonymity import analyze_kanonymity
@@ -482,9 +659,15 @@ class AirGapWizard:
             more = Prompt.ask("Are there more columns or data elements you want me to encrypt? [y/N]", default="N")
             if not more.lower().startswith("y"):
                 break
-            field_name = Prompt.ask("Enter column or field name to encrypt (e.g. Seq, GL Code, Doc. No)")
+            field_name = Prompt.ask("Enter column name or index to encrypt (e.g. Seq, GL Code, 4)")
             if not field_name.strip():
                 continue
+
+            # Support entering column by 1-based index
+            if field_name.strip().isdigit():
+                col_idx = int(field_name.strip()) - 1
+                if 0 <= col_idx < len(df.columns):
+                    field_name = df.columns[col_idx]
 
             know_val = Prompt.ask(f"Do you know an expected or potential value for `{field_name}`? [y/N]", default="y")
             if know_val.lower().startswith("y"):
@@ -499,17 +682,76 @@ class AirGapWizard:
             else:
                 self.console.print(f"[INFO] Registered rule for field '[bold]{field_name}[/bold]'.")
 
-        # Step 8: Encrypted Duplicate Export vs. Clipboard Payload
-        self.console.print("\n[bold cyan]Step 8: Encrypted Duplicate Export vs. Clipboard Payload[/bold cyan]")
-        dl_dup = Prompt.ask("Do you want to download an encrypted duplicate file to disk? [y/N]", default="y")
+        # Step 7.5: Human Intuition & Custom Objectives Hook
+        self.console.print("\n[bold cyan]Step 7.5: Human Intuition & Domain Objectives[/bold cyan]")
+        has_custom = Prompt.ask(
+            "Do you have special business requests or column extraction rules for the cloud AI? [y/N]",
+            default="N"
+        )
+        user_custom_instructions = ""
+        if has_custom.lower().startswith("y"):
+            user_custom_instructions = read_multiline_input(
+                self.console,
+                "Enter your custom instructions (e.g., specific metrics to calculate, text to extract, columns to drop):"
+            )
+
+        # Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
+        self.console.print("\n[bold cyan]Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop[/bold cyan]")
+
+        # 1. Synthesize master prompt
+        master_prompt = build_master_prompt(
+            df=df,
+            topology=workbook_topology,
+            policy=policy,
+            user_custom_instructions=user_custom_instructions,
+            target_df_name=df_name,
+            multi_sheets=masked_multi_sheets if multi_sheets else None,
+            dataset_name=dataset_base_name,
+        )
+
+        # 2. Optionally enrich with local model if active
+        master_prompt = enrich_prompt_with_local_model(master_prompt)
+
+        # 3. Interactive Review & Refinement Loop
+        finalized_prompt = interactive_prompt_editor(
+            master_prompt,
+            self.console,
+            dataset_name=dataset_base_name
+        )
+
+        # 4. Save finalized prompt to disk
+        prompt_file_path = save_prompt_to_disk(
+            finalized_prompt,
+            dataset_dir=dataset_dir or os.getcwd(),
+            dataset_base_name=dataset_base_name
+        )
+
+        # 5. Copy to clipboard
+        copied = copy_to_clipboard(finalized_prompt)
+        clip_msg = " [bold green](Copied to system clipboard!)[/bold green]" if copied else ""
+
+        self.console.print(Panel(
+            f"[bold green][Saved][/bold green] Autonomous Engineering Briefing Saved to Disk!{clip_msg}\n"
+            f"• Prompt File: `[bold]{prompt_file_path}[/bold]`\n"
+            f"• Ready to feed directly into ChatGPT, Claude, Cursor, or your API payload.",
+            border_style="green"
+        ))
+
+        # 6. Offer optional encrypted duplicate spreadsheet export
+        dl_dup = Prompt.ask("Do you also want to download an encrypted duplicate spreadsheet to disk? [y/N]", default="N")
         if dl_dup.lower().startswith("y"):
             ext = os.path.splitext(cleaned_input)[1].lower() if cleaned_input else ".xlsx"
             if ext not in (".xlsx", ".csv", ".parquet"):
                 ext = ".xlsx"
             dup_filename = f"{dataset_base_name}_anonymized{ext}"
-            dup_path = os.path.join(dataset_dir, dup_filename)
+            dup_path = os.path.join(dataset_dir or os.getcwd(), dup_filename)
             try:
-                if ext == ".xlsx":
+                if ext == ".xlsx" and masked_multi_sheets and len(masked_multi_sheets) > 1:
+                    import pandas as pd
+                    with pd.ExcelWriter(dup_path, engine="openpyxl") as writer:
+                        for sname, sdf in masked_multi_sheets.items():
+                            sdf.to_pandas().to_excel(writer, sheet_name=sname, index=False)
+                elif ext == ".xlsx":
                     masked_df.write_excel(dup_path)
                 elif ext == ".csv":
                     masked_df.write_csv(dup_path)
@@ -524,23 +766,7 @@ class AirGapWizard:
                 ))
             except Exception as e:
                 self.console.print(f"[bold red]Failed to save duplicate file:[/bold red] {e}")
-        else:
-            payload, _, _ = generate_airgap_payload(
-                df, origin_country, policy.statute_name,
-                "Clean and transform dataset", target_df_name=df_name
-            )
-            copied = copy_to_clipboard(payload)
-            if copied:
-                self.console.print(Panel(
-                    "[INFO] [bold green]Sanitized 5-row synthetic mock payload copied to system clipboard![/bold green]\n"
-                    "Paste directly into ChatGPT, Claude, or Cursor.",
-                    border_style="green"
-                ))
-            else:
-                self.console.print("[yellow]Clipboard unavailable. Printing payload directly:[/yellow]\n")
-                self.console.print(payload)
 
-        # Step 9: Interactive Code Execution Airlock (.py / .ipynb)
         # Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
         self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
         has_code = Prompt.ask("Will code be provided to clean/transform the data? [y/N]", default="N")
@@ -581,6 +807,13 @@ class AirGapWizard:
                     out_default = os.path.join(dataset_dir, f"{dataset_base_name}_cleaned.csv")
                     exec_scope.setdefault("OUTPUT_FILE", out_default)
                     exec_scope.setdefault("output_path", out_default)
+
+                if multi_sheets and len(multi_sheets) > 1:
+                    exec_scope["sheets"] = {sname: sdf for sname, sdf in multi_sheets.items()}
+                    for sname, sdf in multi_sheets.items():
+                        s_var = "df_" + re.sub(r"[^a-zA-Z0-9_]", "_", sname.lower()).strip("_")
+                        exec_scope[s_var] = sdf
+                        exec_scope[sname] = sdf
 
                 if pipeline_type == "py":
                     while True:
