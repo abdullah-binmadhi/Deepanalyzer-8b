@@ -139,13 +139,13 @@ def start_server(
         host = "/tmp/llama.sock" if platform.system() in ("Darwin", "Linux") else "127.0.0.1"
     resolved_model = resolve_model_path(model_path)
     if not resolved_model:
-        print("❌ Error: Could not find DeepAnalyze GGUF model file.")
+        print("Error: Could not find DeepAnalyze GGUF model file.")
         print("   Please place your model in ./models/ or set export DEEPANALYZE_MODEL_PATH='/path/to/model.gguf'")
         sys.exit(1)
 
     llama_bin = resolve_llama_server_binary()
     if not llama_bin:
-        print("❌ Error: `llama-server` binary not found in PATH or standard locations.")
+        print("Error: `llama-server` binary not found in PATH or standard locations.")
         print("   Please install llama.cpp via `brew install llama.cpp` (macOS) or compile from source.")
         sys.exit(1)
 
@@ -168,34 +168,38 @@ def start_server(
         *(extra_args or [])
     ]
 
-    print(f"🚀 Starting DeepAnalyze Inference Server ({platform.system()} {platform.machine()})...")
-    print(f"📦 Target Model: {resolved_model}")
+    print(f"[INFO] Starting DeepAnalyze Inference Server ({platform.system()} {platform.machine()})...")
+    print(f"[INFO] Target Model: {resolved_model}")
     if resolved_draft:
-        print(f"⚡ Speculative Draft Model (2.2x): {resolved_draft} (draft_max={draft_max})")
+        print(f"[INFO] Speculative Draft Model (2.2x): {resolved_draft} (draft_max={draft_max})")
     if prompt_cache_path:
-        print(f"💾 Persistent Prompt Cache: {prompt_cache_path}")
-    print(f"🌐 Host: {host}:{port}")
-    print(f"⚡ Acceleration Flags: {' '.join(hw_flags)}")
-    print(f"🔧 Command: {' '.join(cmd)}\n")
+        print(f"[INFO] Persistent Prompt Cache: {prompt_cache_path}")
+    print(f"[INFO] Host: {host}:{port}")
+    print(f"[INFO] Acceleration Flags: {' '.join(hw_flags)}")
+    print(f"[INFO] Command: {' '.join(cmd)}\n")
 
     try:
         proc = subprocess.Popen(cmd)
         proc.wait()
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down DeepAnalyze Inference Server cleanly...")
+        print("\nShutting down DeepAnalyze Inference Server cleanly...")
         if proc:
             proc.terminate()
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
-        print("✔ Server stopped.")
+        print("[INFO] Server stopped.")
 
 
 def cli_entrypoint():
     """Universal CLI entry point for deepanalyze command."""
     parser = argparse.ArgumentParser(description="DeepAnalyze Unified Server & Runtime CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # wizard command
+    wizard_parser = subparsers.add_parser("wizard", help="Launch the interactive zero-code Air-Gap Wizard")
+    wizard_parser.add_argument("file", nargs="?", default=None, help="Optional dataset file path to ingest immediately")
 
     # server command
     server_parser = subparsers.add_parser("server", help="Manage local inference server")
@@ -212,6 +216,11 @@ def cli_entrypoint():
     start_parser.add_argument("--min-p", type=float, default=0.05, help="Min-P sampling threshold (default: 0.05)")
 
     args, unknown = parser.parse_known_args()
+
+    if args.command == "wizard":
+        from .wizard import AirGapWizard
+        AirGapWizard().run(df=getattr(args, "file", None))
+        return
 
     if args.command == "server":
         if args.server_action == "start" or args.server_action is None:

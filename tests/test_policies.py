@@ -58,4 +58,4 @@ if __name__ == "__main__":
     test_regional_policies_resolution()
     test_column_classification()
     test_luhn_algorithm()
-    print("✅ test_policies.py passed!")
+    print("test_policies.py passed!")

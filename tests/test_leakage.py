@@ -37,7 +37,7 @@ def test_zero_leakage_payload_generation():
         if raw_id in payload:
             found_leaks.append(raw_id)
 
-    print("\n🔍 Zero-Leakage Audit Results:")
+    print("\nZero-Leakage Audit Results:")
     print(f"Total raw identities tested: {len(raw_identities)}")
     print(f"Found leaks in payload: {found_leaks}")
 
@@ -46,4 +46,4 @@ def test_zero_leakage_payload_generation():
 
 if __name__ == "__main__":
     test_zero_leakage_payload_generation()
-    print("✅ test_leakage.py passed!")
+    print("test_leakage.py passed!")

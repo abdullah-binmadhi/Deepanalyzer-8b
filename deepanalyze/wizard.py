@@ -122,7 +122,7 @@ def read_multiline_input(console_instance: Console, prompt_msg: str) -> str:
                 script_path = clean_filepath(line)
                 with open(script_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                console_instance.print(f"✔ Loaded script from `[bold]{script_path}[/bold]`.")
+                console_instance.print(f"[INFO] Loaded script from `[bold]{script_path}[/bold]`.")
                 return content
 
             if line.strip() in ("EOF", "END"):
@@ -276,7 +276,7 @@ class AirGapWizard:
         self.console = console_instance or console
         self.user_ns = user_ns
 
-    def run(self, df: Optional[pl.DataFrame] = None, df_name: str = "df") -> Optional[pl.DataFrame]:
+    def run(self, df: Optional[Any] = None, df_name: str = "df") -> Optional[pl.DataFrame]:
         """Runs the 13-step interactive zero-code Air-Gap Wizard."""
         self.console.print(Panel.fit(
             "[bold cyan]DEEPANALYZE AIR-GAP COMPLIANCE GATEWAY (v4.0)[/bold cyan]\n"
@@ -289,8 +289,15 @@ class AirGapWizard:
         cleaned_input = ""
 
         # Step 1: Resilient Ingestion
-        if df is None:
+        if isinstance(df, str):
+            path_input = df
+            df = None
+        elif df is None:
             path_input = Prompt.ask("\n[bold]Step 1: Enter path to dataset file (CSV/Excel/Parquet) or in-memory variable name[/bold]")
+        else:
+            path_input = None
+
+        if df is None and path_input is not None:
             cleaned_input = clean_filepath(path_input)
 
             if self.user_ns and cleaned_input in self.user_ns and hasattr(self.user_ns[cleaned_input], "shape"):
@@ -299,7 +306,7 @@ class AirGapWizard:
                 dataset_base_name = df_name
                 if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
                     df = pl.from_pandas(df)
-                self.console.print(f"✔ Bound to in-memory DataFrame `[bold]{df_name}[/bold]` ({df.height} rows x {df.width} columns).")
+                self.console.print(f"[INFO] Bound to in-memory DataFrame `[bold]{df_name}[/bold]` ({df.height} rows x {df.width} columns).")
             else:
                 try:
                     df = ingest_file(cleaned_input)
@@ -309,7 +316,7 @@ class AirGapWizard:
                     df_name = clean_var
                     if self.user_ns is not None:
                         self.user_ns[df_name] = df
-                    self.console.print(f"✔ Ingested {df.height} rows x {df.width} columns successfully as variable `[bold]{df_name}[/bold]`.")
+                    self.console.print(f"[INFO] Ingested {df.height} rows x {df.width} columns successfully as variable `[bold]{df_name}[/bold]`.")
                 except Exception as e:
                     self.console.print(f"[bold red]Ingestion Error:[/bold red] {e}")
                     return None
@@ -334,7 +341,7 @@ class AirGapWizard:
             "5": "Universal"
         }
         origin_country = country_map.get(origin_choice.strip(), origin_choice.strip())
-        self.console.print(f"✔ Origin Location: [bold green]{origin_country}[/bold green]")
+        self.console.print(f"[INFO] Origin Location: [bold green]{origin_country}[/bold green]")
 
         # Step 3: Dynamic Compliance Framework (Question 2)
         self.console.print("\n[bold cyan]Step 3: Governing Compliance Framework (Question 2)[/bold cyan]")
@@ -351,7 +358,7 @@ class AirGapWizard:
         if is_not_sure:
             statute_name = detect_statute_for_country(origin_country)
             self.console.print(
-                f"✔ [bold green]System Analysis:[/bold green] Detected best framework for [bold]{origin_country}[/bold] is "
+                f"[bold green][Analysis][/bold green] Detected best framework for [bold]{origin_country}[/bold] is "
                 f"'[bold cyan]{statute_name}[/bold cyan]'. Enforcing this framework."
             )
         else:
@@ -360,7 +367,7 @@ class AirGapWizard:
                 statute_name = options[chosen_idx]
             except Exception:
                 statute_name = framework_choice.strip()
-            self.console.print(f"✔ Enforcing Statute: [bold green]{statute_name}[/bold green]")
+            self.console.print(f"[INFO] Enforcing Statute: [bold green]{statute_name}[/bold green]")
 
         policy = resolve_policy(origin_country, statute_name)
 
@@ -380,7 +387,7 @@ class AirGapWizard:
             detected_key, human_name, explanation = detect_dataset_architecture(df)
             arch_key = detected_key
             self.console.print(
-                f"✔ [bold green]System Analysis:[/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. "
+                f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. "
                 f"{explanation} Activating specialized privacy airlock."
             )
         elif arch_choice.strip() == "1":
@@ -396,10 +403,10 @@ class AirGapWizard:
         self.console.print("\n[bold cyan]Step 5: Full-File Deep Scan & Pattern Categorization[/bold cyan]")
         if arch_key == "ERP_RAGGED":
             masked_df = mask_structural_erp(df)
-            self.console.print(f"✔ Executed Structural Geometric Masking across all {df.height} rows and {df.width} columns.")
+            self.console.print(f"[INFO] Executed Structural Geometric Masking across all {df.height} rows and {df.width} columns.")
         else:
             masked_df = tokenize_dataframe(df, policy)
-            self.console.print(f"✔ Executed SIMD Volatile Tokenization across all {df.height} rows and {df.width} columns.")
+            self.console.print(f"[INFO] Executed SIMD Volatile Tokenization across all {df.height} rows and {df.width} columns.")
 
         # Step 6: Unique Masking Snippet Display
         self.console.print("\n[bold cyan]Step 6: Unique Masked Pattern Snippet Display[/bold cyan]")
@@ -444,11 +451,11 @@ class AirGapWizard:
                 if updated_df is not None:
                     masked_df = updated_df
                 self.console.print(
-                    f"✔ [bold green]Learned Pattern:[/bold green] Inferred regex `[cyan]{learned_pat}[/cyan]` "
+                    f"[bold green][Pattern Learned][/bold green] Inferred regex `[cyan]{learned_pat}[/cyan]` "
                     f"for field '[bold]{field_name}[/bold]'. Re-masked matching occurrences across dataset."
                 )
             else:
-                self.console.print(f"✔ Registered rule for field '[bold]{field_name}[/bold]'.")
+                self.console.print(f"[INFO] Registered rule for field '[bold]{field_name}[/bold]'.")
 
         # Step 8: Encrypted Duplicate Export vs. Clipboard Payload
         self.console.print("\n[bold cyan]Step 8: Encrypted Duplicate Export vs. Clipboard Payload[/bold cyan]")
@@ -467,7 +474,7 @@ class AirGapWizard:
                 elif ext == ".parquet":
                     masked_df.write_parquet(dup_path)
                 self.console.print(Panel(
-                    f"✔ [bold green]Encrypted Duplicate Successfully Saved to Disk![/bold green]\n"
+                    f"[bold green][Saved][/bold green] Encrypted Duplicate Successfully Saved to Disk!\n"
                     f"• Saved at: `[bold]{dup_path}[/bold]`\n"
                     f"• Structure: 100% of ERP layout and coordinates preserved\n"
                     f"• Privacy: 0% real personal or financial figures retained",
@@ -483,8 +490,8 @@ class AirGapWizard:
             copied = copy_to_clipboard(payload)
             if copied:
                 self.console.print(Panel(
-                    "✔ [bold green]Sanitized 5-row synthetic mock payload copied to system clipboard![/bold green]\n"
-                    "👉 Paste directly into ChatGPT, Claude, or Cursor.",
+                    "[INFO] [bold green]Sanitized 5-row synthetic mock payload copied to system clipboard![/bold green]\n"
+                    "Paste directly into ChatGPT, Claude, or Cursor.",
                     border_style="green"
                 ))
             else:
@@ -501,7 +508,7 @@ class AirGapWizard:
 
             pipeline_type = "ipynb" if code_mode.strip() == "2" else "py"
             pipeline_file = create_pipeline_file(dataset_dir, file_type=pipeline_type)
-            self.console.print(f"✔ Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
+            self.console.print(f"[INFO] Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
 
             exec_scope = self.user_ns if self.user_ns is not None else globals()
             exec_scope[df_name] = df
@@ -524,7 +531,7 @@ class AirGapWizard:
                         exec_scope[df_name], _ = prepare_dataframe_for_code(exec_scope[df_name], code_text)
                         execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
                         append_code_to_pipeline(pipeline_file, code_text)
-                        self.console.print("✔ [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
+                        self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
                         break
                     except Exception as err:
                         self.console.print(Panel(
@@ -556,7 +563,7 @@ class AirGapWizard:
                             exec_scope[df_name], _ = prepare_dataframe_for_code(exec_scope[df_name], block_text)
                             execute_code_safely(block_text, exec_scope, timeout_sec=20.0)
                             append_code_to_pipeline(pipeline_file, block_text)
-                            self.console.print(f"✔ [bold green]Block {block_num} executed successfully![/bold green]")
+                            self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
                             block_success = True
                             break
                         except Exception as err:
@@ -585,7 +592,7 @@ class AirGapWizard:
         if current_target_df is not None and hasattr(current_target_df, "shape"):
             final_df = detokenize_dataframe(current_target_df)
             exec_scope[df_name] = final_df
-            self.console.print("✔ [bold green]Volatile Detokenization Complete:[/bold green] Restored genuine identities with 100.00% character fidelity.")
+            self.console.print("[bold green][Detokenized][/bold green] Volatile Detokenization Complete: Restored genuine identities with 100.00% character fidelity.")
         else:
             final_df = df
 
@@ -611,7 +618,7 @@ class AirGapWizard:
                         final_df.write_parquet(clean_out_path)
                     else:
                         final_df.write_excel(clean_out_path)
-                self.console.print(f"✔ [bold green]Clean dataset exported successfully to:[/bold green] `[bold]{clean_out_path}[/bold]`")
+                self.console.print(f"[bold green][Exported][/bold green] Clean dataset exported successfully to: `[bold]{clean_out_path}[/bold]`")
             except Exception as e:
                 self.console.print(f"[bold red]Failed to export cleaned file:[/bold red] {e}")
 
@@ -625,7 +632,7 @@ class AirGapWizard:
                 with open(pq_guide_path, "w", encoding="utf-8") as f:
                     f.write(generate_powerquery_step_by_step_guide(dataset_base_name, cleaned_input))
                 self.console.print(
-                    f"✔ [bold green]Excel Power Query Companion Exported:[/bold green]\n"
+                    f"[bold green][Exported][/bold green] Excel Power Query Companion Exported:\n"
                     f"  • M-Script: `[bold]{pq_script_path}[/bold]`\n"
                     f"  • Step-by-Step UI Guide: `[bold]{pq_guide_path}[/bold]`"
                 )
@@ -636,6 +643,11 @@ class AirGapWizard:
         self.console.print("\n[bold cyan]Step 13: Statutory Audit Certificate[/bold cyan]")
         cert_path = os.path.join(dataset_dir, "compliance_audit.md")
         create_compliance_audit_certificate(df, final_df if isinstance(final_df, pl.DataFrame) else df, policy, output_path=cert_path)
-        self.console.print(f"✔ Formal compliance audit report generated at `[bold]{cert_path}[/bold]`.")
+        self.console.print(f"[INFO] Formal compliance audit report generated at `[bold]{cert_path}[/bold]`.")
 
         return final_df
+
+
+if __name__ == "__main__":
+    target_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    AirGapWizard().run(df=target_arg)

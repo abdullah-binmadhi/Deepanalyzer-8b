@@ -44,4 +44,4 @@ def test_firewall_allows_safe_polars_code():
 if __name__ == "__main__":
     test_firewall_blocks_forbidden_imports()
     test_firewall_allows_safe_polars_code()
-    print("✅ test_firewall.py passed!")
+    print("test_firewall.py passed!")

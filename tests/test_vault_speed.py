@@ -27,7 +27,7 @@ def test_vault_speed_100k_rows():
     t1 = time.perf_counter()
 
     elapsed_ms = (t1 - t0) * 1000
-    print(f"\n⚡ Vault Tokenization on 100,000 rows x 6 columns: {elapsed_ms:.2f} ms")
+    print(f"\nVault Tokenization on 100,000 rows x 6 columns: {elapsed_ms:.2f} ms")
 
     assert tokenized.height == n_rows
     # Direct identifiers should be pseudonymized
@@ -41,4 +41,4 @@ def test_vault_speed_100k_rows():
 
 if __name__ == "__main__":
     test_vault_speed_100k_rows()
-    print("✅ test_vault_speed.py passed!")
+    print("test_vault_speed.py passed!")

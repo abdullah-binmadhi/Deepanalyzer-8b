@@ -43,7 +43,7 @@ def test_memory_footprint_airgap_lifecycle():
     mem_after = get_process_memory_mb()
     overhead_mb = mem_after - mem_before
 
-    print(f"\n🧠 Memory Footprint: Before={mem_before:.1f} MB, After={mem_after:.1f} MB, Overhead={overhead_mb:.1f} MB")
+    print(f"\nMemory Footprint: Before={mem_before:.1f} MB, After={mem_after:.1f} MB, Overhead={overhead_mb:.1f} MB")
 
     # Clean up and flush
     flush()
@@ -55,4 +55,4 @@ def test_memory_footprint_airgap_lifecycle():
 
 if __name__ == "__main__":
     test_memory_footprint_airgap_lifecycle()
-    print("✅ test_memory_footprint.py passed!")
+    print("test_memory_footprint.py passed!")

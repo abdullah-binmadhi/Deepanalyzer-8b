@@ -52,9 +52,9 @@ def test_reconciliation_fidelity():
     assert full_restored["customer_name"].to_list() == original_names
     assert full_restored["email"].to_list() == original_emails
 
-    print("✔ Deterministic reconciliation verified with 100.00% character fidelity.")
+    print("Deterministic reconciliation verified with 100.00% character fidelity.")
 
 
 if __name__ == "__main__":
     test_reconciliation_fidelity()
-    print("✅ test_reconciliation.py passed!")
+    print("test_reconciliation.py passed!")

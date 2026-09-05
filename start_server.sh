@@ -20,7 +20,7 @@ for path in "${MODEL_CANDIDATES[@]}"; do
 done
 
 if [ -z "$MODEL_PATH" ]; then
-  echo "❌ Error: Could not find DeepAnalyze GGUF model file."
+  echo "Error: Could not find DeepAnalyze GGUF model file."
   echo "Please place your model in ./models/ or set export DEEPANALYZE_MODEL_PATH='/path/to/model.gguf'"
   exit 1
 fi
@@ -43,7 +43,7 @@ done
 
 SPECULATIVE_FLAGS=()
 if [ -n "$DRAFT_PATH" ]; then
-  echo "⚡ Speculative Draft Model (2.5x Speedup): $DRAFT_PATH"
+  echo "[INFO] Speculative Draft Model (2.5x Speedup): $DRAFT_PATH"
   SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --spec-draft-n-max 8)
 fi
 
@@ -53,16 +53,16 @@ if [ -e "$SOCKET_PATH" ]; then
   rm -f "$SOCKET_PATH"
 fi
 
-echo "🚀 Starting DeepAnalyze Inference Server (v4.0 Air-Gap Mode)..."
-echo "📦 Primary Target Model: $MODEL_PATH"
-echo "🌐 Transport: Unix Domain Socket ($SOCKET_PATH)"
+echo "[INFO] Starting DeepAnalyze Inference Server (v4.0 Air-Gap Mode)..."
+echo "[INFO] Primary Target Model: $MODEL_PATH"
+echo "[INFO] Transport: Unix Domain Socket ($SOCKET_PATH)"
 
 # 3. Hardware-specific Flag Detection
 EXTRA_FLAGS=()
 
 # Detect macOS / Apple Silicon
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "⚡ Hardware Detected: Apple Silicon (Metal Acceleration)"
+  echo "[INFO] Hardware Detected: Apple Silicon (Metal Acceleration)"
   EXTRA_FLAGS=(
     -ngl 99
     -c 16384
@@ -75,7 +75,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   )
 else
   # Linux / CUDA / CPU fallback
-  echo "⚡ Hardware Detected: Linux/Generic (CUDA/Vulkan/CPU)"
+  echo "[INFO] Hardware Detected: Linux/Generic (CUDA/Vulkan/CPU)"
   EXTRA_FLAGS=(
     -ngl 99
     -c 16384

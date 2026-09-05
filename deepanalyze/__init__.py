@@ -76,7 +76,7 @@ def _deepanalyze_magic(line: str, cell: Any = None) -> Any:
 def load_ipython_extension(ipython: Any) -> None:
     """Called automatically by IPython when running %load_ext deepanalyze."""
     ipython.register_magic_function(_deepanalyze_magic, magic_kind="line_cell", magic_name="deepanalyze")
-    print(f"🔒 DeepAnalyze Air-Gap Gateway (v{__version__}) loaded successfully.")
+    print(f"DeepAnalyze Air-Gap Gateway (v{__version__}) loaded successfully.")
     print("   Run `%deepanalyze` for the interactive wizard, or `--help` for syntax.")
 
 

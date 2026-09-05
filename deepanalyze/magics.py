@@ -127,7 +127,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             new_shape = user_ns[target_name].shape if hasattr(user_ns.get(target_name), "shape") else "Unknown"
 
             console.print(Panel(
-                f"✔ [bold green]AST Audit Passed & Script Executed Successfully![/bold green]\n"
+                f"[bold green][Audited][/bold green] AST Audit Passed & Script Executed Successfully!\n"
                 f"• Target DataFrame: [bold]{target_name}[/bold] (Dimensions: {new_shape})\n"
                 f"• Execution Time: [cyan]{t_elapsed_ms:.2f} ms[/cyan]\n"
                 f"• Security Status: [green]RAM Isolation Verified (0 network calls)[/green]",
@@ -157,7 +157,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         if restored_df is not None:
             user_ns[target_name] = restored_df
             console.print(Panel(
-                f"✔ [bold green]State Rollback Successful![/bold green]\n"
+                f"[bold green][Rollback][/bold green] State Rollback Successful!\n"
                 f"• Restored [bold]{target_name}[/bold] ({restored_df.height} rows x {restored_df.width} columns)\n"
                 f"• Snapshot restored from in-memory LIFO stack in 0.00 ms",
                 border_style="green"
@@ -193,7 +193,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
 
         copied = copy_to_clipboard(payload)
         summary = (
-            f"✔ [bold green]Air-Gap Payload Generated![/bold green]\n"
+            f"[bold green][Air-Gap][/bold green] Air-Gap Payload Generated!\n"
             f"• Statute Enforced: [bold]{policy.statute_name}[/bold]\n"
             f"• Direct Identifiers Protected: [cyan]{sum(1 for v in classified.values() if v == 'MUST_ENCRYPT')}[/cyan]\n"
             f"• 5-Row Differential Synthetic Mock: [green]Created (0% real records)[/green]\n\n"
@@ -201,7 +201,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         if copied:
             summary += "👉 [bold]Sanitized prompt copied to system clipboard.[/bold] Paste directly into ChatGPT/Claude/Cursor."
         else:
-            summary += "👉 [bold yellow]Clipboard unavailable; see printed payload below.[/bold yellow]"
+            summary += "[bold yellow]Clipboard unavailable; see printed payload below.[/bold yellow]"
 
         console.print(Panel(summary, border_style="green"))
         if not copied:
@@ -223,7 +223,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
 
         create_compliance_audit_certificate(dummy_df, dummy_df, policy, output_path=cert_path)
         console.print(Panel(
-            f"✔ [bold green]Compliance Certificate Exported![/bold green]\n"
+            f"[bold green][Certificate][/bold green] Compliance Certificate Exported!\n"
             f"• Target File: `[bold]{cert_path}[/bold]`\n"
             f"• Statute: {policy.statute_name}\n"
             f"• Attestation: Volatile RAM retention verified (zero data leakage)",
