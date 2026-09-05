@@ -85,9 +85,13 @@ def generate_powerquery_step_by_step_guide(
     dataset_name: str,
     file_path: Optional[str] = None
 ) -> str:
-    """Generates a complete markdown guide with both M-code and UI click steps."""
+    """Generates a complete markdown guide with click-by-click UI steps.
+
+    No redundant script is embedded since the M-code is provided directly in powerquery_script.m.
+    """
     display_path = file_path or f"/path/to/{dataset_name}"
-    m_code = generate_powerquery_m_code(display_path)
+    is_csv = display_path.lower().endswith(".csv")
+    file_type_label = "From Text/CSV" if is_csv else "From Excel Workbook"
 
     guide = f"""# Excel Power Query Step-by-Step Data Cleaning Guide
 
@@ -99,19 +103,14 @@ This guide explains how to flatten and clean **{dataset_name}** directly inside 
 
 1. Open Microsoft Excel.
 2. Go to the **Data** tab on the top ribbon.
-3. Click **Get Data** (or **New Query**) -> **From File** -> **From Excel Workbook**.
+3. Click **Get Data** (or **New Query**) -> **From File** -> **{file_type_label}**.
 4. Select your file: `{dataset_name}`.
-5. In the Navigator preview window, select sheet **Report** and click **Transform Data** (do *not* click Load).
+5. In the Navigator preview window, select your table/sheet and click **Transform Data** (do *not* click Load).
 6. In the Power Query Editor window, go to the **Home** tab and click **Advanced Editor**.
-7. Delete everything in the editor, and paste the following M-code:
-
-```powerquery
-{m_code}
-```
-
+7. Open the accompanying `powerquery_script.m` file, copy all text (`Ctrl+A` / `Cmd+A` then `Ctrl+C` / `Cmd+C`), and paste it into the Advanced Editor, replacing any existing code.
 8. Click **Done**.
 9. In the Home tab, click **Close & Load**.
-10. **Done!** You now have a clean, relational table with all 12 columns. Every time you get a new monthly export, just click **Data -> Refresh All**!
+10. **Done!** You now have a clean, relational table. Every time you get updated data, simply click **Data -> Refresh All**!
 
 ---
 

@@ -10,8 +10,17 @@ from deepanalyze.powerquery import generate_powerquery_m_code, generate_powerque
 from deepanalyze.transformer import clean_unflattened_invoice_erp
 
 
-RAW_ERP = "/Users/abdullahbinmadhi/Desktop/deepanalyze/INV LISTING 31082025 copy.xlsx"
-TARGET_ERP = "/Users/abdullahbinmadhi/Desktop/deepanalyze/INV LISTING 31082025 (Cleaned) copy.xlsx"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAW_ERP_CANDIDATES = [
+    os.path.join(BASE_DIR, "Testing files", "INV LISTING 31082025 copy.xlsx"),
+    os.path.join(BASE_DIR, "INV LISTING 31082025 copy.xlsx"),
+]
+TARGET_ERP_CANDIDATES = [
+    os.path.join(BASE_DIR, "Testing files", "INV LISTING 31082025 (Cleaned) copy.xlsx"),
+    os.path.join(BASE_DIR, "INV LISTING 31082025 (Cleaned) copy.xlsx"),
+]
+RAW_ERP = next((p for p in RAW_ERP_CANDIDATES if os.path.exists(p)), RAW_ERP_CANDIDATES[0])
+TARGET_ERP = next((p for p in TARGET_ERP_CANDIDATES if os.path.exists(p)), TARGET_ERP_CANDIDATES[0])
 
 
 def test_excel_ingest_preserves_all_columns():

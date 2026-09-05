@@ -499,102 +499,161 @@ class AirGapWizard:
                 self.console.print(payload)
 
         # Step 9: Interactive Code Execution Airlock (.py / .ipynb)
-        self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb)[/bold cyan]")
+        # Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
+        self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
         has_code = Prompt.ask("Will code be provided to clean/transform the data? [y/N]", default="N")
+        pipeline_type = None
         if has_code.lower().startswith("y"):
             self.console.print("  [1] Single Script (.py)")
             self.console.print("  [2] Multiple Code Blocks (.ipynb)")
-            code_mode = Prompt.ask("Select delivery format [1-2]", default="1")
+            self.console.print("  [3] Power Query (M-Code)")
+            code_mode = Prompt.ask("Select delivery format [1-3]", default="1")
 
-            pipeline_type = "ipynb" if code_mode.strip() == "2" else "py"
-            pipeline_file = create_pipeline_file(dataset_dir, file_type=pipeline_type)
-            self.console.print(f"[INFO] Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
+            if code_mode.strip() == "3":
+                pipeline_type = "powerquery"
+                pq_script_path = os.path.join(dataset_dir, "powerquery_script.m")
+                m_code_text = read_multiline_input(self.console, "Paste your Power Query (M-Code) below:")
+                if m_code_text:
+                    with open(pq_script_path, "w", encoding="utf-8") as f:
+                        f.write(m_code_text.strip() + "\n")
+                    self.console.print(Panel(m_code_text, title="Incoming Power Query M-Script", border_style="cyan"))
+                    self.console.print(f"[bold green][Saved][/bold green] Power Query M-Script saved to: `[bold]{pq_script_path}[/bold]`")
+                    self.console.print("[INFO] Power Query transformations execute natively inside Microsoft Excel / Power BI.")
+                    self.console.print("[INFO] A step-by-step UI instruction guide will be generated in Step 12.")
+                else:
+                    self.console.print("[yellow]No Power Query M-code entered.[/yellow]")
+            else:
+                pipeline_type = "ipynb" if code_mode.strip() == "2" else "py"
+                pipeline_file = create_pipeline_file(dataset_dir, file_type=pipeline_type)
+                self.console.print(f"[INFO] Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
 
-            exec_scope = self.user_ns if self.user_ns is not None else globals()
-            exec_scope[df_name] = df
-            exec_scope.setdefault("pl", pl)
+                exec_scope = self.user_ns if self.user_ns is not None else globals()
+                exec_scope["__name__"] = "__main__"
+                exec_scope.setdefault("pl", pl)
+                if cleaned_input:
+                    exec_scope.setdefault("INPUT_FILE", cleaned_input)
+                    exec_scope.setdefault("input_path", cleaned_input)
+                    exec_scope.setdefault("input_file", cleaned_input)
+                    exec_scope.setdefault("file_path", cleaned_input)
+                    exec_scope.setdefault("filepath", cleaned_input)
+                    out_default = os.path.join(dataset_dir, f"{dataset_base_name}_cleaned.csv")
+                    exec_scope.setdefault("OUTPUT_FILE", out_default)
+                    exec_scope.setdefault("output_path", out_default)
 
-            if pipeline_type == "py":
-                while True:
-                    code_text = read_multiline_input(self.console, "Paste your complete Python script below:")
-                    if not code_text:
-                        self.console.print("[yellow]No code entered.[/yellow]")
-                        break
-
-                    self.console.print(Panel(code_text, title="Incoming Script Preview", border_style="cyan"))
-                    Prompt.ask("Press Enter to audit with AST Firewall and execute in local RAM...")
-
-                    # Step 10: Execution Error Self-Healing Loop
-                    try:
-                        push_snapshot(df_name, exec_scope[df_name])
-                        from .firewall import prepare_dataframe_for_code
-                        exec_scope[df_name], _ = prepare_dataframe_for_code(exec_scope[df_name], code_text)
-                        execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
-                        append_code_to_pipeline(pipeline_file, code_text)
-                        self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
-                        break
-                    except Exception as err:
-                        self.console.print(Panel(
-                            f"[bold red]Execution Error:[/bold red]\n{err}",
-                            border_style="red"
-                        ))
-                        retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
-                        if not retry.lower().startswith("y"):
-                            self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
+                if pipeline_type == "py":
+                    while True:
+                        code_text = read_multiline_input(self.console, "Paste your complete Python script below:")
+                        if not code_text:
+                            self.console.print("[yellow]No code entered.[/yellow]")
                             break
 
-            else:
-                block_num = 1
-                while True:
-                    block_text = read_multiline_input(self.console, f"Paste Code Block {block_num}:")
-                    if not block_text:
-                        self.console.print("[yellow]Empty block skipped.[/yellow]")
-                        break
+                        self.console.print(Panel(code_text, title="Incoming Script Preview", border_style="cyan"))
+                        Prompt.ask("Press Enter to audit with AST Firewall and execute in local RAM...")
 
-                    self.console.print(Panel(block_text, title=f"Code Block {block_num} Preview", border_style="cyan"))
-                    Prompt.ask("Press Enter to audit and execute this block...")
-
-                    # Step 10: Execution Error Self-Healing Loop for blocks
-                    block_success = False
-                    while True:
+                        # Step 10: Execution Error Self-Healing Loop
                         try:
-                            push_snapshot(df_name, exec_scope[df_name])
-                            from .firewall import prepare_dataframe_for_code
-                            exec_scope[df_name], _ = prepare_dataframe_for_code(exec_scope[df_name], block_text)
-                            execute_code_safely(block_text, exec_scope, timeout_sec=20.0)
-                            append_code_to_pipeline(pipeline_file, block_text)
-                            self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
-                            block_success = True
+                            push_snapshot(df_name, exec_scope.get(df_name, df))
+                            from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
+                            df_prepared, _ = prepare_dataframe_for_code(exec_scope.get(df_name, df), code_text)
+                            exec_scope[df_name] = df_prepared
+                            exec_scope["df"] = df_prepared
+                            exec_scope["data"] = df_prepared
+
+                            execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
+                            append_code_to_pipeline(pipeline_file, code_text)
+
+                            resolved_df, resolution_source = resolve_transformed_dataframe(
+                                exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
+                            )
+                            exec_scope[df_name] = resolved_df
+                            exec_scope["df"] = resolved_df
+                            if hasattr(resolved_df, "shape"):
+                                self.console.print(
+                                    f"[bold green][Cleaned Data Captured][/bold green] Transformed dataset resolved from "
+                                    f"{resolution_source} ({resolved_df.shape[0]} rows x {resolved_df.shape[1]} columns)."
+                                )
+                            self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
                             break
                         except Exception as err:
                             self.console.print(Panel(
-                                f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}",
+                                f"[bold red]Execution Error:[/bold red]\n{err}",
                                 border_style="red"
                             ))
-                            retry = Prompt.ask("Would you like to paste the corrected code for this block? [y/N]", default="y")
-                            if retry.lower().startswith("y"):
-                                block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
-                            else:
+                            retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
+                            if not retry.lower().startswith("y"):
+                                self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
                                 break
 
-                    if not block_success:
-                        break
+                else:
+                    block_num = 1
+                    while True:
+                        block_text = read_multiline_input(self.console, f"Paste Code Block {block_num}:")
+                        if not block_text:
+                            self.console.print("[yellow]Empty block skipped.[/yellow]")
+                            break
 
-                    another = Prompt.ask("Block executed successfully. Is there another code block? [y/N]", default="N")
-                    if not another.lower().startswith("y"):
-                        break
-                    block_num += 1
+                        self.console.print(Panel(block_text, title=f"Code Block {block_num} Preview", border_style="cyan"))
+                        Prompt.ask("Press Enter to audit and execute this block...")
+
+                        # Step 10: Execution Error Self-Healing Loop for blocks
+                        block_success = False
+                        while True:
+                            try:
+                                push_snapshot(df_name, exec_scope.get(df_name, df))
+                                from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
+                                df_prepared, _ = prepare_dataframe_for_code(exec_scope.get(df_name, df), block_text)
+                                exec_scope[df_name] = df_prepared
+                                exec_scope["df"] = df_prepared
+                                exec_scope["data"] = df_prepared
+
+                                execute_code_safely(block_text, exec_scope, timeout_sec=20.0)
+                                append_code_to_pipeline(pipeline_file, block_text)
+
+                                resolved_df, resolution_source = resolve_transformed_dataframe(
+                                    exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
+                                )
+                                exec_scope[df_name] = resolved_df
+                                exec_scope["df"] = resolved_df
+                                self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
+                                block_success = True
+                                break
+                            except Exception as err:
+                                self.console.print(Panel(
+                                    f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}",
+                                    border_style="red"
+                                ))
+                                retry = Prompt.ask("Would you like to paste the corrected code for this block? [y/N]", default="y")
+                                if retry.lower().startswith("y"):
+                                    block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                else:
+                                    break
+
+                        if not block_success:
+                            break
+
+                        another = Prompt.ask("Block executed successfully. Is there another code block? [y/N]", default="N")
+                        if not another.lower().startswith("y"):
+                            break
+                        block_num += 1
 
         # Step 11: Local Detokenization & Reconciliation
         self.console.print("\n[bold cyan]Step 11: Local Detokenization & Reconciliation[/bold cyan]")
-        exec_scope = self.user_ns if self.user_ns is not None else globals()
-        current_target_df = exec_scope.get(df_name, df)
-        if current_target_df is not None and hasattr(current_target_df, "shape"):
-            final_df = detokenize_dataframe(current_target_df)
-            exec_scope[df_name] = final_df
-            self.console.print("[bold green][Detokenized][/bold green] Volatile Detokenization Complete: Restored genuine identities with 100.00% character fidelity.")
-        else:
+        if pipeline_type == "powerquery":
+            self.console.print("[INFO] Power Query mode active: Data transformations execute inside Microsoft Excel.")
             final_df = df
+        else:
+            exec_scope = self.user_ns if self.user_ns is not None else globals()
+            current_target_df = exec_scope.get(df_name)
+            if current_target_df is None or (hasattr(current_target_df, "shape") and current_target_df.shape == (0, 0)):
+                current_target_df = exec_scope.get("df", df)
+
+            if current_target_df is not None and hasattr(current_target_df, "shape"):
+                final_df = detokenize_dataframe(current_target_df)
+                exec_scope[df_name] = final_df
+                exec_scope["df"] = final_df
+                self.console.print("[bold green][Detokenized][/bold green] Volatile Detokenization Complete: Restored genuine identities with 100.00% character fidelity.")
+            else:
+                final_df = df
 
         # Step 12: Clean Dataset Export
         self.console.print("\n[bold cyan]Step 12: Clean Dataset Export[/bold cyan]")
@@ -622,13 +681,11 @@ class AirGapWizard:
             except Exception as e:
                 self.console.print(f"[bold red]Failed to export cleaned file:[/bold red] {e}")
 
-            # Export Excel Power Query Companion (M-Script + UI Guide)
+        # Export Excel Power Query Companion (ONLY when Power Query path was chosen)
+        if pipeline_type == "powerquery":
             try:
-                from .powerquery import generate_powerquery_m_code, generate_powerquery_step_by_step_guide
+                from .powerquery import generate_powerquery_step_by_step_guide
                 pq_guide_path = os.path.join(dataset_dir, "powerquery_guide.md")
-                pq_script_path = os.path.join(dataset_dir, "powerquery_script.m")
-                with open(pq_script_path, "w", encoding="utf-8") as f:
-                    f.write(generate_powerquery_m_code(cleaned_input or dataset_base_name))
                 with open(pq_guide_path, "w", encoding="utf-8") as f:
                     f.write(generate_powerquery_step_by_step_guide(dataset_base_name, cleaned_input))
                 self.console.print(
@@ -637,7 +694,7 @@ class AirGapWizard:
                     f"  • Step-by-Step UI Guide: `[bold]{pq_guide_path}[/bold]`"
                 )
             except Exception as pq_err:
-                pass
+                self.console.print(f"[yellow]Note: Could not write powerquery_guide.md: {pq_err}[/yellow]")
 
         # Step 13: Statutory Audit Certificate
         self.console.print("\n[bold cyan]Step 13: Statutory Audit Certificate[/bold cyan]")

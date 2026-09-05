@@ -41,3 +41,10 @@ packages = ["deepanalyze"]
 
 [project.scripts]
 deepanalyze = "deepanalyze.server:cli_entrypoint"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:.*make_block is deprecated.*:Warning",
+    "ignore::DeprecationWarning:pyarrow.*",
+]

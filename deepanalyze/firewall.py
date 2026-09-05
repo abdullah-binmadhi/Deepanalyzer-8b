@@ -163,9 +163,13 @@ def execute_code_safely(
     """Audits code and executes it within local RAM with a watchdog timer.
 
     Pre-injects pandas (pd), numpy (np), and polars (pl) to guarantee compatibility
-    with external AI-generated transformation pipelines.
+    with external AI-generated transformation pipelines. Sets __name__ to '__main__'
+    so script-style execution blocks execute naturally.
     """
     audit_code(code_str)
+
+    # Set __name__ to __main__ so cloud AI 'if __name__ == "__main__":' blocks execute
+    global_scope.setdefault("__name__", "__main__")
 
     # Pre-inject core data science libraries expected by cloud AI code
     global_scope.setdefault("pl", pl)
@@ -204,6 +208,82 @@ def execute_code_safely(
         raise exec_exception
 
     return global_scope
+
+
+def resolve_transformed_dataframe(
+    global_scope: Dict[str, Any],
+    original_df: Any,
+    primary_var: str = "df",
+    input_path: Optional[str] = None
+) -> Tuple[Any, str]:
+    """Inspects execution scope, created files, and defined functions to harvest the transformed DataFrame.
+
+    Handles:
+    1. Output files created/modified on disk (OUTPUT_FILE, output_path, etc.)
+    2. Explicitly assigned DataFrame variables (cleaned_df, df_clean, final_df, df, etc.)
+    3. In-place modified DataFrames
+    4. Callable pipeline functions (clean_*, transform_*, process_*, etc.)
+    """
+    import inspect
+    try:
+        import pandas as pd
+    except ImportError:
+        pd = None
+
+    # 1. Check if output file was written to disk
+    for key in ["OUTPUT_FILE", "output_path", "output_file", "clean_out_path", "OUTPUT_PATH"]:
+        out_path = global_scope.get(key)
+        if out_path and isinstance(out_path, str) and os.path.isfile(out_path):
+            try:
+                if out_path.endswith(".csv"):
+                    return pd.read_csv(out_path), f"output file `{os.path.basename(out_path)}`"
+                elif out_path.endswith((".xlsx", ".xls")):
+                    return pd.read_excel(out_path), f"output file `{os.path.basename(out_path)}`"
+                elif out_path.endswith(".parquet"):
+                    return pd.read_parquet(out_path), f"output file `{os.path.basename(out_path)}`"
+            except Exception:
+                pass
+
+    # 2. Check candidate DataFrame variables in scope
+    candidate_vars = [
+        "df_cleaned", "cleaned_df", "df_clean", "clean_df", "final_df",
+        "df_transformed", "transformed_df", "result_df", "result",
+        "df_out", "out_df", "data_clean", "cleaned_data",
+        "df", primary_var, "data"
+    ]
+    for var in candidate_vars:
+        if var in global_scope:
+            val = global_scope[var]
+            if (pd is not None and isinstance(val, pd.DataFrame)) or isinstance(val, pl.DataFrame):
+                if val is not original_df:
+                    return val, f"variable `{var}`"
+                if hasattr(val, "shape") and hasattr(original_df, "shape"):
+                    if val.shape != original_df.shape:
+                        return val, f"in-place modified `{var}`"
+
+    # 3. Check for callable transformation functions defined in scope
+    for name, obj in list(global_scope.items()):
+        if callable(obj) and not inspect.isclass(obj):
+            lname = name.lower()
+            if any(term in lname for term in ["clean", "transform", "process", "normalize", "unpivot", "flatten", "pipeline"]):
+                try:
+                    sig = inspect.signature(obj)
+                    params = list(sig.parameters.values())
+                    if params:
+                        first_param = params[0].name.lower()
+                        if any(p in first_param for p in ["path", "file", "csv", "xlsx", "input"]):
+                            if input_path and os.path.isfile(input_path):
+                                res = obj(input_path)
+                                if (pd is not None and isinstance(res, pd.DataFrame)) or isinstance(res, pl.DataFrame):
+                                    return res, f"function `{name}(input_path)`"
+                        else:
+                            res = obj(original_df)
+                            if (pd is not None and isinstance(res, pd.DataFrame)) or isinstance(res, pl.DataFrame):
+                                return res, f"function `{name}(df)`"
+                except Exception:
+                    pass
+
+    return original_df, "unmodified original"
 
 
 # =============================================================================

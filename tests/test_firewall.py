@@ -41,7 +41,56 @@ def test_firewall_allows_safe_polars_code():
         assert audit_code(snippet) is True
 
 
+def test_execute_code_safely_main_block():
+    """Validates that __name__ == '__main__' blocks execute properly."""
+    code = """
+executed = False
+if __name__ == "__main__":
+    executed = True
+"""
+    scope = {}
+    execute_code_safely(code, scope)
+    assert scope.get("executed") is True
+
+
+def test_resolve_transformed_dataframe_all_modes(tmp_path):
+    """Validates resolve_transformed_dataframe across output files, variables, and functions."""
+    import pandas as pd
+    from deepanalyze.firewall import resolve_transformed_dataframe
+
+    orig_df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+
+    # 1. Output file mode
+    out_file = str(tmp_path / "cleaned.csv")
+    cleaned_df = pd.DataFrame({"a": [10, 20, 30], "b": ["X", "Y", "Z"]})
+    cleaned_df.to_csv(out_file, index=False)
+    scope1 = {"OUTPUT_FILE": out_file}
+    resolved, source = resolve_transformed_dataframe(scope1, orig_df, "df")
+    assert "output file" in source
+    assert resolved.shape == (3, 2)
+    assert resolved["a"].tolist() == [10, 20, 30]
+
+    # 2. Transformed variable mode
+    scope2 = {"df_cleaned": cleaned_df}
+    resolved2, source2 = resolve_transformed_dataframe(scope2, orig_df, "df")
+    assert "df_cleaned" in source2
+    assert resolved2["a"].tolist() == [10, 20, 30]
+
+    # 3. Callable function mode
+    def clean_records(df):
+        df = df.copy()
+        df["c"] = [100, 200, 300]
+        return df
+
+    scope3 = {"clean_records": clean_records}
+    resolved3, source3 = resolve_transformed_dataframe(scope3, orig_df, "df")
+    assert "clean_records(df)" in source3
+    assert "c" in resolved3.columns
+    assert resolved3["c"].tolist() == [100, 200, 300]
+
+
 if __name__ == "__main__":
     test_firewall_blocks_forbidden_imports()
     test_firewall_allows_safe_polars_code()
+    test_execute_code_safely_main_block()
     print("test_firewall.py passed!")
