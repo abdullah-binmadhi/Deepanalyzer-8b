@@ -14,6 +14,7 @@ import platform
 import re
 import subprocess
 import sys
+import traceback
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import polars as pl
@@ -850,8 +851,19 @@ class AirGapWizard:
                             self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
                             break
                         except Exception as err:
+                            full_tb = traceback.format_exc()
+                            from .brain import CognitiveBlackboard, autopsy_traceback
+                            current_df = exec_scope.get(df_name, df)
+                            current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
+                            cols = list(current_df.columns) if hasattr(current_df, "columns") else []
+                            bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
+                            repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+
                             self.console.print(Panel(
-                                f"[bold red]Execution Error:[/bold red]\n{err}",
+                                f"[bold red]Execution Error:[/bold red]\n{err}\n\n"
+                                f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                f"{repair_prompt}",
+                                title="Ouroboros Self-Healing Airlock",
                                 border_style="red"
                             ))
                             retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
@@ -893,8 +905,19 @@ class AirGapWizard:
                                 block_success = True
                                 break
                             except Exception as err:
+                                full_tb = traceback.format_exc()
+                                from .brain import CognitiveBlackboard, autopsy_traceback
+                                current_df = exec_scope.get(df_name, df)
+                                current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
+                                cols = list(current_df.columns) if hasattr(current_df, "columns") else []
+                                bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
+                                repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+
                                 self.console.print(Panel(
-                                    f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}",
+                                    f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}\n\n"
+                                    f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                    f"{repair_prompt}",
+                                    title="Ouroboros Self-Healing Airlock",
                                     border_style="red"
                                 ))
                                 retry = Prompt.ask("Would you like to paste the corrected code for this block? [y/N]", default="y")

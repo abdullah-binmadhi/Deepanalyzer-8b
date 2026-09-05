@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.syntax import Syntax
 
-from .brain import CognitiveBlackboard, DynamicResonanceEngine
+from .brain import CognitiveBlackboard, DynamicResonanceEngine, autopsy_traceback
 from .policies import CompliancePolicy, classify_dataframe_columns, resolve_policy
 from .profiler import SheetProfile, SheetRole, WorkbookTopology, profile_dataframe
 from .sentinel import generate_synthetic_mock
@@ -484,3 +484,19 @@ def interactive_prompt_editor(
                 console.print(f"[bold red]Phrase not found in prompt.[/bold red]\n")
 
     return current_prompt
+
+
+def build_repair_prompt(
+    traceback_str: str,
+    df: Optional[Any] = None,
+    bb: Optional[CognitiveBlackboard] = None
+) -> str:
+    """Ouroboros Self-Healing: Generates a surgical micro-repair prompt from an airlock execution crash."""
+    if bb is None:
+        shape = df.shape if df is not None and hasattr(df, "shape") else (0, 0)
+        cols = list(df.columns) if df is not None and hasattr(df, "columns") else []
+        bb = CognitiveBlackboard(shape=shape, columns=cols)
+
+    df_pd = df.to_pandas() if isinstance(df, pl.DataFrame) else df
+    return autopsy_traceback(traceback_str, bb=bb, df=df_pd)
+

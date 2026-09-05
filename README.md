@@ -20,10 +20,10 @@ The composite score of **8.8 / 10** represents a deliberate engineering choice: 
 
 | Evaluation Dimension | DeepAnalyze (Hybrid Airlock) | Raw Local LLM (Ollama 8B) | PandasAI (Local Mode) | Open Interpreter (Local) | Presidio + Cloud LLM |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Architectural Model** | 7-Brain Cognitive Resonance + Token Vault + Dual Airlock | Autoregressive Next-Token Generation | LLM Prompt Wrapper for DataFrames | Agentic OS Command Execution | PII Scrubbing + Cloud API Call |
+| **Architectural Model** | 14-Brain Omni-Modal Resonance + Token Vault + Dual Airlock | Autoregressive Next-Token Generation | LLM Prompt Wrapper for DataFrames | Agentic OS Command Execution | PII Scrubbing + Cloud API Call |
 | **Deterministic Data Leakage Rate** | **0.00%** (Hard RAM Vault Surrogates) | **High** (Raw data enters model memory) | **High** (Sends sample rows in prompt) | **High** (Sends dataframe head in prompt) | **< 2.0%** (Misses custom business keys) |
 | **Bilingual & Cultural Data Physics** | **Native Invariant** (Eastern Arabic `٠-٩`, BiDi strip, Hijri, ZATCA/GCC VAT) | **Poor / Corrupted** (BiDi breaks tokens) | **None** (Fails on Arabic headers) | **None** (Fails on Arabic delimiters) | **Limited** (Regex only, misses statutory VAT) |
-| **Cognitive Reasoning Engine** | **7-Brain Data Physics** (Entropy, Invariants, Topology) | Unpredictable (Stochastic Hallucinations) | None (Simple Pandas Code Gen) | Basic LLM Tool Loop | None (Entity Recognition Only) |
+| **Cognitive Reasoning Engine** | **14-Brain Council + Stigmergic Bayesian Consensus** | Unpredictable (Stochastic Hallucinations) | None (Simple Pandas Code Gen) | Basic LLM Tool Loop | None (Entity Recognition Only) |
 | **Multi-Sheet Workbook Discovery** | **Automated** (Cross-sheet topology, FK candidate inference) | **None** (Truncated by token limits) | **None** (Single DataFrame only) | Manual multi-file loops | **None** (Single file streams) |
 | **Algebraic Invariant Discovery** | **Brute-Force Physical Audit** ($A \times B \approx C$, 15% ZATCA VAT) | **Unreliable** (Arithmetic hallucination) | **None** (No mathematical discovery) | **None** | **None** |
 | **Re-Identification Defense** | **k-Anonymity ($k \ge 5$) & l-Diversity** | None | None | None | None (Scrubbing only) |
@@ -348,9 +348,10 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes the fol
 * Users can input custom domain logic, requested calculated fields, or metric extractions (e.g. *"Extract RAM into ram_gb and storage into storage_gb"*, *"Calculate line discount and flag discrepancies"*).
 
 ### Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
-* **7-Brain Cognitive Resonance Engine Integration:** Invokes all 7 data physics sub-engines (Topological Cartographer, Morphological Typologist, Forensic Pathologist, Relational Cryptographer, Mathematical Physicist, Autonomous Feature Alchemist, and Executive Orchestrator) to generate an authoritative architectural inspection monologue, forensic pathology protocols, and discovered algebraic invariants ($A \times B \approx C$).
+* **14-Brain Omni-Modal Cognitive Resonance Council:** Invokes the complete 14-brain council spanning data physics (Topological Cartographer, Morphological Typologist, Forensic Pathologist, Relational Cryptographer, Mathematical Physicist, Autonomous Feature Alchemist), multi-modal engines (Spatial Cartographer, Chronometric Signal Processor with FFT, Process & State Modeler, Tensor Semanticist & Manifold Preservation, Graph & Network Topologist), statutory arbiters (Statutory Privacy Arbiter), and cryptographic sentinels (Cryptographic Sentinel & Executive Orchestrator) communicating via a Stigmergic Blackboard with Bayesian belief consensus.
+* **Ouroboros Self-Healing Loop:** Directly ingests execution tracebacks and unhandled exceptions from the AST execution airlock back into the Cognitive Blackboard to formulate forensic root-cause diagnostics and surgical micro-repair prompts.
 * **Native Bilingual & Cultural Polymorphism:** Automatically normalizes Eastern Arabic (Indic) numerals (`٠-٩`), strips invisible BiDi Unicode markers, detects Arabic report titles and subtotal footers, parses Hijri calendars (`1446-08-15`, `15 رمضان 1445 هـ`), discovers statutory 15% ZATCA and 5% GCC VAT invariants, and finger-prints regional identifiers (ZATCA VAT ID, Saudi CR, Iqama).
-* **Autonomous Master Prompt Compilation:** DeepAnalyze synthesizes an industrial-grade 8-section Data Engineering Briefing combining topology, field anomalies, automated spec extractions, user custom instructions, and a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
+* **Autonomous Master Prompt Compilation:** DeepAnalyze synthesizes an industrial-grade Data Engineering Briefing combining topology, field anomalies, automated spec extractions, user custom instructions, and a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
 * **Local Inference Acceleration (Optional):** If the local 8B GGUF model server is active, it enriches the prompt with automated feature engineering suggestions; if offline, deterministic templates compile instantly with zero latency.
 * **Interactive Terminal Review & Multi-Turn Refinement:** Renders the full prompt in the terminal and asks: *"Would you like to modify or add instructions to this prompt? [y/N]"*. Users can append rules, edit sections, or launch their system editor (`$EDITOR` / nano / notepad) repeatedly until fully satisfied.
 * **Automatic Disk Export & Clipboard Delivery:** Automatically saves the finalized prompt to disk as `[dataset_name]_cleaning_prompt.md` and copies it to the system clipboard for immediate use with ChatGPT, Claude, Cursor, or external APIs.
@@ -568,7 +569,7 @@ All scripts generated by DeepAnalyze now use fully validated expression syntax w
 deepanalyze/
 ├── __init__.py      # Public API exports & IPython extension lifecycle
 ├── wizard.py        # Zero-Code Interactive 13-Step Air-Gap Wizard
-├── brain.py         # 7-Brain Cognitive Resonance Engine (Data Physics & Blackboard)
+├── brain.py         # 14-Brain Omni-Modal Cognitive Resonance Engine (Bayesian Blackboard & Ouroboros)
 ├── profiler.py      # Deep Exploration, Topology Discovery & Autonomous Briefing
 ├── promptgen.py     # Prompt Synthesis Engine, Human Intuition & Interactive Review Loop
 ├── policies.py      # Jurisdictional Compliance Engine & "Not Sure" Statute Resolver
@@ -585,11 +586,11 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 74 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 84 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```
-* `tests/test_brain.py`: Validates all 7 cognitive sub-engines with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, and Eastern Arabic numeral / BiDi character normalization.
+* `tests/test_brain.py`: Validates the complete 14-Brain Omni-Modal Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, multi-modal spatial cartography (bounding box & GPS coordinates), chronometrics (periodicity & FFT), process state modeling, tensor semantic manifold preservation, graph network topology, statutory privacy arbitration (ZATCA, NDMO, GDPR overrides), cryptographic surrogate decoding, Stigmergic Bayesian belief consensus updates, and Ouroboros crash autopsies with surgical micro-repair prompts.
 * `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
 * `tests/test_multisheet.py`: Validates multi-sheet workbook topology profiling, relational foreign key candidate inference, synchronized multi-sheet tokenization preserving join integrity, multi-sheet DP mock generation, and multi-sheet airlock code execution.
 * `tests/test_promptgen.py`: Validates domain tech spec extraction (RAM/ROM/Battery/Processor), clinical healthcare instructions, ERP multi-tier ledger transformations, custom business logic injection, differential privacy mock integration, disk prompt export, and offline graceful degradation.

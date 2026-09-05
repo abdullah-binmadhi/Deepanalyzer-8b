@@ -13,8 +13,18 @@ from deepanalyze.brain import (
     Brain5MathematicalPhysicist,
     Brain6AutonomousFeatureAlchemist,
     Brain7ExecutiveOrchestrator,
+    Brain8SpatialCartographer,
+    Brain9ChronometricSignalProcessor,
+    Brain10ProcessStateModeler,
+    Brain11TensorSemanticist,
+    Brain12GraphNetworkTopologist,
+    Brain13StatutoryArbiter,
+    Brain14CryptographicSentinel,
     CognitiveBlackboard,
     DynamicResonanceEngine,
+    OmniModalResonanceEngine,
+    StigmergicBlackboard,
+    autopsy_traceback,
     calculate_entropy,
     normalize_bilingual_cell,
 )
@@ -378,5 +388,159 @@ def test_dynamic_resonance_engine_e2e_arabic_erp():
     assert 0 in engine.bb.metadata_rows
     assert engine.bb.footer_start_index == len(matrix) - 1
     assert any("ZATCA" in law or "VAT" in law for law in engine.bb.algebraic_laws)
+
+
+def test_stigmergic_bayesian_belief_updates():
+    bb = StigmergicBlackboard(filename="belief_test.csv", shape=(100, 2), columns=["x", "y"])
+    bb.add_belief("x", "CONTINUOUS_NUMERIC", 0.60, "Numerical distribution")
+    assert bb.column_beliefs["x"]["CONTINUOUS_NUMERIC"] == pytest.approx(0.60)
+
+    # Bayesian probability update: P(A or B) = 0.60 + 0.50 - 0.30 = 0.80
+    bb.add_belief("x", "CONTINUOUS_NUMERIC", 0.50, "Second confirmation")
+    assert bb.column_beliefs["x"]["CONTINUOUS_NUMERIC"] == pytest.approx(0.80)
+
+    # Add competing belief
+    bb.add_belief("x", "LATITUDE_COORDINATE", 0.95, "Spatial range [-90, 90]")
+    assert bb.get_dominant_belief("x") == "LATITUDE_COORDINATE"
+
+
+def test_brain8_spatial_cartographer():
+    df = pd.DataFrame({
+        "lat": [24.7136, 24.7140, 24.7150, 24.7138, 24.7145],
+        "lon": [46.6753, 46.6760, 46.6770, 46.6755, 46.6762],
+        "station_name": ["Riyadh North", "Riyadh Central", "Riyadh East", "Riyadh West", "Riyadh South"]
+    })
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain8SpatialCartographer().execute(df, bb)
+
+    assert "coordinates" in bb.spatial_profiles
+    assert bb.spatial_profiles["coordinates"]["lat_col"] == "lat"
+    assert bb.spatial_profiles["coordinates"]["lon_col"] == "lon"
+    assert any("Haversine" in d["feature"] or "Spatial" in d["feature"] for d in bb.feature_directives)
+    assert bb.get_dominant_belief("lat") == "SPATIAL_LATITUDE"
+
+
+def test_brain9_chronometric_signal_processor():
+    dates = pd.date_range("2024-01-01", periods=30, freq="D")
+    vals = [10.0 + 5.0 * np.sin(2 * np.pi * i / 7) for i in range(30)]
+    df = pd.DataFrame({"reading_date": dates, "sensor_val": vals})
+
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain9ChronometricSignalProcessor().execute(df, bb)
+
+    assert "reading_date" in bb.chronometric_profiles
+    assert any("Chronometric" in d["feature"] for d in bb.feature_directives)
+    assert bb.get_dominant_belief("reading_date") == "TEMPORAL_CHRONOMETRIC"
+
+
+def test_brain10_process_state_modeler():
+    states = ["NEW", "IN_PROGRESS", "COMPLETED", "CANCELLED", "IN_PROGRESS", "COMPLETED"] * 5
+    df = pd.DataFrame({"order_status": states, "order_id": [f"ORD-{i}" for i in range(30)]})
+
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain10ProcessStateModeler().execute(df, bb)
+
+    assert "order_status" in bb.process_models
+    assert any("Process" in d["feature"] for d in bb.feature_directives)
+    assert bb.get_dominant_belief("order_status") == "PROCESS_STATE"
+
+
+def test_brain11_tensor_semanticist():
+    rng = np.random.default_axis = np.random.RandomState(42)
+    data = {f"emb_dim_{i}": rng.randn(25) for i in range(16)}
+    data["doc_id"] = [f"DOC-{i}" for i in range(25)]
+    df = pd.DataFrame(data)
+
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain11TensorSemanticist().execute(df, bb)
+
+    assert len(bb.tensor_profiles) >= 1
+    assert any("Tensor" in d["feature"] for d in bb.feature_directives)
+
+
+def test_brain12_graph_network_topologist():
+    df = pd.DataFrame({
+        "sender_id": ["user_a", "user_b", "user_c", "user_a", "user_d"] * 4,
+        "recipient_id": ["user_b", "user_c", "user_a", "user_d", "user_b"] * 4,
+        "tx_amount": [100.0, 200.0, 300.0, 400.0, 500.0] * 4,
+    })
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain12GraphNetworkTopologist().execute(df, bb)
+
+    assert "edges" in bb.graph_topology
+    assert bb.graph_topology["edges"]["source_col"] == "sender_id"
+    assert bb.graph_topology["edges"]["target_col"] == "recipient_id"
+    assert any("Graph" in d["feature"] for d in bb.feature_directives)
+
+
+def test_brain13_statutory_arbiter():
+    df = pd.DataFrame({
+        "tax_registration": ["300012345678903"] * 10,
+        "id_card": ["1087654321"] * 10,
+        "amount": [150.0] * 10,
+    })
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain13StatutoryArbiter().execute(df, bb)
+
+    assert len(bb.compliance_overrides) >= 1
+    assert any("ZATCA" in c or "NDMO" in c for c in bb.compliance_overrides)
+
+
+def test_brain14_cryptographic_sentinel():
+    df = pd.DataFrame({
+        "customer_ref": ["TOK_CUST_99182", "TOK_CUST_99183", "TOK_CUST_99184"] * 4,
+        "metric": [10, 20, 30] * 4,
+    })
+    bb = CognitiveBlackboard(shape=df.shape, columns=list(df.columns))
+    Brain2MorphologicalTypologist().execute(df, bb)
+    Brain14CryptographicSentinel().execute(df, bb)
+
+    assert len(bb.cryptographic_signatures) >= 1
+    assert any("customer_ref" in sig for sig in bb.cryptographic_signatures)
+
+
+def test_omni_modal_resonance_engine_e2e():
+    dates = pd.date_range("2024-01-01", periods=15, freq="D")
+    df = pd.DataFrame({
+        "timestamp": dates,
+        "lat": [24.7136 + (i * 0.001) for i in range(15)],
+        "lon": [46.6753 + (i * 0.001) for i in range(15)],
+        "device_status": ["ACTIVE", "STANDBY", "ACTIVE", "COMPLETED", "STANDBY"] * 3,
+        "base_price": [100.0 * (i + 1) for i in range(15)],
+        "total_vat": [115.0 * (i + 1) for i in range(15)],
+    })
+
+    engine = OmniModalResonanceEngine(df, filename="telemetry_fleet.csv")
+    assert len(engine.brains) == 14
+
+    prompt = engine.think_and_synthesize()
+    assert "### SYSTEM ROLE & OBJECTIVE" in prompt
+    assert "### ARCHITECTURAL INSPECTION (INTERNAL MONOLOGUE)" in prompt
+    assert "### 1. DATASET TOPOLOGY & BOUNDARIES" in prompt
+    assert "### 5. AST SECURITY FIREWALL CONSTRAINTS" in prompt
+    assert len(engine.bb.internal_monologue) >= 5
+
+
+def test_ouroboros_crash_autopsy():
+    tb = """Traceback (most recent call last):
+  File "pipeline.py", line 42, in execute
+    df['total_gross_amount'] = df['invoice_total'] * 1.15
+KeyError: 'invoice_total'"""
+
+    bb = CognitiveBlackboard(filename="invoices.csv", columns=["inv_id", "inv_total", "tax"])
+    repair = autopsy_traceback(tb, bb)
+
+    assert "OUROBOROS AUTONOMOUS CRASH AUTOPSY" in repair
+    assert "KeyError" in repair
+    assert "invoice_total" in repair
+    assert bb.ouroboros_repair_prompt is not None
+    assert bb.ouroboros_traceback == tb.strip()
+
 
 
