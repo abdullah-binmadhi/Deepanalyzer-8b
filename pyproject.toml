@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deepanalyze"
-version = "3.0.0"
-description = "Agentic In-Memory Data Execution Engine for Jupyter/IPython"
+version = "4.0.0"
+description = "Deterministic Data Leak Prevention (DLP) & Compliance Air-Gap Gateway"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
@@ -15,35 +15,25 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Framework :: IPython",
     "Framework :: Jupyter",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Information Analysis"
 ]
 dependencies = [
-    "pandas>=1.5.0",
     "polars>=0.20.0",
     "pyarrow>=14.0.0",
-    "numpy>=1.20.0",
-    "scipy>=1.9.0",
-    "scikit-learn>=1.2.0",
-    "statsmodels>=0.14.0",
-    "duckdb>=0.9.0",
-    "fastexcel>=0.11.0",
+    "orjson>=3.9.0",
+    "httpx>=0.26.0",
+    "rich>=13.7.0",
+    "ipython>=8.18.0",
     "openpyxl>=3.1.0",
-    "xlsxwriter>=3.1.0",
-    "matplotlib>=3.5.0",
-    "seaborn>=0.12.0",
-    "openai>=1.0.0",
-    "httpx>=0.24.0",
-    "rich>=13.0.0",
-    "ipython>=8.0.0",
-    "orjson>=3.9.0"
+    "pyperclip>=1.8.2",
+    "pandas>=2.0.0",
+    "numpy>=1.20.0"
 ]
 
 [project.optional-dependencies]
 test = [
-    "pytest>=7.0.0"
-]
-semantic = [
-    "fastembed>=0.2.0"
+    "pytest>=8.0.0"
 ]
 
 [tool.setuptools]

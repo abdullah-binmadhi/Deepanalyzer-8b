@@ -17,3 +17,6 @@ memorey_vault/
 memory_vault/
 eda_quality_monitor.py
 pipeline.py
+clean_pipeline.py
+clean_pipeline.ipynb
+compliance_audit.md

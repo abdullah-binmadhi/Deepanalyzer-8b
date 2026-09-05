@@ -1,6 +1,0 @@
-root ::= (content-char)* (execute-block)? (content-char)*
-
-execute-block ::= "<Execute>" (code-char)* "</Execute>"
-
-content-char ::= [^\x00]
-code-char ::= [^\x00]

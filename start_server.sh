@@ -47,9 +47,15 @@ if [ -n "$DRAFT_PATH" ]; then
   SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --spec-draft-n-max 8)
 fi
 
-echo "🚀 Starting DeepAnalyze Inference Server..."
+SOCKET_PATH="${DEEPANALYZE_SOCKET:-/tmp/llama.sock}"
+# Clean up any stale socket file before binding to prevent EADDRINUSE errors
+if [ -e "$SOCKET_PATH" ]; then
+  rm -f "$SOCKET_PATH"
+fi
+
+echo "🚀 Starting DeepAnalyze Inference Server (v4.0 Air-Gap Mode)..."
 echo "📦 Primary Target Model: $MODEL_PATH"
-echo "🌐 Endpoint: http://127.0.0.1:8080"
+echo "🌐 Transport: Unix Domain Socket ($SOCKET_PATH)"
 
 # 3. Hardware-specific Flag Detection
 EXTRA_FLAGS=()
@@ -64,8 +70,6 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     -t 4
     --cache-type-k q8_0
     --cache-type-v q8_0
-    --prompt-cache ./models/deepanalyze.cache
-    --prompt-cache-all
     -a deepanalyze-8b
     --min-p 0.05
   )
@@ -77,11 +81,9 @@ else
     -c 16384
     --cache-type-k q8_0
     --cache-type-v q8_0
-    --prompt-cache ./models/deepanalyze.cache
-    --prompt-cache-all
     -a deepanalyze-8b
     --min-p 0.05
   )
 fi
 
-exec llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 "${SPECULATIVE_FLAGS[@]}" "${EXTRA_FLAGS[@]}" "$@"
+exec llama-server -m "$MODEL_PATH" --host "$SOCKET_PATH" "${SPECULATIVE_FLAGS[@]}" "${EXTRA_FLAGS[@]}" "$@"

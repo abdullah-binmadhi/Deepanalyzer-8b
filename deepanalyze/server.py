@@ -128,13 +128,15 @@ def start_server(
     draft_max: int = 8,
     prompt_cache_path: Optional[str] = None,
     port: int = 8080,
-    host: str = "127.0.0.1",
+    host: Optional[str] = None,
     context_size: int = 16384,
     alias: str = "deepanalyze-8b",
     min_p: float = 0.05,
     extra_args: Optional[List[str]] = None
 ):
     """Starts the llama-server process with hardware-optimized arguments & speculative drafting."""
+    if host is None:
+        host = "/tmp/llama.sock" if platform.system() in ("Darwin", "Linux") else "127.0.0.1"
     resolved_model = resolve_model_path(model_path)
     if not resolved_model:
         print("❌ Error: Could not find DeepAnalyze GGUF model file.")
@@ -153,11 +155,6 @@ def start_server(
     if resolved_draft:
         speculative_flags.extend(["-md", resolved_draft, "--spec-draft-n-max", str(draft_max)])
 
-    cache_flags = []
-    resolved_cache = prompt_cache_path or ("./models/deepanalyze.cache" if os.path.exists("./models") else None)
-    if resolved_cache:
-        cache_flags.extend(["--prompt-cache", resolved_cache, "--prompt-cache-all"])
-
     alias_flags = ["-a", alias] if alias else []
 
     cmd = [
@@ -168,7 +165,6 @@ def start_server(
         "--port", str(port),
         *hw_flags,
         *speculative_flags,
-        *cache_flags,
         *(extra_args or [])
     ]
 

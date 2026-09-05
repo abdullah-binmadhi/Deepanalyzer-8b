@@ -1,64 +1,85 @@
-from .core import (
-    deepanalyze,
-    deepanalyze_interceptor,
-    deepanalyze_completer,
-    _apply_polars_compat_shim,
-    __version__
+"""DeepAnalyze: Deterministic Data Leak Prevention (DLP) & Compliance Air-Gap Gateway."""
+
+from typing import Any
+
+from .firewall import (
+    ASTSecurityViolation,
+    audit_code,
+    execute_code_safely,
+    pop_snapshot,
+    push_snapshot,
 )
-from . import cleaners
-from . import privacy_knife
-from . import dashboard
-from . import statistical_engine
-from . import storyteller
-from . import feature_forge
-from . import forecaster
-from . import drift_sentinel
-from . import schema_synthesizer
-from . import synthetic_data
-from . import turbo_compiler
-from . import debate_router
-from . import causal_engine
-from . import enricher
-from . import pipeline_compiler
-from . import optimizer
-from . import brain
-from . import server
-from . import mole_telemetry
+from .magics import deepanalyze_magic_handler
+from .policies import (
+    CompliancePolicy,
+    classify_dataframe_columns,
+    resolve_policy,
+)
+from .sentinel import (
+    extract_contextual_entities,
+    generate_synthetic_mock,
+    mask_structural_erp,
+)
+from .vault import (
+    detokenize_dataframe,
+    detokenize_text,
+    flush,
+    get_vault_stats,
+    tokenize_dataframe,
+)
+from .wizard import (
+    AirGapWizard,
+    copy_to_clipboard,
+    create_compliance_audit_certificate,
+    generate_airgap_payload,
+)
+
+__version__ = "4.0.0"
+
+__all__ = [
+    "__version__",
+    "CompliancePolicy",
+    "resolve_policy",
+    "classify_dataframe_columns",
+    "tokenize_dataframe",
+    "detokenize_dataframe",
+    "detokenize_text",
+    "get_vault_stats",
+    "flush",
+    "audit_code",
+    "execute_code_safely",
+    "ASTSecurityViolation",
+    "push_snapshot",
+    "pop_snapshot",
+    "generate_synthetic_mock",
+    "mask_structural_erp",
+    "extract_contextual_entities",
+    "AirGapWizard",
+    "generate_airgap_payload",
+    "create_compliance_audit_certificate",
+    "copy_to_clipboard",
+    "load_ipython_extension",
+    "unload_ipython_extension",
+]
 
 
-def load_ipython_extension(ipython):
-    """Called automatically by IPython when running %load_ext deepanalyze"""
-    # 1. Apply Polars compatibility runtime shims
-    _apply_polars_compat_shim()
-
-    # 2. Register magic function
-    ipython.register_magic_function(deepanalyze, magic_kind='line_cell', magic_name='deepanalyze')
-    
-    # 3. Register tab-completion hook
-    ipython.set_hook("complete_command", deepanalyze_completer, re_key=r"%?deepanalyze")
-    
-    # 4. Register auto-pilot interceptor
-    if deepanalyze_interceptor not in ipython.input_transformers_cleanup:
-        ipython.input_transformers_cleanup.append(deepanalyze_interceptor)
-    
-    # 5. Register continuous Live Host Memory HUD
+def _deepanalyze_magic(line: str, cell: Any = None) -> Any:
+    """Entry point for %deepanalyze and %%deepanalyze IPython magic."""
     try:
-        if hasattr(ipython, "events") and hasattr(ipython.events, "register"):
-            # Avoid duplicate registrations
-            if mole_telemetry.post_run_cell_memory_hud not in ipython.events.callbacks.get("post_run_cell", []):
-                ipython.events.register("post_run_cell", mole_telemetry.post_run_cell_memory_hud)
-    except Exception:
-        pass
+        from IPython import get_ipython
+        ip = get_ipython()
+    except ImportError:
+        ip = None
+    return deepanalyze_magic_handler(line, cell=cell, ipython=ip)
 
-    print(f"✅ DeepAnalyze Engine (v{__version__} - Universal Adapter) loaded successfully!")
-    print("   🦔 Live Host RAM HUD: Active after each cell (toggle with `%deepanalyze --mem-hud`)")
-    print("   Tab completion active. Type %deepanalyze --status to check backend.")
 
-def unload_ipython_extension(ipython):
-    if deepanalyze_interceptor in ipython.input_transformers_cleanup:
-        ipython.input_transformers_cleanup.remove(deepanalyze_interceptor)
-    try:
-        if hasattr(ipython, "events") and hasattr(ipython.events, "unregister"):
-            ipython.events.unregister("post_run_cell", mole_telemetry.post_run_cell_memory_hud)
-    except Exception:
-        pass
+def load_ipython_extension(ipython: Any) -> None:
+    """Called automatically by IPython when running %load_ext deepanalyze."""
+    ipython.register_magic_function(_deepanalyze_magic, magic_kind="line_cell", magic_name="deepanalyze")
+    print(f"🔒 DeepAnalyze Air-Gap Gateway (v{__version__}) loaded successfully.")
+    print("   Run `%deepanalyze` for the interactive wizard, or `--help` for syntax.")
+
+
+def unload_ipython_extension(ipython: Any) -> None:
+    """Called when running %unload_ext deepanalyze."""
+    pass
