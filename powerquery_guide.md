@@ -15,9 +15,7 @@ This guide explains how to flatten and clean **INV LISTING 31082025 copy.xlsx** 
 7. Delete everything in the editor, and paste the following M-code:
 
 ```powerquery
-section Section1;
-
-shared Report = let
+let
     // 1. Ingest Excel Workbook
     Source = Excel.Workbook(File.Contents("/Users/abdullahbinmadhi/Desktop/deepanalyze/INV LISTING 31082025 copy.xlsx"), null, true),
     Navigation = Source{[Item="Report", Kind="Sheet"]}[Data],
@@ -80,7 +78,7 @@ shared Report = let
     // 10. Sort descending by Invoice Total
     #"Sorted Rows" = Table.Sort(#"Final Types", { {"invoice_total", Order.Descending} })
 in
-    #"Sorted Rows";
+    #"Sorted Rows"
 ```
 
 8. Click **Done**.

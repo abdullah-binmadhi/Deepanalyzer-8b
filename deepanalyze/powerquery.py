@@ -13,9 +13,7 @@ def generate_powerquery_m_code(file_path: str, sheet_name: str = "Report") -> st
     """Generates ready-to-paste Power Query M-code for the Excel Advanced Editor."""
     normalized_path = file_path.replace("\\", "/")
 
-    m_code = f"""section Section1;
-
-shared Report = let
+    m_code = f"""let
     // 1. Ingest Excel Workbook
     Source = Excel.Workbook(File.Contents("{normalized_path}"), null, true),
     Navigation = Source{{[Item="{sheet_name}", Kind="Sheet"]}}[Data],
@@ -78,7 +76,7 @@ shared Report = let
     // 10. Sort descending by Invoice Total
     #"Sorted Rows" = Table.Sort(#"Final Types", {{ {{"invoice_total", Order.Descending}} }})
 in
-    #"Sorted Rows";
+    #"Sorted Rows"
 """
     return m_code.strip()
 

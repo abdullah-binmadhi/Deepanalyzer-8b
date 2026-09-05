@@ -50,7 +50,7 @@ def test_erp_transformation_exact_fidelity():
 def test_powerquery_m_code_generation():
     """Validates that Power Query M-code contains all necessary transformation steps."""
     m_code = generate_powerquery_m_code("/test/path/erp.xlsx", "Report")
-    assert "section Section1;" in m_code
+    assert m_code.startswith("let")
     assert 'Excel.Workbook(File.Contents("/test/path/erp.xlsx"), null, true)' in m_code
     assert "Table.Skip(Navigation, 18)" in m_code
     assert 'Text.StartsWith([Column1], "IV-")' in m_code
