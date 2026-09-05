@@ -1,5 +1,9 @@
 # DeepAnalyze: Zero-Code Compliance Air-Gap Gateway
 
+**English Version** | [النسخة العربية (Arabic Version)](README_AR.md)
+
+---
+
 DeepAnalyze is an open-source, deterministic **Data Leak Prevention (DLP) engine and compliance air-gap gateway** for Jupyter, IPython, and the command line. It empowers financial controllers, data teams, and enterprise analysts to leverage frontier cloud AI models (**ChatGPT, Claude, Cursor**) on **messy, unflattened ERP spreadsheets, invoices, accounting ledgers, and clinical records** without exposing confidential business data, personal identities, or proprietary figures.
 
 The engine enforces statutory anonymization in local volatile RAM, produces zero-risk synthetic payloads or full encrypted duplicate files for cloud LLMs, provides an interactive `.py` / `.ipynb` code execution airlock with automatic error retry, reconciles returned transformations locally with zero data leakage, and automatically generates ready-to-paste Excel Power Query companions for non-programmers.
