@@ -397,6 +397,9 @@ Analyze DataFrames inside Jupyter Notebook, JupyterLab, or VS Code:
 %%deepanalyze --run --target df
 df['total_amount'] = df['quantity'] * df['unit_price']
 
+# Autonomous Ouroboros Self-Repair: Diagnose last crash & auto-fix with local 8B model (or custom prompt)
+%deepanalyze --fix "handle outliers in total_amount"
+
 # Instant Rollback: Undo transformations up to 5 history snapshots
 %deepanalyze --undo --target df
 
@@ -614,6 +617,7 @@ in
 | `%deepanalyze` | Jupyter / IPython | Launches full interactive wizard in notebook | `%deepanalyze` |
 | `--airgap` | Jupyter / IPython | Direct anonymization & payload copy to clipboard | `%deepanalyze --airgap --origin "Saudi Arabia" --jurisdiction "PDPL" --target df "Clean dates"` |
 | `%%deepanalyze --run` | Jupyter Cell Magic | Audits syntax with AST Firewall and executes in RAM | `%%deepanalyze --run --target df`<br>`df['Total'] = df['Qty'] * df['Price']` |
+| `--fix` | Jupyter / IPython | Autonomous Ouroboros diagnosis & repair via local 8B model or custom prompt | `%deepanalyze --fix "handle outliers in price"` |
 | `--undo` | Jupyter / IPython | Rolls back DataFrame state (up to 5 history snapshots) | `%deepanalyze --undo --target df` |
 | `--audit` | Jupyter / IPython | Exports verifiable compliance certificate | `%deepanalyze --audit --out compliance_audit.md` |
 
@@ -701,16 +705,18 @@ deepanalyze/
 ├── testgen.py       # Automated Pytest Pipeline Generator (Schema/Domain/Nulls)
 ├── powerquery.py    # Excel Power Query M-Code & Step-by-Step UI Guide Generator
 ├── transformer.py   # High-Performance Deterministic ERP Flattening Engines
-├── magics.py        # IPython Directives (%deepanalyze, --airgap, --run, --undo, --audit)
+├── magics.py        # IPython Directives (%deepanalyze, --airgap, --run, --fix, --undo, --audit)
+├── client.py        # Offline Inference Client, Health Probes & Autonomous Repair Synthesizer
 └── server.py        # Universal CLI & Local GGUF Inference Manager (Metal/CUDA/Socket)
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 90 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 101 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```
 * `tests/test_brain.py`: Validates the complete 18-Brain Omni-Cognitive Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, multi-modal spatial cartography (bounding box & GPS coordinates), chronometrics (periodicity & FFT), process state modeling, tensor semantic manifold preservation, graph network topology, statutory privacy arbitration (ZATCA, NDMO, GDPR overrides), cryptographic surrogate decoding, Stigmergic Bayesian belief consensus updates, Ouroboros crash autopsies with surgical micro-repair prompts, Socratic inquiry questions, Empathetic cognitive friction translation, Intuitive human behavioral intent detection, and Narrative Weaver Startup Colleague persona synthesis.
+* `tests/test_fix.py`: Validates the closed-loop Ouroboros `--fix` directive, local model health probing, autonomous forensic diagnosis and surgical repair with local 8B GGUF model, custom steering prompts, AST security firewall validation on model-synthesized code, LIFO rollback integration, and graceful clipboard autopsy fallback when offline.
 * `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
 * `tests/test_multisheet.py`: Validates multi-sheet workbook topology profiling, relational foreign key candidate inference, synchronized multi-sheet tokenization preserving join integrity, multi-sheet DP mock generation, and multi-sheet airlock code execution.
 * `tests/test_promptgen.py`: Validates domain tech spec extraction (RAM/ROM/Battery/Processor), clinical healthcare instructions, ERP multi-tier ledger transformations, custom business logic injection, differential privacy mock integration, disk prompt export, and offline graceful degradation.

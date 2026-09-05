@@ -1,11 +1,12 @@
 """DeepAnalyze v4.0 IPython Magics & CLI Interface.
 
-Implements the five streamlined directives:
+Implements the six streamlined directives:
 1. %deepanalyze                                (Interactive Wizard)
 2. %deepanalyze --airgap ...                   (Direct Sanitization to Clipboard)
 3. %%deepanalyze --run --target <df>           (AST Firewall & Execution)
-4. %deepanalyze --undo --target <df>           (Instant Rollback)
-5. %deepanalyze --audit --out <path>           (Export Compliance Certificate)
+4. %deepanalyze --fix [prompt]                 (Autonomous Ouroboros Diagnosis & Repair)
+5. %deepanalyze --undo --target <df>           (Instant Rollback)
+6. %deepanalyze --audit --out <path>           (Export Compliance Certificate)
 """
 
 import argparse
@@ -13,13 +14,25 @@ import re
 import shlex
 import sys
 import time
+import traceback
 from typing import Any, Dict, List, Optional
 
 import polars as pl
 from rich.console import Console
 from rich.panel import Panel
 
-from .firewall import ASTSecurityViolation, audit_code, execute_code_safely, pop_snapshot, push_snapshot
+from .client import check_model_health, request_model_fix, request_model_transformation
+from .firewall import (
+    ASTSecurityViolation,
+    audit_code,
+    clear_last_execution_failure,
+    execute_code_safely,
+    get_last_execution_failure,
+    pop_snapshot,
+    push_snapshot,
+    record_execution_failure,
+    resolve_transformed_dataframe,
+)
 from .policies import resolve_policy
 from .vault import detokenize_dataframe, detokenize_text, flush, get_vault_stats, tokenize_dataframe
 from .wizard import AirGapWizard, copy_to_clipboard, create_compliance_audit_certificate, generate_airgap_payload
@@ -48,6 +61,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
     parser = argparse.ArgumentParser(prog="deepanalyze", add_help=False)
     parser.add_argument("--airgap", action="store_true", help="Generate zero-risk prompt payload to clipboard")
     parser.add_argument("--run", action="store_true", help="Audit and execute external AI code in local RAM")
+    parser.add_argument("--fix", nargs="?", const="", default=None, help="Diagnose and auto-repair execution errors with local model or custom prompt")
     parser.add_argument("--undo", action="store_true", help="Instant rollback of target DataFrame")
     parser.add_argument("--audit", action="store_true", help="Export statutory compliance certificate")
     parser.add_argument("--target", type=str, default=None, help="Name of target DataFrame variable")
@@ -56,7 +70,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
     parser.add_argument("--out", type=str, default="compliance_audit.md", help="Audit certificate output path")
     parser.add_argument("-h", "--help", action="store_true", help="Show usage information")
 
-    # Positional arguments (e.g. user prompt string for --airgap)
+    # Positional arguments (e.g. user prompt string for --airgap or --fix)
     parsed, unknown = parser.parse_known_args(args_list)
 
     if parsed.help:
@@ -65,6 +79,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             "• [bold]%deepanalyze[/bold] : Launch interactive Air-Gap Wizard\n"
             "• [bold]%deepanalyze --airgap --target <df> [prompt][/bold] : Copy sanitized mock to clipboard\n"
             "• [bold]%%deepanalyze --run --target <df>[/bold] : Audit & execute external AI code locally\n"
+            "• [bold]%deepanalyze --fix [prompt][/bold] : Autonomous Ouroboros diagnosis & repair via local model\n"
             "• [bold]%deepanalyze --undo --target <df>[/bold] : Roll back to previous DataFrame snapshot\n"
             "• [bold]%deepanalyze --audit --out <path>[/bold] : Generate formal compliance certificate",
             border_style="cyan"
@@ -83,6 +98,176 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         user_ns.setdefault("np", np)
     except ImportError:
         pass
+
+    # =========================================================================
+    # DIRECTIVE 4: AUTONOMOUS DIAGNOSIS & REPAIR (%deepanalyze --fix)
+    # =========================================================================
+    if parsed.fix is not None:
+        custom_prompt_parts = []
+        if parsed.fix.strip():
+            custom_prompt_parts.append(parsed.fix.strip())
+        if cell and cell.strip():
+            custom_prompt_parts.append(cell.strip())
+        elif unknown:
+            custom_prompt_parts.extend(unknown)
+        custom_prompt = " ".join(custom_prompt_parts).strip() or None
+
+        last_failure = get_last_execution_failure()
+        target_name = parsed.target or (last_failure.target_name if last_failure else (unknown[0] if unknown else "df"))
+        target_df = user_ns.get(target_name)
+
+        if target_df is None and "df" in user_ns:
+            target_name = "df"
+            target_df = user_ns["df"]
+
+        if target_df is None:
+            console.print(f"[bold red]Target DataFrame `{target_name}` not found in session.[/bold red]")
+            return None
+
+        # Check if local model server is online
+        model_online = check_model_health()
+
+        if model_online:
+            console.print(Panel(
+                "[bold cyan][DeepAnalyze 8B][/bold cyan] Local Inference Server Online. "
+                "Synthesizing autonomous forensic diagnosis and surgical repair...",
+                border_style="cyan"
+            ))
+
+            schema_info = {
+                "columns": list(target_df.columns) if hasattr(target_df, "columns") else [],
+                "shape": target_df.shape if hasattr(target_df, "shape") else "Unknown"
+            }
+
+            try:
+                if last_failure:
+                    diagnosis, repaired_code = request_model_fix(
+                        failed_code=last_failure.code,
+                        traceback_str=last_failure.traceback_str,
+                        autopsy_str=last_failure.autopsy_report or str(last_failure.error),
+                        custom_prompt=custom_prompt,
+                        target_name=target_name,
+                        schema_info=schema_info
+                    )
+                elif custom_prompt:
+                    diagnosis, repaired_code = request_model_transformation(
+                        prompt=custom_prompt,
+                        target_name=target_name,
+                        schema_info=schema_info
+                    )
+                else:
+                    console.print(Panel(
+                        "[bold yellow]No execution failure recorded and no directive provided.[/bold yellow]\n\n"
+                        "• To diagnose a crash: Run a script first via `%%deepanalyze --run`.\n"
+                        "• To transform data: Provide a prompt via `%deepanalyze --fix \"<transformation>\"`.",
+                        border_style="yellow"
+                    ))
+                    return None
+
+                repaired_code = clean_markdown_code_blocks(repaired_code)
+
+                console.print(Panel(
+                    f"[bold cyan]Forensic Diagnosis:[/bold cyan]\n{diagnosis}\n\n"
+                    f"[bold green]Patched Code Synthesized:[/bold green]\n```python\n{repaired_code}\n```",
+                    title="DeepAnalyze 8B Autonomous Diagnosis",
+                    border_style="cyan"
+                ))
+
+                # Push snapshot for instant rollback
+                if hasattr(target_df, "shape"):
+                    push_snapshot(target_name, target_df)
+
+                from .firewall import prepare_dataframe_for_code
+                user_ns[target_name], _ = prepare_dataframe_for_code(user_ns[target_name], repaired_code)
+
+                # 1. AST Security Audit
+                audit_code(repaired_code)
+
+                # 2. Execute within user namespace in local RAM
+                t0 = time.perf_counter()
+                execute_code_safely(repaired_code, user_ns, timeout_sec=20.0)
+
+                # 3. Resolve transformed DataFrame
+                resolved_df, _ = resolve_transformed_dataframe(user_ns, target_df, primary_var=target_name)
+
+                # 4. Token reconciliation
+                if hasattr(resolved_df, "shape"):
+                    user_ns[target_name] = detokenize_dataframe(resolved_df)
+                else:
+                    user_ns[target_name] = resolved_df
+
+                t_elapsed_ms = (time.perf_counter() - t0) * 1000
+                new_shape = user_ns[target_name].shape if hasattr(user_ns.get(target_name), "shape") else "Unknown"
+
+                # Clear failure memory on successful repair
+                clear_last_execution_failure()
+
+                console.print(Panel(
+                    f"[bold green][Auto-Repaired][/bold green] AST Audit Passed & Fix Executed Successfully!\n"
+                    f"• Target DataFrame: [bold]{target_name}[/bold] (Dimensions: {new_shape})\n"
+                    f"• Execution Time: [cyan]{t_elapsed_ms:.2f} ms[/cyan]\n"
+                    f"• Rollback Protection: [green]Active (Use %deepanalyze --undo to revert)[/green]",
+                    border_style="green"
+                ))
+                return user_ns.get(target_name)
+
+            except ASTSecurityViolation as err:
+                console.print(Panel(
+                    f"[bold red]REPAIR BLOCKED BY AST FIREWALL[/bold red]\n{err}\n\n"
+                    "The model-synthesized script attempted an action prohibited by local RAM airlock policies.",
+                    border_style="red"
+                ))
+                return None
+            except Exception as err:
+                console.print(Panel(
+                    f"[bold red]Repair Execution Error:[/bold red] {err}\n\n"
+                    "Re-run %deepanalyze --fix with additional steering instructions to refine the repair.",
+                    border_style="red"
+                ))
+                return None
+
+        else:
+            # Model is OFFLINE: Graceful fallback to Ouroboros Clipboard Autopsy
+            if last_failure:
+                autopsy = last_failure.autopsy_report
+                if not autopsy:
+                    from .brain import CognitiveBlackboard, autopsy_traceback
+                    cols = list(target_df.columns) if hasattr(target_df, "columns") else []
+                    bb_repair = CognitiveBlackboard(filename=target_name, shape=getattr(target_df, "shape", (0, 0)), columns=cols)
+                    autopsy = autopsy_traceback(last_failure.traceback_str, bb=bb_repair, df=target_df.to_pandas() if hasattr(target_df, "to_pandas") else target_df)
+
+                repair_prompt_parts = [autopsy]
+                if custom_prompt:
+                    repair_prompt_parts.append(f"\n### USER DIRECTIVE\n{custom_prompt}\n")
+                repair_prompt = "\n".join(repair_prompt_parts)
+
+                copied = copy_to_clipboard(repair_prompt)
+                fallback_msg = (
+                    f"[bold yellow]Local Inference Server Offline[/bold yellow]\n\n"
+                    f"• Root Cause: [red]{last_failure.error}[/red]\n"
+                )
+                if copied:
+                    fallback_msg += "• [bold green]Surgical repair prompt copied to system clipboard.[/bold green] Paste directly into ChatGPT/Claude.\n\n"
+                else:
+                    fallback_msg += "• [yellow]Clipboard unavailable. Surgical repair prompt printed below.[/yellow]\n\n"
+
+                fallback_msg += (
+                    "• [bold cyan]Autonomous Self-Repair:[/bold cyan] To enable instant local healing in RAM, "
+                    "start the server with `deepanalyze server start`."
+                )
+
+                console.print(Panel(fallback_msg, title="Ouroboros Autopsy Fallback", border_style="yellow"))
+                if not copied:
+                    console.print(repair_prompt)
+                return None
+            else:
+                console.print(Panel(
+                    "[bold yellow]Local Inference Server Offline[/bold yellow]\n\n"
+                    "• No execution crash recorded to diagnose.\n"
+                    "• To enable autonomous prompt execution and repair: start the model with `deepanalyze server start`.",
+                    border_style="yellow"
+                ))
+                return None
 
     # =========================================================================
     # DIRECTIVE 3: SECURE EXECUTION FIREWALL (%%deepanalyze --run)
@@ -126,6 +311,9 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             t_elapsed_ms = (time.perf_counter() - t0) * 1000
             new_shape = user_ns[target_name].shape if hasattr(user_ns.get(target_name), "shape") else "Unknown"
 
+            # Clear failure memory on clean execution
+            clear_last_execution_failure()
+
             console.print(Panel(
                 f"[bold green][Audited][/bold green] AST Audit Passed & Script Executed Successfully!\n"
                 f"• Target DataFrame: [bold]{target_name}[/bold] (Dimensions: {new_shape})\n"
@@ -136,29 +324,47 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             return user_ns.get(target_name)
 
         except ASTSecurityViolation as err:
+            full_tb = traceback.format_exc()
+            from .brain import CognitiveBlackboard, autopsy_traceback
+            cols = list(target_df.columns) if hasattr(target_df, "columns") else []
+            bb_repair = CognitiveBlackboard(filename=target_name, shape=getattr(target_df, "shape", (0, 0)), columns=cols)
+            autopsy_rep = autopsy_traceback(full_tb, bb=bb_repair, df=target_df.to_pandas() if hasattr(target_df, "to_pandas") else target_df)
+            record_execution_failure(target_name, code_to_run, err, full_tb, target_df, autopsy_rep)
+
             console.print(Panel(
-                f"[bold red]EXECUTION BLOCKED BY AST FIREWALL[/bold red]\n{err}",
+                f"[bold red]EXECUTION BLOCKED BY AST FIREWALL[/bold red]\n{err}\n\n"
+                f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model.",
                 border_style="red"
             ))
             return None
         except Exception as err:
+            full_tb = traceback.format_exc()
+            from .brain import CognitiveBlackboard, autopsy_traceback
+            cols = list(target_df.columns) if hasattr(target_df, "columns") else []
+            bb_repair = CognitiveBlackboard(filename=target_name, shape=getattr(target_df, "shape", (0, 0)), columns=cols)
+            autopsy_rep = autopsy_traceback(full_tb, bb=bb_repair, df=target_df.to_pandas() if hasattr(target_df, "to_pandas") else target_df)
+            record_execution_failure(target_name, code_to_run, err, full_tb, target_df, autopsy_rep)
+
             console.print(Panel(
-                f"[bold red]Execution Error:[/bold red] {err}",
+                f"[bold red]Execution Error:[/bold red] {err}\n\n"
+                f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model.",
                 border_style="red"
             ))
             return None
 
     # =========================================================================
-    # DIRECTIVE 4: INSTANT STATE ROLLBACK (%deepanalyze --undo)
+    # DIRECTIVE 5: INSTANT STATE ROLLBACK (%deepanalyze --undo)
     # =========================================================================
     if parsed.undo:
         target_name = parsed.target or (unknown[0] if unknown else "df")
         restored_df = pop_snapshot(target_name)
         if restored_df is not None:
             user_ns[target_name] = restored_df
+            rows = getattr(restored_df, "height", restored_df.shape[0] if hasattr(restored_df, "shape") else 0)
+            cols = getattr(restored_df, "width", restored_df.shape[1] if hasattr(restored_df, "shape") else 0)
             console.print(Panel(
                 f"[bold green][Rollback][/bold green] State Rollback Successful!\n"
-                f"• Restored [bold]{target_name}[/bold] ({restored_df.height} rows x {restored_df.width} columns)\n"
+                f"• Restored [bold]{target_name}[/bold] ({rows} rows x {cols} columns)\n"
                 f"• Snapshot restored from in-memory LIFO stack in 0.00 ms",
                 border_style="green"
             ))
@@ -199,7 +405,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             f"• 5-Row Differential Synthetic Mock: [green]Created (0% real records)[/green]\n\n"
         )
         if copied:
-            summary += "👉 [bold]Sanitized prompt copied to system clipboard.[/bold] Paste directly into ChatGPT/Claude/Cursor."
+            summary += "• [bold]Sanitized prompt copied to system clipboard.[/bold] Paste directly into ChatGPT/Claude/Cursor."
         else:
             summary += "[bold yellow]Clipboard unavailable; see printed payload below.[/bold yellow]"
 
@@ -209,7 +415,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         return None
 
     # =========================================================================
-    # DIRECTIVE 5: EXPORT COMPLIANCE CERTIFICATE (%deepanalyze --audit)
+    # DIRECTIVE 6: EXPORT COMPLIANCE CERTIFICATE (%deepanalyze --audit)
     # =========================================================================
     if parsed.audit:
         target_name = parsed.target or "df"
@@ -242,3 +448,4 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
     if res_df is not None and target_name:
         user_ns[target_name] = res_df
     return res_df
+

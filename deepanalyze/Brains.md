@@ -1021,7 +1021,7 @@ To see how this works, imagine you upload a deeply corrupted Saudi hospital bill
 
 3. **The Output (What the LLM actually says to you):**
 
-> *"Hey Abdullah! 👋 I took a look at the hospital billing file. Man, these system exports are always such a headache—it looks like the actual data doesn't even start until row 12 because of all that header junk. I went ahead and sliced all that off for you.*
+> *"Hey Abdullah! I took a look at the hospital billing file. Man, these system exports are always such a headache—it looks like the actual data doesn't even start until row 12 because of all that header junk. I went ahead and sliced all that off for you.*
 > *I also noticed the math on the billing works perfectly (`Billed - Insurance = Patient Resp`), so I locked that in. One quick weird thing, though: about 5% of the 'Phone Number' column actually has email addresses jammed into it. I gently moved those over to the Email column so we don't lose them, but we might want to check the data entry system later.*
 > *I've written the Python script to clean it all up. Do you want to run this now, or is there anything else you want me to look out for?"*
 

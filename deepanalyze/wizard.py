@@ -23,6 +23,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from .client import check_model_health, request_model_fix
 from .firewall import (
     ASTSecurityViolation,
     append_code_to_pipeline,
@@ -31,6 +32,7 @@ from .firewall import (
     execute_code_safely,
     pop_snapshot,
     push_snapshot,
+    record_execution_failure,
 )
 from .policies import (
     CompliancePolicy,
@@ -861,6 +863,7 @@ class AirGapWizard:
                             cols = list(current_df.columns) if hasattr(current_df, "columns") else []
                             bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
                             repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+                            record_execution_failure(df_name, code_text, err, full_tb, current_df, repair_prompt)
 
                             self.console.print(Panel(
                                 f"[bold red]Execution Error:[/bold red]\n{err}\n\n"
@@ -869,10 +872,55 @@ class AirGapWizard:
                                 title="Ouroboros Self-Healing Airlock",
                                 border_style="red"
                             ))
-                            retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
-                            if not retry.lower().startswith("y"):
-                                self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
-                                break
+
+                            if check_model_health():
+                                choice = Prompt.ask(
+                                    "DeepAnalyze 8B is online. Select action: [A]uto-repair / [P]aste manually / [Q]uit",
+                                    choices=["a", "p", "q", "A", "P", "Q"],
+                                    default="A"
+                                ).lower()
+                                if choice == "a":
+                                    custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
+                                    try:
+                                        self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
+                                        schema_info = {
+                                            "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
+                                            "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
+                                        }
+                                        diag, patched_code = request_model_fix(
+                                            failed_code=code_text,
+                                            traceback_str=full_tb,
+                                            autopsy_str=repair_prompt,
+                                            custom_prompt=custom_hint or None,
+                                            target_name=df_name,
+                                            schema_info=schema_info
+                                        )
+                                        self.console.print(Panel(
+                                            f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                            title="DeepAnalyze 8B Autonomous Diagnosis",
+                                            border_style="cyan"
+                                        ))
+                                        code_text = patched_code
+                                        continue
+                                    except Exception as fix_err:
+                                        self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
+                                        retry = Prompt.ask("Would you like to paste the corrected code manually? [y/N]", default="y")
+                                        if retry.lower().startswith("y"):
+                                            code_text = read_multiline_input(self.console, "Paste the corrected code:")
+                                            continue
+                                        else:
+                                            break
+                                elif choice == "p":
+                                    code_text = read_multiline_input(self.console, "Paste the corrected code:")
+                                    continue
+                                else:
+                                    break
+                            else:
+                                retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
+                                if not retry.lower().startswith("y"):
+                                    self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
+                                    break
+                                code_text = read_multiline_input(self.console, "Paste the corrected code:")
 
                 else:
                     block_num = 1
@@ -918,6 +966,7 @@ class AirGapWizard:
                                 cols = list(current_df.columns) if hasattr(current_df, "columns") else []
                                 bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
                                 repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+                                record_execution_failure(df_name, block_text, err, full_tb, current_df, repair_prompt)
 
                                 self.console.print(Panel(
                                     f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}\n\n"
@@ -926,11 +975,55 @@ class AirGapWizard:
                                     title="Ouroboros Self-Healing Airlock",
                                     border_style="red"
                                 ))
-                                retry = Prompt.ask("Would you like to paste the corrected code for this block? [y/N]", default="y")
-                                if retry.lower().startswith("y"):
-                                    block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+
+                                if check_model_health():
+                                    choice = Prompt.ask(
+                                        f"DeepAnalyze 8B is online. Select action for Block {block_num}: [A]uto-repair / [P]aste manually / [Q]uit",
+                                        choices=["a", "p", "q", "A", "P", "Q"],
+                                        default="A"
+                                    ).lower()
+                                    if choice == "a":
+                                        custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
+                                        try:
+                                            self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
+                                            schema_info = {
+                                                "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
+                                                "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
+                                            }
+                                            diag, patched_code = request_model_fix(
+                                                failed_code=block_text,
+                                                traceback_str=full_tb,
+                                                autopsy_str=repair_prompt,
+                                                custom_prompt=custom_hint or None,
+                                                target_name=df_name,
+                                                schema_info=schema_info
+                                            )
+                                            self.console.print(Panel(
+                                                f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                title="DeepAnalyze 8B Autonomous Diagnosis",
+                                                border_style="cyan"
+                                            ))
+                                            block_text = patched_code
+                                            continue
+                                        except Exception as fix_err:
+                                            self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
+                                            retry = Prompt.ask(f"Would you like to paste the corrected code for Block {block_num}? [y/N]", default="y")
+                                            if retry.lower().startswith("y"):
+                                                block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                                continue
+                                            else:
+                                                break
+                                    elif choice == "p":
+                                        block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                        continue
+                                    else:
+                                        break
                                 else:
-                                    break
+                                    retry = Prompt.ask(f"Would you like to paste the corrected code for Block {block_num}? [y/N]", default="y")
+                                    if retry.lower().startswith("y"):
+                                        block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                    else:
+                                        break
 
                         if not block_success:
                             break

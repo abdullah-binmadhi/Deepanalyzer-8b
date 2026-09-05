@@ -10,11 +10,13 @@ Provides pipeline file generation for .py and .ipynb airlock runs.
 import ast
 from collections import defaultdict
 import copy
+from dataclasses import dataclass
 import json
 import os
 import signal
 import sys
 import threading
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import polars as pl
@@ -459,3 +461,59 @@ def pop_snapshot(target_name: str) -> Optional[pl.DataFrame]:
 
 def get_snapshot_depth(target_name: str) -> int:
     return _GLOBAL_ROLLBACK.depth(target_name)
+
+
+# =============================================================================
+# OUROBOROS SESSION FAILURE MEMORY (FOR --fix AUTONOMOUS REPAIR)
+# =============================================================================
+
+@dataclass
+class ExecutionFailureContext:
+    target_name: str
+    code: str
+    error: Any
+    traceback_str: str
+    timestamp: float
+    columns: Optional[List[str]] = None
+    shape: Optional[Tuple[int, int]] = None
+    autopsy_report: Optional[str] = None
+
+
+_LAST_EXECUTION_FAILURE: Optional[ExecutionFailureContext] = None
+
+
+def record_execution_failure(
+    target_name: str,
+    code: str,
+    error: Any,
+    traceback_str: str,
+    df: Optional[Any] = None,
+    autopsy_report: Optional[str] = None
+) -> ExecutionFailureContext:
+    """Records the most recent execution failure for closed-loop Ouroboros --fix diagnosis."""
+    global _LAST_EXECUTION_FAILURE
+    cols = list(df.columns) if df is not None and hasattr(df, "columns") else None
+    shape = tuple(df.shape) if df is not None and hasattr(df, "shape") else None
+
+    _LAST_EXECUTION_FAILURE = ExecutionFailureContext(
+        target_name=target_name,
+        code=code,
+        error=error,
+        traceback_str=traceback_str,
+        timestamp=time.time(),
+        columns=cols,
+        shape=shape,
+        autopsy_report=autopsy_report
+    )
+    return _LAST_EXECUTION_FAILURE
+
+
+def get_last_execution_failure() -> Optional[ExecutionFailureContext]:
+    """Returns the most recent execution failure context, or None if clear."""
+    return _LAST_EXECUTION_FAILURE
+
+
+def clear_last_execution_failure() -> None:
+    """Clears the failure memory once repaired."""
+    global _LAST_EXECUTION_FAILURE
+    _LAST_EXECUTION_FAILURE = None
