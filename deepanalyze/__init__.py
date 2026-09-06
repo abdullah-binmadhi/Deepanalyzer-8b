@@ -83,6 +83,17 @@ from .wizard import (
     create_compliance_audit_certificate,
     generate_airgap_payload,
 )
+from .benchmarks import (
+    BenchmarkMetric,
+    TierReport,
+    FullBenchmarkReport,
+    run_tier1_preflight,
+    run_tier2_deep_audit,
+    run_all_benchmarks,
+    render_tier1_scorecard_panel,
+    render_full_scorecard_panel,
+    render_markdown_audit_report,
+)
 
 __version__ = "4.0.0"
 
@@ -154,6 +165,15 @@ __all__ = [
     "generate_airgap_payload",
     "create_compliance_audit_certificate",
     "copy_to_clipboard",
+    "BenchmarkMetric",
+    "TierReport",
+    "FullBenchmarkReport",
+    "run_tier1_preflight",
+    "run_tier2_deep_audit",
+    "run_all_benchmarks",
+    "render_tier1_scorecard_panel",
+    "render_full_scorecard_panel",
+    "render_markdown_audit_report",
     "load_ipython_extension",
     "unload_ipython_extension",
 ]

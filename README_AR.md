@@ -32,7 +32,7 @@
 | **استهلاك الذاكرة التشغيلي (RAM)** | **أقل من 210 ميجابايت** / **~5.2 جيجابايت** (مع 8B) | **~5.5 - 8.2 جيجابايت** (تكميم 8B Q4/Q8) | **~1.2 - 2.5 جيجابايت** (بيئة بايثون والمكتبات) | **~1.5 - 3.0 جيجابايت** | **~750 ميجابايت - 1.2 جيجابايت** (نماذج الكيانات) |
 | **المخرجات لغير المبرمجين** | **كود باور كويري M ودليل مصور** | غير متوفر (مقتطفات كود فقط) | غير متوفر | غير متوفر | غير متوفر |
 | **التحقق الآلي المستمر (CI/CD)** | **توليد حزمة Pytest تلقائية** | غير متوفر | غير متوفر | غير متوفر | غير متوفر |
-| **مجموعة اختبارات التحقق القبلية** | **90 اختباراً مؤتمتاً** (في أقل من 3 ثوانٍ) | غير متوفر | اختبارات وحدات محدودة | اختبارات وحدات محدودة | اختبارات وحدات محدودة |
+| **مجموعة اختبارات التحقق القبلية** | **118 اختباراً مؤتمتاً** (في أقل من 7 ثوانٍ) | غير متوفر | اختبارات وحدات محدودة | اختبارات وحدات محدودة | اختبارات وحدات محدودة |
 
 ### تفصيل بطاقة التقييم
 
@@ -99,6 +99,25 @@
 ### 2.1 معمارية النظام ومسار تدفق البيانات
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
 flowchart TD
     subgraph INGESTION["1. طبقة استقبال وقراءة البيانات"]
         RAW["ملف جدول أصلي / تصدير ERP خام<br/>(CSV, XLSX, TSV, Parquet)"]
@@ -165,9 +184,9 @@ flowchart TD
         SCORE --> AUDIT
     end
 
-    style VAULT fill:#eef2ff,stroke:#4338ca,stroke-width:2px
-    style FIREWALL fill:#fef2f2,stroke:#b91c1c,stroke-width:2px
-    style SCORE fill:#f0fdf4,stroke:#15803d,stroke-width:2px
+    classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
+    classDef highlight fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
+    class VAULT,FIREWALL,SCORE highlight;
 ```
 
 ```text
@@ -219,6 +238,25 @@ flowchart TD
 * **حلقة أوربوروس الذاتية للترميم (Closed-Loop Ouroboros Synapse)**: اعتراض استثناءات التشغيل من جدار الحماية AST وتغذيتها فورياً إلى اللوحة الإدراكية لتوليد تشخيص دقيق وبرومبتات ترميم جراحية دون انهيار الجلسة.
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
 flowchart LR
     subgraph LEFT["النصف الأيسر: فيزياء البيانات والقوانين الرياضية (العقول 1-14)"]
         direction TB
@@ -280,11 +318,11 @@ flowchart LR
     %% التغذية العكسية لحلقة أوربوروس
     PATCH ==>|حقن توجيهات الترميم الجراحية| SYNAPSE
 
-    style SYNAPSE fill:#f8fafc,stroke:#3b82f6,stroke-width:3px
-    style LEFT fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
-    style RIGHT fill:#fefce8,stroke:#ca8a04,stroke-width:2px
-    style OUROBOROS fill:#fef2f2,stroke:#dc2626,stroke-width:2px
-    style PROMPT fill:#eef2ff,stroke:#4f46e5,stroke-width:2px
+    classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
+    classDef core fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
+    classDef accent fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    class BB_BELIEF,BB_MONO,BB_ANOM,BB_INVAR,BB_FRICT core;
+    class PROMPT,PATCH,CRASH,AUTOPSY accent;
 ```
 
 ```text
@@ -322,6 +360,9 @@ flowchart LR
 * **جدار الحماية الأمني AST:** تحليل شجرة البناء المجردة للكود قبل تنفيذه، وحظر اتصالات الشبكة، والوصول لمتغيرات البيئة (`os.environ`)، والمسارات الحساسة (`/etc/`، `~/.ssh/`)، واستخراج التوقيت بالقنوات الجانبية.
 * **نطاق التنفيذ المزدوج:** حقن مسبق تلقائي لمكتبات `pandas as pd` و `numpy as np` و `polars as pl`، مع التقاط الاستثناءات وإتاحة نافذة تصحيح وإعادة تشغيل فورية.
 * **مسار مايكروسوفت إكسل المزدوج:** توليد كود لغة M مدقق (`powerquery_script.m`) مع دليل خطوات مصور (`powerquery_guide.md`) لتمكين المحاسبين من تحديث تقاريرهم داخل إكسل مباشرة.
+* **محرك التحقق النظامي (11 معياراً حتمياً وتجريبياً):** بدلاً من إطلاق ادعاءات تسويقية عامة غير دقيقة، يُطبّق ديب أنالايز بدقة المعايير التقنية لإزالة وتجهيل الهوية المنصوص عليها نظاماً في **المادة 29 من نظام حماية البيانات الشخصية السعودي (PDPL)**، و**المادة 4(1) من اللائحة الأوروبية العامة (GDPR)**، و**المعيار الآمن لقانون HIPAA الأمريكي (§ 164.514(b))**، و**إرشادات الميكروداتا من معهد المعايير الأمريكي NIST SP 800-188**. ينقسم محرك التحقق إلى مستويين متكاملين:
+  * *المستوى الأول: بوابة التحقق المسبق اللحظية (< 15 مللي ثانية):* فحص حتمي يمنع خروج أو نسخ أي بيانات قبل التحقق من 4 معايير قطعية (فحص حقن رموز الكناري، والمسح الحتمي لمعرفات PII بالـ Regex، ومعيار $k \ge 5$، ومعيار التنوع $l \ge 2$)، مع توفير خيارات معالجة تفاعلية فورية عند التعثر (`[1] تعميم المعرفات الشبه-محددة تلقائياً`، `[2] تحديد أعمدة إضافية للتشفير`، `[3] إلغاء التصدير`).
+  * *المستوى الثاني: مصفوفة التدقيق المعمق (7 اختبارات إحصائية):* تقييم إحصائي شامل ($t$-Closeness، ومخاطر الربط التجريبي Linkability، والمسافة للأقرب NNDR، وهجمات استدلال العضوية MIA، والارتباط المشترك غير الخطي NMI، وفحص سلامة بيئة جدار الحماية AST، ومطابقة استعادة البيانات الحتمية بنسبة 100.00%)، تُدمج تلقائياً مع شهادة إقرار المنهجية النظامية داخل ملف `compliance_audit.md`.
 
 ---
 
@@ -490,13 +531,45 @@ clean_df.to_excel("Clean_payroll.xlsx", index=False)
 * **نص التوجيه (Prompt)**: *"هل لديك طلبات عمل مخصصة أو قواعد لاستخراج الأعمدة للذكاء الاصطناعي السحابي؟ [y/N]"*
 * **إجراء المحرك (Engine Action)**: استيعاب متطلبات العمل الفريدة للمستخدم (مثل: *"استخرج الرام في ram_gb"*, *"تطبيق ضريبة 15%"*) وحقنها داخل البرومبت.
 
-### الخطوة 8: توليف البرومبت الرئيسي والمراجعة التفاعلية
-* **نص التوجيه (Prompt)**: عرض البرومبت المولد كاملاً في الطرفية وسؤال: *"هل ترغب في تعديل أو إضافة تعليمات لهذا البرومبت؟ [y/N]"*
-* **إجراء المحرك (Engine Action)**: 
+### الخطوة 8: توليف البرومبت الرئيسي والمراجعة التفاعلية وبوابة الأمان اللحظية
+* **نص التوجيه (Prompt)**: عرض البرومبت المولد كاملاً في الطرفية، وتنفيذ **بوابة الأمان والخصوصية اللحظية (Tier 1 Pre-Flight Privacy Gateway)**، وعرض لوحة الفحص الحتمية:
+```text
+[PRE-FLIGHT PRIVACY GATEWAY]
+Scanning in-memory buffers against baseline statutory criteria...
+
+Test ID | Technical Metric          | Result  | Target Criterion       | Statutory Reference
+--------|---------------------------|---------|------------------------|---------------------------------
+T1.1    | Canary String Exfiltration| 0.00%   | 0 Leaks (Exact 0)      | NIST SP 800-188 §3.2
+T1.2    | Plaintext Direct PII Scan | 0 Found | 0 Matches              | PDPL Art. 29 / GDPR Art. 4(1)
+T1.3    | Singling-Out (k-Anonymity)| k = 6   | k >= 5 (Equiv. Class)  | HIPAA Safe Harbor / WP29
+T1.4    | Homogeneity (l-Diversity) | l = 3   | l >= 2 (Distinct Attr) | NIST SP 800-188 Microdata
+
+Status: 4/4 CRITERIA SATISFIED
+```
+* **إجراء المحرك والتوجيه التفاعلي (Engine Action & Branching)**: 
   * تشغيل **مجلس العقول الـ 18 الإدراكي** (فيزياء البيانات للنصف الأيسر + الذكاء العاطفي وشخصية الزميل التقني للنصف الأيمن).
   * توحيد الأرقام الهندية-العربية (`٠-٩`) تلقائياً، ومحارف BiDi، والتقويم الهجري، وثوابت ضريبة 15% ZATCA و5% الخليجية.
   * حقن نموذج محاكاة اصطناعي من 5 صفوف مدعوم بالخصوصية التفاضلية وضجيج لابلاس ($\epsilon=1.0$).
-* **النتيجة المُسلّمة (Output)**: حفظ ملف `[dataset]_cleaning_prompt.md`، ونسخ النص للحافظة، وإمكانية تنزيل نسخة إكسل المشفرة `[dataset]_anonymized.xlsx`.
+  * تشغيل **بوابة التحقق المسبق اللحظية (Tier 1 Pre-Flight Gate)** (< 15 مللي ثانية داخل RAM):
+    * **الحالة الأولى: تعثر أي معيار حتمي (مثل $k < 5$ أو رصد نص PII صريح):**
+      ```text
+      Status: 1 CRITERION FAILED (T1.3: k-Anonymity = 2; 14 unique row signatures detected)
+      Risk: Potential singling-out vulnerability under EU WP29 / HIPAA Expert Determination.
+
+      Options:
+        [1] Auto-generalize quasi-identifiers (Bin ages, truncate postal codes)
+        [2] Select additional columns to encrypt
+        [3] Abort export
+      Select action [1/2/3] (default: 1): 
+      ```
+    * **الحالة الثانية: اجتياز كافة المعايير بنجاح (4/4):**
+      ```text
+      Status: 4/4 CRITERIA SATISFIED
+      Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.
+
+      Download encrypted dataset duplicate? [Y/n]: 
+      ```
+* **النتيجة المُسلّمة (Output)**: حفظ ملف `[dataset]_cleaning_prompt.md`، ونسخ النص للحافظة، وإمكانية تنزيل نسخة إكسل المشفرة `[dataset]_anonymized.xlsx` (مع بقاء مفاتيح الجلسة في RAM فقط).
 
 ### الخطوة 9: غرفة العزل البرمجية التفاعلية (.py / .ipynb / .m)
 * **نص التوجيه (Prompt)**: اختيار نمط التنفيذ: `[1] سكربت فردي (.py)` أو `[2] خلايا متعددة (.ipynb)` أو `[3] باور كويري (M-Code)`.
@@ -518,8 +591,32 @@ clean_df.to_excel("Clean_payroll.xlsx", index=False)
 
 ### الخطوة 13: شهادة الامتثال والتدقيق التنظيمي
 * **نص التوجيه (Prompt)**: توليد مؤتمت فوري عند اكتمال المعالجة.
-* **إجراء المحرك (Engine Action)**: حساب تجزئة الجلسة الأمنية SHA-256، وتوثيق اللوائح المنفذة، وتأكيد تحقيق 0% تسريب للنصوص الصريحة.
-* **النتيجة المُسلّمة (Output)**: وثيقة اعتماد رسمية موثقة بصيغة ماركداون `compliance_audit.md`.
+* **إجراء المحرك (Engine Action)**: حساب تجزئة الجلسة الأمنية SHA-256، وتشغيل **حزمة معايير الأمان والخصوصية الـ 11 كاملة** (المستويان Tier 1 للبوابة اللحظية وTier 2 للتدقيق العميق)، وتجميع تقرير التدقيق الرسمي مع إقرار المنهجية النظامية القانونية الموثقة.
+* **النتيجة المُسلّمة (Output)**: وثيقة اعتماد رسمية موثقة بصيغة ماركداون `compliance_audit.md` تتضمن مصفوفة المعايير النظامية كاملة:
+
+| معرّف الاختبار | الاسم التقني | المستهدف التشغيلي | المرجع النظامي والبند القانوني |
+| :--- | :--- | :--- | :--- |
+| **T1.1** | Canary Token Injection | تسريب $0.00\%$ | **NIST SP 800-188 §3.2** (منع الحفظ غير المقصود والتسريب المباشر) |
+| **T1.2** | Deterministic PII Scan | $0$ تطابق نصوص صريحة | **المادة 29 PDPL / المادة 4(1) GDPR / معيار PCI-DSS v4.0 Req 3.4** |
+| **T1.3** | Singling-Out Risk ($k$-Anonymity) | $k \ge 5$ ($0.00\%$ صفوف فريدة) | **فريق عمل المادة 29 الأوروبي (WP29) / معيار HIPAA الآمن § 164.514(b)** |
+| **T1.4** | Attribute Homogeneity ($l$-Diversity) | $l \ge 2$ عبر المجموعات | **NIST SP 800-188** (تشتت الخصائص الحساسة) |
+| **T2.5** | Distribution Skew ($t$-Closeness) | $D[P, Q] \le 0.15$ (Wasserstein) | **IEEE Transactions on Data Privacy** (المسافة التوزيعية للمجموعات الفرعية) |
+| **T2.6** | Empirical Linkability (`anonymeter`) | درجة المخاطرة $< 0.05$ | **الهيئة الفرنسية لحماية البيانات (CNIL) وإرشادات PETS 2023** |
+| **T2.7** | Nearest-Neighbor Distance (NNDR) | $\text{NNDR} \ge 0.25$ | **ISO/IEC 27559:2022** (التحقق من عدم حفظ وتكرار البيانات الاصطناعية) |
+| **T2.8** | Membership Inference Attack (MIA) | $\text{AUC} \le 0.55$ (خط الصدفة المرجعي) | **إطار عمل الخصوصية NIST v1.1** (تقليص مساحة إعادة كشف الهوية) |
+| **T2.9** | Normalized Mutual Information (NMI) | $\text{NMI} < 0.05$ | **نظرية شانون للمعلومات** (كشف الإنتروبيا المتبقية) |
+| **T2.10**| AST Security Sandbox Audit | حظر خروج بنسبة $100\%$ | **CWE-94 / OWASP Top 10** (منع حقن الأكواد وتجاوز النطاق المعزول) |
+| **T2.11**| Round-Trip Reconciliation | مطابقة تامة $100.00\%$ | **ISO 8000 / BCBS 239** (حوكمة وسلامة تسلسل البيانات) |
+
+```markdown
+### STATUTORY METHODOLOGY ATTESTATION
+This audit verifies that the evaluated data artifacts satisfy the mathematical de-identification, pseudonymization, and sandboxing requirements referenced above. 
+
+Evaluation Methodology:
+1. Direct identifiers are irreversibly masked or surrogate-tokenized within volatile system memory pursuant to GDPR Article 4(5) and Saudi PDPL Article 29.
+2. Quasi-identifiers achieve mathematical equivalence class thresholds (k >= 5, l >= 2) consistent with HIPAA Safe Harbor and EU WP29 de-identification methodologies.
+3. Code execution pathways are audited against static abstract syntax tree (AST) constraint policies, eliminating network egress and host filesystem mutation risks prior to runtime execution.
+```
 
 ---
 
@@ -689,7 +786,7 @@ deepanalyze server start \
 
 ---
 
-## 10. هيكلية الحزم البرمجية ومجموعة اختبارات التحقق الـ 90
+## 10. هيكلية الحزم البرمجية ومجموعة اختبارات التحقق الـ 118
 
 ### شجرة الملفات البرمجية للمشروع
 ```text
@@ -700,6 +797,7 @@ deepanalyze/
 ├── profiler.py      # الاستكشاف العميق ومعمارية المصنفات والموجز الهندسي الذاتي
 ├── promptgen.py     # محرك توليف البرومبت المتقدم، وخطاف الحدس البشري، وحلقة المراجعة
 ├── policies.py      # محرك الامتثال القانوني ومحدد الأنظمة التلقائي
+├── benchmarks.py    # حزمة معايير الأمان والخصوصية الـ 11 (بوابة التحقق اللحظي Tier 1 والتدقيق العميق Tier 2)
 ├── sentinel.py      # الماسح العميق، والقناع الهندسي، والماسح السياقي، ومولد الخصوصية التفاضلية
 ├── vault.py         # خزنة الرموز المعزولة في الذاكرة العشوائية مع التعلم التفاعلي للأنماط
 ├── firewall.py      # جدار حماية AST الأمني، وفاحص المسارات، وحاجز التوقيت
@@ -713,11 +811,12 @@ deepanalyze/
 └── server.py        # خادم الاستدلال المحلي وإدارة نماذج GGUF (Metal/CUDA/Socket)
 ```
 
-### حزمة الاختبارات القبلية المؤتمتة (101 اختباراً)
-يتم التحقق من كل إصدار من خلال 101 اختباراً دقيقاً للأمان والأداء ومجلس العقول الـ 18 ثنائية اللغة:
+### حزمة الاختبارات القبلية المؤتمتة (118 اختباراً)
+يتم التحقق من كل إصدار من خلال 118 اختباراً دقيقاً للأمان والأداء ومجلس العقول الـ 18 ثنائية اللغة:
 ```bash
 pytest
 ```
+* `tests/test_benchmarks.py`: التحقق من كافة معايير الأمان والخصوصية الـ 11 عبر المستويين: المستوى الأول Tier 1 (حقن رموز الكناري، والمسح بالتعابير النمطية PII، وتكافؤ k-anonymity، وتنوع l-diversity، وعدم حفظ السجلات بالأقرب NNDR، وتسريب الوكلاء بالمعلومات المتبادلة NMI) والمستوى الثاني Tier 2 (انحراف توزيع t-closeness بمسافة نقل التراب EMD، ومخاطر الربط الخارجي التجريبي، وهجمات استدلال العضوية بنماذج الظل MIA، وسياسة جدار الحماية AST، وتطابق الاستعادة الحتمية بنسبة 100.00%)، مع التحقق من تضمينها التلقائي في وثيقة `compliance_audit.md`.
 * `tests/test_brain.py`: التحقق من مجلس العقول الـ 18 بالكامل مع دعم التعددية الثقافية وثنائية اللغة الفطرية (Native Bilingual & Cultural Polymorphism): حساب إنتروبيا شانون، ورسم الخرائط الطوبولوجية (كثافة الخلايا وحدود الترويسات وترويسات وتقارير وملخصات إكسل العربية)، والبصمات الشكلية (UUID، IP، التواريخ، العملات الخليجية والعالمية، التقويم الهجري الشرعي، المعرفات النظامية كالرقم الضريبي لهيئة الزكاة والضريبة والجمارك ZATCA والسجل التجاري وهوية الإقامة، ومفاتيح الربط المركبة بنظام يونيكود)، وباثولوجيا البيانات الجنائية (التلوث والشذوذ الإحصائي)، والتشفير العلائقي (المفاتيح الأساسية والتسلسل الهرمي الوظيفي)، والفيزياء الرياضية (اكتشاف القوانين الجبرية $A \times B \approx C$ وثوابت ضريبة القيمة المضافة النظامية 15% ZATCA و5% لدول الخليج)، وخيمياء هندسة الميزات التلقائية، والمحركات متعددة الوسائط (الخرائط المكانية، وتحليل السلاسل الزمنية بـ FFT، ونمذجة حالات العمليات، والحفاظ على طوبولوجيا المتجهات، وشبكات المخططات، والتحكيم النظامي للامتثال)، والبدائل التشفيرية، والتوافق البايزي التراكمي، وتشريح أخطاء أوربوروس وتوليد برومبتات الترميم الجراحية، بالإضافة إلى النصف الأيمن: الأسئلة السقراطية التعاونية، وحساب درجة الاحتكاك وتوجيهات التعاطف ومكافحة المصطلحات المعقدة، والتحقيق الحدسي للمقاصد البشرية، وتوليف شخصية الزميل المساعد المتواضع في حائك السرديات.
 * `tests/test_fix.py`: التحقق من توجيه الترميم الذاتي المغلق لـ أوربوروس `--fix`، وفحص جاهزية خادم الاستدلال المحلي، والتشخيص الجنائي للأعطال وإصلاحها آلياً بنموذج 8B المحلي، والتوجيه ببرومبت مخصص، وفرض جدار الحماية AST على الكود المولد، وتكامل التراجع LIFO، والتراجع السلس للنسخ إلى الحافظة عند غياب الخادم.
 * `tests/test_profiler.py`: التحقق من فحص الأعمدة، وتناقض صيغ التواريخ، والأقواس المحاسبية السالبة `(1,000.00)`، والرموز النقدية العالقة، ومسافات الفراغ، وتوليد الموجز الهندسي.

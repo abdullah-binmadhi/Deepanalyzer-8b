@@ -423,7 +423,19 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         if target_df is None and "df" in user_ns:
             target_df = user_ns["df"]
 
-        dummy_df = target_df if isinstance(target_df, pl.DataFrame) else pl.DataFrame({"records": [1]})
+        if target_df is not None:
+            if isinstance(target_df, pl.DataFrame):
+                dummy_df = target_df
+            elif hasattr(target_df, "to_dict"):
+                try:
+                    dummy_df = pl.from_pandas(target_df)
+                except Exception:
+                    dummy_df = pl.DataFrame({"records": [1]})
+            else:
+                dummy_df = pl.DataFrame({"records": [1]})
+        else:
+            dummy_df = pl.DataFrame({"records": [1]})
+
         policy = resolve_policy(parsed.origin, parsed.jurisdiction or parsed.origin)
         cert_path = parsed.out or "compliance_audit.md"
 

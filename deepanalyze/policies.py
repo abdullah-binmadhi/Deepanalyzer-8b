@@ -128,13 +128,14 @@ REGIONAL_DEFINITIONS: Dict[str, Dict] = {
 def normalize_jurisdiction_key(name: str) -> str:
     """Normalizes country or statutory input for dictionary matching."""
     cleaned = re.sub(r"[^a-zA-Z\s]", "", name).strip().upper()
-    if any(term in cleaned for term in ["POLAND", "POLSKA", "PL", "GDPR", "EU"]):
-        return "POLAND"
-    if any(term in cleaned for term in ["SAUDI", "KSA", "ARABIA", "PDPL", "NDMO"]):
+    words = set(cleaned.split())
+    if any(term in cleaned for term in ["SAUDI", "KSA", "ARABIA", "PDPL", "NDMO", "ZATCA"]):
         return "SAUDI ARABIA"
-    if any(term in cleaned for term in ["US", "USA", "UNITED STATES", "AMERICA", "HIPAA", "CCPA", "CPRA", "GLBA"]):
+    if any(term in cleaned for term in ["POLAND", "POLSKA", "GDPR", "UODO"]) or "PL" in words or "EU" in words:
+        return "POLAND"
+    if any(term in cleaned for term in ["UNITED STATES", "AMERICA", "HIPAA", "CCPA", "CPRA", "GLBA"]) or "US" in words or "USA" in words:
         return "UNITED STATES"
-    if any(term in cleaned for term in ["UK", "UNITED KINGDOM", "BRITAIN", "ENGLAND", "DPA", "NINO"]):
+    if any(term in cleaned for term in ["UNITED KINGDOM", "BRITAIN", "ENGLAND", "DPA", "NINO"]) or "UK" in words:
         return "UNITED KINGDOM"
     return cleaned
 

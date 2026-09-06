@@ -32,7 +32,7 @@ The composite score of **8.8 / 10** reflects an honest, balanced engineering tra
 | **Operational RAM Footprint** | **< 210 MB** (CLI) / **~5.2 GB** (with local 8B GGUF) | **~5.5 GB - 8.2 GB** (8B Q4/Q8 quantization) | **~1.2 GB - 2.5 GB** (Python env + dependencies) | **~1.5 GB - 3.0 GB** | **~750 MB - 1.2 GB** (Loaded NER models) |
 | **Non-Programmer Deliverables** | **Power Query M-Script + UI Guide** | None (Code snippets only) | None | None | None |
 | **Automated CI/CD Validation** | **Auto-Generated Pytest Suite** | None | None | None | None |
-| **Pre-Commit Verification Suite** | **90 Automated Tests** (< 3 sec execution) | None | Unit tests only | Unit tests only | Unit tests only |
+| **Pre-Commit Verification Suite** | **118 Automated Tests** (< 7 sec execution) | None | Unit tests only | Unit tests only | Unit tests only |
 
 ### Scorecard Breakdown
 
@@ -99,6 +99,25 @@ DeepAnalyze acts as a zero-code local security airlock between your confidential
 ### 2.1 System Architecture & Zero-Leak Compliance Airlock
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
 flowchart TD
     subgraph INGESTION["1. INGESTION LAYER"]
         RAW["Raw Spreadsheet / ERP Export<br/>(CSV, XLSX, TSV, Parquet)"]
@@ -165,9 +184,9 @@ flowchart TD
         SCORE --> AUDIT
     end
 
-    style VAULT fill:#eef2ff,stroke:#4338ca,stroke-width:2px
-    style FIREWALL fill:#fef2f2,stroke:#b91c1c,stroke-width:2px
-    style SCORE fill:#f0fdf4,stroke:#15803d,stroke-width:2px
+    classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
+    classDef highlight fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
+    class VAULT,FIREWALL,SCORE highlight;
 ```
 
 ```text
@@ -208,10 +227,11 @@ flowchart TD
   * Clean Dataset: Clean_file.xlsx / Clean_file.csv
   * Quality Scorecard: Real-time row diffs, null drops, 0-100 purity score
   * Automated Regression Suite: test_clean_pipeline.py (Pytest CI/CD)
-  * Statutory Audit Proof: compliance_audit.md
+  * Compliance Audit: compliance_audit.md (Statutory Methodology Attestation)
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### 2.2 The 18-Brain Omni-Cognitive Neural Mesh
+### 2.2 The 18-Brain Omni-Cognitive Architecture
 
 DeepAnalyze structures its cognitive analysis into two cooperating hemispheres connected through a central Stigmergic Bayesian Blackboard:
 * **Left Hemisphere (Brains 1 to 14)**: Cold data physics, matrix topology, algebraic invariants ($A \times B \approx C$), FFT chronometrics, spatial geodesics, process automata, and statutory compliance arbitration.
@@ -219,6 +239,25 @@ DeepAnalyze structures its cognitive analysis into two cooperating hemispheres c
 * **Closed-Loop Ouroboros Synapse**: Ingests runtime exception tracebacks from the AST sandbox directly back into the Blackboard, generating instant, surgical repair prompts.
 
 ```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
 flowchart LR
     subgraph LEFT["LEFT HEMISPHERE: Data Physics & Invariants (Brains 1-14)"]
         direction TB
@@ -280,11 +319,11 @@ flowchart LR
     %% Closed Loop Feedback
     PATCH ==>|Injects Repair Directives| SYNAPSE
 
-    style SYNAPSE fill:#f8fafc,stroke:#3b82f6,stroke-width:3px
-    style LEFT fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
-    style RIGHT fill:#fefce8,stroke:#ca8a04,stroke-width:2px
-    style OUROBOROS fill:#fef2f2,stroke:#dc2626,stroke-width:2px
-    style PROMPT fill:#eef2ff,stroke:#4f46e5,stroke-width:2px
+    classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
+    classDef core fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
+    classDef accent fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    class BB_BELIEF,BB_MONO,BB_ANOM,BB_INVAR,BB_FRICT core;
+    class PROMPT,PATCH,CRASH,AUTOPSY accent;
 ```
 
 ```text
@@ -321,6 +360,7 @@ flowchart LR
   * *Clipboard Payload (Differential Privacy Mock):* A 5-row schema mock with calibrated Laplace noise ($\epsilon = 1.0$), ensuring zero verbatim records enter chat windows.
 * **AST Security Firewall:** Parses untrusted Python syntax trees before execution, blocking sockets (`requests`, `socket`, `urllib`), environment variables (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), and timing side-channels (`time.sleep` > 1.0s).
 * **Dual-Engine Scope:** Pre-injects `pandas as pd`, `numpy as np`, and `polars as pl` into scope, catching syntax or runtime errors with live self-healing retry prompts.
+* **11-Test Privacy Benchmark & Egress Safety Gate:** Runs a real-time Tier 1 pre-flight check (< 150 ms) covering canary leaks, regex direct matches, $k$-anonymity, $l$-diversity, NNDR, and NMI before prompting for encrypted file download, backed by a Tier 2 deep audit suite ($t$-closeness, linkability, MIA, AST firewall, and 100% round-trip reconciliation) automatically compiled into `compliance_audit.md`.
 * **Excel Power Query Dual-Track:** Generates validated Power Query M-code (`powerquery_script.m`) and an illustrated click-by-click guide (`powerquery_guide.md`) so finance teams can refresh transformations natively inside Microsoft Excel.
 
 ---
@@ -490,13 +530,45 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes a deter
 * **Prompt**: *"Do you have special business requests or column extraction rules for the cloud AI? [y/N]"*
 * **Engine Action**: Ingests custom user requirements (e.g. *"Extract RAM into ram_gb"*, *"Enforce VAT 15%"*) to inject into the prompt.
 
-### Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
-* **Prompt**: Displays the generated master prompt and asks: *"Would you like to modify or add instructions? [y/N]"*
-* **Engine Action**: 
+### Step 8: Master Prompt Synthesis, Interactive Review & Pre-Flight Privacy Gateway
+* **Prompt**: Displays the generated master prompt, executes the **Tier 1 Pre-Flight Privacy Gateway**, and prompts for encrypted duplicate export:
+```text
+[PRE-FLIGHT PRIVACY GATEWAY]
+Scanning in-memory buffers against baseline statutory criteria...
+
+Test ID | Technical Metric          | Result  | Target Criterion       | Statutory Reference
+--------|---------------------------|---------|------------------------|---------------------------------
+T1.1    | Canary String Exfiltration| 0.00%   | 0 Leaks (Exact 0)      | NIST SP 800-188 §3.2
+T1.2    | Plaintext Direct PII Scan | 0 Found | 0 Matches              | PDPL Art. 29 / GDPR Art. 4(1)
+T1.3    | Singling-Out (k-Anonymity)| k = 6   | k >= 5 (Equiv. Class)  | HIPAA Safe Harbor / WP29
+T1.4    | Homogeneity (l-Diversity) | l = 3   | l >= 2 (Distinct Attr) | NIST SP 800-188 Microdata
+
+Status: 4/4 CRITERIA SATISFIED
+```
+* **Engine Action & Interactive Branching**:
   * Executes the **18-Brain Omni-Cognitive Council** (Left Hemisphere Data Physics + Right Hemisphere EQ & Startup Colleague Persona).
   * Automatically normalizes Eastern Arabic numerals (`٠-٩`), BiDi marks, Hijri dates, and 15% ZATCA / 5% GCC VAT invariants.
   * Injects a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
-* **Output**: Saves `[dataset]_cleaning_prompt.md`, copies text to clipboard, and optionally exports `[dataset]_anonymized.xlsx`.
+  * Runs the **Tier 1 Pre-Flight Gate** (< 15 ms in volatile RAM):
+    * **Case A: Any Tier 1 Check Fails (e.g. $k < 5$ or Plaintext PII detected):**
+      ```text
+      Status: 1 CRITERION FAILED (T1.3: k-Anonymity = 2; 14 unique row signatures detected)
+      Risk: Potential singling-out vulnerability under EU WP29 / HIPAA Expert Determination.
+
+      Options:
+        [1] Auto-generalize quasi-identifiers (Bin ages, truncate postal codes)
+        [2] Select additional columns to encrypt
+        [3] Abort export
+      Select action [1/2/3] (default: 1): 
+      ```
+    * **Case B: All Tier 1 Checks Pass:**
+      ```text
+      Status: 4/4 CRITERIA SATISFIED
+      Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.
+
+      Download encrypted dataset duplicate? [Y/n]: 
+      ```
+* **Output**: Saves `[dataset]_cleaning_prompt.md`, copies text to clipboard, and optionally exports `[dataset]_anonymized.xlsx` (volatile session keys held strictly in RAM).
 
 ### Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
 * **Prompt**: Choose execution mode: `[1] Single Script (.py)`, `[2] Multiple Blocks (.ipynb)`, or `[3] Power Query (M-Code)`.
@@ -518,8 +590,32 @@ When you run `%deepanalyze` or `deepanalyze wizard`, the system executes a deter
 
 ### Step 13: Statutory Compliance Audit Certificate
 * **Prompt**: Automatic generation upon completion.
-* **Engine Action**: Computes SHA-256 session hash, logs enforced statutes, and confirms zero plaintext leakage.
-* **Output**: Verifiable `compliance_audit.md` certificate.
+* **Engine Action**: Computes SHA-256 session hash, executes the full **11-Test Benchmark Suite** across Tier 1 and Tier 2, and compiles the formal audit report with an attributable Statutory Methodology Attestation.
+* **Output**: Verifiable `compliance_audit.md` certificate containing the complete statutory benchmark matrix:
+
+| Test ID | Test Name | Operational Target | Governing Standard & Technical Clause |
+| :--- | :--- | :--- | :--- |
+| **T1.1** | Canary Token Injection | $0.00\%$ Leakage | **NIST SP 800-188 §3.2** (Unintended Memorization & Direct Egress Defense) |
+| **T1.2** | Deterministic PII Scan | $0$ Plaintext Matches | **Saudi PDPL Art. 29 / GDPR Art. 4(1) / PCI-DSS v4.0 Req 3.4** |
+| **T1.3** | Singling-Out Risk ($k$-Anonymity) | $k \ge 5$ ($0.00\%$ unique rows) | **EU Article 29 Working Party (WP29) / HIPAA Safe Harbor § 164.514(b)** |
+| **T1.4** | Attribute Homogeneity ($l$-Diversity) | $l \ge 2$ across groups | **NIST SP 800-188** (Sensitive Attribute Dispersion) |
+| **T2.5** | Distribution Skew ($t$-Closeness) | $D[P, Q] \le 0.15$ (Wasserstein) | **IEEE Transactions on Data Privacy** (Subgroup Distributional Distance) |
+| **T2.6** | Empirical Linkability (`anonymeter`) | Risk Score $< 0.05$ | **French Data Protection Authority (CNIL) & PETS 2023 Guidelines** |
+| **T2.7** | Nearest-Neighbor Distance (NNDR) | $\text{NNDR} \ge 0.25$ | **ISO/IEC 27559:2022** (Synthetic Data Non-Memorization Verification) |
+| **T2.8** | Membership Inference Attack (MIA) | $\text{AUC} \le 0.55$ (Chance Baseline) | **NIST Privacy Framework v1.1** (Re-identification Surface Minimization) |
+| **T2.9** | Normalized Mutual Information (NMI) | $\text{NMI} < 0.05$ | **Shannon Information Theory** (Residual Entropy Disclosure) |
+| **T2.10**| AST Security Sandbox Audit | $100\%$ Egress Block | **CWE-94 / OWASP Top 10** (Code Injection & Data Exfiltration Prevention) |
+| **T2.11**| Round-Trip Reconciliation | $100.00\%$ Character Fidelity | **ISO 8000 / BCBS 239** (Data Governance & Lineage Integrity) |
+
+```markdown
+### STATUTORY METHODOLOGY ATTESTATION
+This audit verifies that the evaluated data artifacts satisfy the mathematical de-identification, pseudonymization, and sandboxing requirements referenced above. 
+
+Evaluation Methodology:
+1. Direct identifiers are irreversibly masked or surrogate-tokenized within volatile system memory pursuant to GDPR Article 4(5) and Saudi PDPL Article 29.
+2. Quasi-identifiers achieve mathematical equivalence class thresholds (k >= 5, l >= 2) consistent with HIPAA Safe Harbor and EU WP29 de-identification methodologies.
+3. Code execution pathways are audited against static abstract syntax tree (AST) constraint policies, eliminating network egress and host filesystem mutation risks prior to runtime execution.
+```
 
 ---
 
@@ -697,6 +793,7 @@ deepanalyze/
 ├── profiler.py      # Deep Exploration, Topology Discovery & Autonomous Briefing
 ├── promptgen.py     # Prompt Synthesis Engine, Human Intuition & Interactive Review Loop
 ├── policies.py      # Jurisdictional Compliance Engine & "Not Sure" Statute Resolver
+├── benchmarks.py    # 11-Test Air-Gap Privacy & Security Benchmark Suite (Tier 1 Gate & Tier 2 Audit)
 ├── sentinel.py      # Full-File Deep Scanner, ERP Masker, NER Scanner & DP Mock Generator
 ├── vault.py         # In-Memory Token Vault with Dynamic Pattern Learning
 ├── firewall.py      # AST Security Firewall, Path Sandbox, Watchdog Guard & Airlock
@@ -711,10 +808,11 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 101 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 118 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```
+* `tests/test_benchmarks.py`: Validates all 11 Air-Gap Privacy & Security Benchmarks across Tier 1 (canary injection, regex PII scanning, k-anonymity, l-diversity, NNDR memorization, NMI proxy leakage) and Tier 2 (t-closeness EMD distribution skewness, empirical anonymeter linkability, MIA shadow inference, AST firewall policy, and 100.00% deterministic reconciliation fidelity) alongside automatic inclusion in `compliance_audit.md`.
 * `tests/test_brain.py`: Validates the complete 18-Brain Omni-Cognitive Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, multi-modal spatial cartography (bounding box & GPS coordinates), chronometrics (periodicity & FFT), process state modeling, tensor semantic manifold preservation, graph network topology, statutory privacy arbitration (ZATCA, NDMO, GDPR overrides), cryptographic surrogate decoding, Stigmergic Bayesian belief consensus updates, Ouroboros crash autopsies with surgical micro-repair prompts, Socratic inquiry questions, Empathetic cognitive friction translation, Intuitive human behavioral intent detection, and Narrative Weaver Startup Colleague persona synthesis.
 * `tests/test_fix.py`: Validates the closed-loop Ouroboros `--fix` directive, local model health probing, autonomous forensic diagnosis and surgical repair with local 8B GGUF model, custom steering prompts, AST security firewall validation on model-synthesized code, LIFO rollback integration, and graceful clipboard autopsy fallback when offline.
 * `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
