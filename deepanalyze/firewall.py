@@ -289,6 +289,13 @@ def resolve_transformed_dataframe(
                 if hasattr(val, "shape") and hasattr(original_df, "shape"):
                     if val.shape != original_df.shape:
                         return val, f"in-place modified `{var}`"
+            elif isinstance(val, dict):
+                # Handle multi-sheet dicts returned e.g. from pd.read_excel(..., sheet_name=None)
+                if primary_var in val and ((pd is not None and isinstance(val[primary_var], pd.DataFrame)) or isinstance(val[primary_var], pl.DataFrame)):
+                    return val[primary_var], f"sheet `{primary_var}` from dict `{var}`"
+                for s_key, s_df in val.items():
+                    if (pd is not None and isinstance(s_df, pd.DataFrame)) or isinstance(s_df, pl.DataFrame):
+                        return s_df, f"sheet `{s_key}` from dict `{var}`"
 
     # 3. Check for callable transformation functions defined in scope
     for name, obj in list(global_scope.items()):

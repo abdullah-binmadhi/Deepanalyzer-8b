@@ -322,25 +322,33 @@ def build_master_prompt(
     sections.append("\n---")
 
     # Section 7: Code Output & Security Constraints
-    multi_sheet_ctx = ""
     if multi_sheets and len(multi_sheets) > 1:
-        sheet_vars = [f"`df_{re.sub(r'[^a-zA-Z0-9_]', '_', s.lower()).strip('_')}`" for s in multi_sheets.keys()]
-        multi_sheet_ctx = (
-            f"Pre-loaded multi-sheet context in local memory:\n"
-            f"- `sheets` dictionary: `{{'sheet_name': DataFrame, ...}}`\n"
-            f"- Primary DataFrame: `{target_df_name}` (from sheet '{topology.primary_sheet}')\n"
-            f"- Individual sheet DataFrames: {', '.join(sheet_vars)}\n"
+        sheet_vars_list = [f"`{s}` (also as `df_{re.sub(r'[^a-zA-Z0-9_]', '_', s.lower()).strip('_')}`)" for s in multi_sheets.keys()]
+        multi_sheet_details = (
+            f"**MULTI-SHEET EXECUTION ENVIRONMENT (PRE-LOADED IN RAM):**\n"
+            f"- All sheets are ALREADY pre-loaded into memory as DataFrames in the execution scope:\n"
+            f"  • Primary ledger DataFrame: `{target_df_name}` (and `df`)\n"
+            f"  • Individual sheets: {', '.join(sheet_vars_list)}\n"
+            f"  • All sheets map: `sheets` dict (`{{'sheet_name': DataFrame, ...}}`)\n"
+            f"- **DO NOT call `pd.read_excel()` or file ingestion functions.** Work directly with the in-memory DataFrames `{', '.join(multi_sheets.keys())}` or `sheets`.\n"
+        )
+    else:
+        multi_sheet_details = (
+            f"**EXECUTION SCOPE (PRE-LOADED IN RAM):**\n"
+            f"- Target DataFrame is ALREADY pre-loaded into memory as `{target_df_name}` (and `df`).\n"
+            f"- **DO NOT call `pd.read_csv()` or `pd.read_excel()`.** Work directly on `{target_df_name}`.\n"
         )
 
-    sections.append("\n### 7. CODE OUTPUT & SECURITY CONSTRAINTS")
+    sections.append("\n### 7. CODE OUTPUT & SECURITY CONSTRAINTS (RUNTIME EXECUTION CONTRACT)")
     sections.append(
-        "1. Write clean, vectorized, self-contained Python code using **Pandas (`pd`)** and **NumPy (`np`)** (or Polars `pl`).\n"
-        f"2. Assign the final cleaned and feature-engineered DataFrame to `{target_df_name}`.\n"
-        "3. **AST Firewall Sandbox Restrictions:** Do NOT use network calls (`requests`, `socket`, `urllib`), "
-        "system environment calls (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), or timing sleep loops (`time.sleep`). "
-        "Code violating these will be rejected by the local airlock firewall.\n"
-        f"{multi_sheet_ctx}"
-        "4. Wrap your executable script inside a single ```python code block."
+        f"{multi_sheet_details}\n"
+        "**CODE ARCHITECTURE & COMPLIANCE REQUIREMENTS:**\n"
+        "1. **Language & Dialect:** Write clean, vectorized, self-contained Python code using **Pandas (`pd`)** and **NumPy (`np`)**.\n"
+        f"2. **Output Contract:** Assign the final transformed, feature-engineered DataFrame back to `{target_df_name}` (and `df`).\n"
+        "3. **Regex & String Safety:** When stripping whitespaces or non-standard characters, ALWAYS use raw string regex (e.g. `r'[\\s\\u2009\\u00a0]+'` or `r'[^0-9.]'`). Avoid invalid escape sequences.\n"
+        "4. **Pandas 2.x/3.x Safe Types:** When selecting string columns, use `df.select_dtypes(include=['object', 'string'])` (avoid specifying only `'object'` which triggers deprecation warnings).\n"
+        "5. **AST Firewall Sandbox Restrictions:** Do NOT perform disk reads, network calls (`requests`, `urllib`), environment queries (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), or timing sleep loops (`time.sleep`). The code runs inside an AST security sandbox.\n"
+        "6. **Formatting:** Wrap your complete executable script inside a single ```python ... ``` fence."
     )
 
     return "\n".join(sections)

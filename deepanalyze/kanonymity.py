@@ -38,6 +38,31 @@ COMMON_SENSITIVE_PATTERNS = [
     re.compile(r".*(religion|political|union).*", re.I),
 ]
 
+ID_KEY_PATTERN = re.compile(
+    r"(_?id|_?key|_?num|_?no|_?code|uuid|guid)$|^([a-z0-9_]*_)?(id|key|code|uuid|guid)$",
+    re.I
+)
+
+METRIC_PATTERN = re.compile(
+    r"^.*(quantity|qty|price|amount|total|sum|discount|cost|count|sales|revenue|profit|margin|rate|score|weight|height|length|width|size|volume|balance|salary|income|val|value).*$",
+    re.I
+)
+
+
+def is_id_or_key_column(col_name: str) -> bool:
+    """Returns True if the column is an entity ID, foreign key, or surrogate key."""
+    clean = str(col_name).strip().lower()
+    # Explicitly protect postal / zip / area codes which are demographic QIs
+    if any(term in clean for term in ["zip", "postal", "area_code"]):
+        return False
+    return bool(ID_KEY_PATTERN.search(clean))
+
+
+def is_metric_column(col_name: str) -> bool:
+    """Returns True if the column represents a quantitative measure or metric."""
+    clean = str(col_name).strip()
+    return bool(METRIC_PATTERN.search(clean))
+
 
 @dataclass
 class KAnonymityReport:
@@ -63,6 +88,9 @@ def detect_quasi_identifiers(df: Union[pl.DataFrame, Any]) -> List[str]:
     qis = []
     for col in columns:
         col_str = str(col).strip()
+        # Strictly ignore entity IDs, foreign keys, and quantitative metrics
+        if is_id_or_key_column(col_str) or is_metric_column(col_str):
+            continue
         # Ignore long questions or survey question items (e.g. "Q6 | ...")
         if "|" in col_str and len(col_str) > 25:
             continue
@@ -106,18 +134,18 @@ def resolve_quasi_identifiers(
     total_records = len(pl_df)
     valid_cols = set(pl_df.columns)
     if quasi_identifiers:
-        qis = [c for c in quasi_identifiers if c in valid_cols]
+        qis = [c for c in quasi_identifiers if c in valid_cols and not is_id_or_key_column(c) and not is_metric_column(c)]
     else:
         qis = detect_quasi_identifiers(pl_df)
 
-    # Fallback: if no recognized QIs, take low/medium cardinality columns
+    # Fallback: if no recognized QIs, take low/medium cardinality columns (excluding IDs/keys/metrics)
     if not qis and total_records > 0:
         candidate_qis = []
         for c in pl_df.columns:
+            c_clean = str(c).strip()
+            if is_id_or_key_column(c_clean) or is_metric_column(c_clean):
+                continue
             try:
-                # Exclude columns that are already direct ID masks
-                if re.search(r"^(internal_?id|id|uuid|record_?id|client_?id)$", str(c).strip(), re.I):
-                    continue
                 n_unique = pl_df[c].n_unique()
                 if 2 <= n_unique <= min(100, max(2, total_records // 2)):
                     candidate_qis.append(c)
@@ -327,8 +355,9 @@ def auto_generalize_dataframe(
             surrogates = [f"ID_{i+1:05d}" for i in range(len(res_df))]
             res_df = res_df.with_columns(pl.Series(col, surrogates))
 
-    # 2. Resolve Quasi-Identifiers
-    qis = resolve_quasi_identifiers(res_df, quasi_identifiers)
+    # 2. Resolve Quasi-Identifiers (strictly excluding entity IDs and quantitative metrics)
+    raw_qis = resolve_quasi_identifiers(res_df, quasi_identifiers)
+    qis = [c for c in raw_qis if not is_id_or_key_column(c) and not is_metric_column(c)]
     if not qis:
         return res_df
 
@@ -360,12 +389,13 @@ def auto_generalize_dataframe(
         elif any(k in qi_lower for k in ["date", "dob", "birth"]):
             vals = [str(v).strip()[:7] if v is not None and len(str(v).strip()) >= 7 else "<NULL>" for v in res_df[qi].to_list()]
             res_df = res_df.with_columns(pl.Series(qi, vals))
-        # Categorical / Location QIs
+        # Categorical / Location QIs (Demographic only)
         else:
             vc = res_df[qi].value_counts()
-            frequent = set(vc.filter(pl.col("count") >= 15)[qi].drop_nulls().to_list())
-            vals = [str(v).strip() if v in frequent else "Other" for v in res_df[qi].to_list()]
-            res_df = res_df.with_columns(pl.Series(qi, vals))
+            frequent = set(vc.filter(pl.col("count") >= target_k)[qi].drop_nulls().to_list())
+            if len(frequent) > 0 and len(frequent) < vc.height:
+                vals = [str(v).strip() if v in frequent else "Other" for v in res_df[qi].to_list()]
+                res_df = res_df.with_columns(pl.Series(qi, vals))
 
     # 4. Enforce Equivalence Class Coarsening for k >= target_k
     exprs = [pl.col(c).cast(pl.Utf8).fill_null("<NULL>") for c in qis]

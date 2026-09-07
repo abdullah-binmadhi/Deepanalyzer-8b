@@ -176,7 +176,7 @@ def request_model_fix(
     target_name: str = "df",
     schema_info: Optional[Dict[str, Any]] = None,
     server_url: Optional[str] = None,
-    timeout: float = 30.0
+    timeout: float = 90.0
 ) -> Tuple[str, str]:
     """Requests an autonomous diagnosis and surgical repair from the local 8B GGUF model."""
 
@@ -226,24 +226,39 @@ def request_model_fix(
     }
 
     req_data = json.dumps(payload).encode("utf-8")
-    status, resp_bytes = _make_request(
-        endpoint="/v1/chat/completions",
-        method="POST",
-        body=req_data,
-        headers={"Content-Type": "application/json"},
-        server_url=server_url,
-        timeout=timeout
-    )
-    if status != 200:
-        raise RuntimeError(f"Inference server error (HTTP {status}): {resp_bytes.decode('utf-8', errors='replace')}")
+    try:
+        status, resp_bytes = _make_request(
+            endpoint="/v1/chat/completions",
+            method="POST",
+            body=req_data,
+            headers={"Content-Type": "application/json"},
+            server_url=server_url,
+            timeout=timeout
+        )
+        if status != 200:
+            raise RuntimeError(f"Inference server error (HTTP {status}): {resp_bytes.decode('utf-8', errors='replace')}")
 
-    res_json = json.loads(resp_bytes.decode("utf-8"))
+        res_json = json.loads(resp_bytes.decode("utf-8"))
 
-    content = res_json.get("choices", [{}])[0].get("message", {}).get("content", "")
-    if not content:
-        raise RuntimeError("Inference server returned empty response.")
+        content = res_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            raise RuntimeError("Inference server returned empty response.")
 
-    return extract_code_from_response(content)
+        return extract_code_from_response(content)
+    except Exception as local_err:
+        # Fallback to configured Frontier LLM (OpenAI, Anthropic, OpenRouter) if available
+        try:
+            from .frontier import detect_available_providers, call_frontier_model
+            providers = detect_available_providers()
+            if providers:
+                prov_key = list(providers.keys())[0]
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                ok, code, raw = call_frontier_model(full_prompt, provider_key=prov_key, timeout_sec=timeout)
+                if ok and code:
+                    return f"[{providers[prov_key].get('name', 'Frontier LLM')}] Surgical repair synthesized.", code
+        except Exception:
+            pass
+        raise local_err
 
 
 def request_model_transformation(
@@ -251,7 +266,7 @@ def request_model_transformation(
     target_name: str = "df",
     schema_info: Optional[Dict[str, Any]] = None,
     server_url: Optional[str] = None,
-    timeout: float = 30.0
+    timeout: float = 90.0
 ) -> Tuple[str, str]:
     """Synthesizes transformation code from a natural language directive using local 8B model."""
 
@@ -290,21 +305,35 @@ def request_model_transformation(
     }
 
     req_data = json.dumps(payload).encode("utf-8")
-    status, resp_bytes = _make_request(
-        endpoint="/v1/chat/completions",
-        method="POST",
-        body=req_data,
-        headers={"Content-Type": "application/json"},
-        server_url=server_url,
-        timeout=timeout
-    )
-    if status != 200:
-        raise RuntimeError(f"Inference server error (HTTP {status}): {resp_bytes.decode('utf-8', errors='replace')}")
+    try:
+        status, resp_bytes = _make_request(
+            endpoint="/v1/chat/completions",
+            method="POST",
+            body=req_data,
+            headers={"Content-Type": "application/json"},
+            server_url=server_url,
+            timeout=timeout
+        )
+        if status != 200:
+            raise RuntimeError(f"Inference server error (HTTP {status}): {resp_bytes.decode('utf-8', errors='replace')}")
 
-    res_json = json.loads(resp_bytes.decode("utf-8"))
+        res_json = json.loads(resp_bytes.decode("utf-8"))
 
-    content = res_json.get("choices", [{}])[0].get("message", {}).get("content", "")
-    if not content:
-        raise RuntimeError("Inference server returned empty response.")
+        content = res_json.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            raise RuntimeError("Inference server returned empty response.")
 
-    return extract_code_from_response(content)
+        return extract_code_from_response(content)
+    except Exception as local_err:
+        try:
+            from .frontier import detect_available_providers, call_frontier_model
+            providers = detect_available_providers()
+            if providers:
+                prov_key = list(providers.keys())[0]
+                full_prompt = f"{system_prompt}\n\n{user_prompt}"
+                ok, code, raw = call_frontier_model(full_prompt, provider_key=prov_key, timeout_sec=timeout)
+                if ok and code:
+                    return f"[{providers[prov_key].get('name', 'Frontier LLM')}] Transformation synthesized.", code
+        except Exception:
+            pass
+        raise local_err

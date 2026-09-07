@@ -535,7 +535,8 @@ class AirGapWizard:
             if workbook_topology and len(workbook_topology.sheets) > 1:
                 df = workbook_topology.sheets[workbook_topology.primary_sheet].df
                 df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
-                multi_sheets = None
+                multi_sheets = {s: p.df for s, p in workbook_topology.sheets.items() if p.df is not None}
+                self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
             detected_key, human_name, explanation = detect_dataset_architecture(df)
             arch_key = detected_key
             self.console.print(f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. {explanation}")
@@ -879,6 +880,8 @@ class AirGapWizard:
                     if is_express_mode:
                         self.console.print("[INFO] Express Clean: Auto-generalizing quasi-identifiers (k >= 5) to satisfy statutory benchmarks...")
                         masked_df = auto_generalize_dataframe(masked_df, target_k=5)
+                        if masked_multi_sheets and workbook_topology and workbook_topology.primary_sheet in masked_multi_sheets:
+                            masked_multi_sheets[workbook_topology.primary_sheet] = masked_df
                         full_benchmark_report = run_all_benchmarks(
                             df=df,
                             masked_df=masked_df,
@@ -908,6 +911,8 @@ class AirGapWizard:
                     if choice == "1":
                         self.console.print("[INFO] Applying automatic generalization on quasi-identifiers & singleton buckets...")
                         masked_df = auto_generalize_dataframe(masked_df, target_k=5)
+                        if masked_multi_sheets and workbook_topology and workbook_topology.primary_sheet in masked_multi_sheets:
+                            masked_multi_sheets[workbook_topology.primary_sheet] = masked_df
                         self.console.print("[bold green]Quasi-identifiers generalized in memory buffer (k >= 5 enforced). Re-evaluating benchmarks...[/bold green]")
                         full_benchmark_report = run_all_benchmarks(
                             df=df,
@@ -973,12 +978,14 @@ class AirGapWizard:
                             ext = ".xlsx"
                         dup_filename = f"{dataset_base_name}_anonymized{ext}"
                         dup_path = os.path.join(dataset_dir or os.getcwd(), dup_filename)
+                        export_sheets = masked_multi_sheets if (masked_multi_sheets and len(masked_multi_sheets) > 1) else (multi_sheets if (multi_sheets and len(multi_sheets) > 1) else None)
                         try:
-                            if ext == ".xlsx" and masked_multi_sheets and len(masked_multi_sheets) > 1:
+                            if ext == ".xlsx" and export_sheets:
                                 import pandas as pd
                                 with pd.ExcelWriter(dup_path, engine="openpyxl") as writer:
-                                    for sname, sdf in masked_multi_sheets.items():
-                                        sdf.to_pandas().to_excel(writer, sheet_name=sname, index=False)
+                                    for sname, sdf in export_sheets.items():
+                                        pdf = sdf.to_pandas() if hasattr(sdf, "to_pandas") else sdf
+                                        pdf.to_excel(writer, sheet_name=sname, index=False)
                             elif ext == ".xlsx":
                                 masked_df.write_excel(dup_path)
                             elif ext == ".csv":
@@ -1103,7 +1110,47 @@ class AirGapWizard:
                                         exec_scope["df"] = df_prepared
                                         exec_scope["data"] = df_prepared
 
-                                        execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
+                                        # Synchronously prepare and inject all workbook sheets matching dialect
+                                        if multi_sheets and len(multi_sheets) > 1:
+                                            prepared_sheets = {}
+                                            for sname, sdf in multi_sheets.items():
+                                                s_prep, _ = prepare_dataframe_for_code(sdf, code_text)
+                                                prepared_sheets[sname] = s_prep
+                                                s_var = "df_" + re.sub(r"[^a-zA-Z0-9_]", "_", sname.lower()).strip("_")
+                                                exec_scope[s_var] = s_prep
+                                                exec_scope[sname] = s_prep
+                                            exec_scope["sheets"] = prepared_sheets
+                                            if workbook_topology and workbook_topology.primary_sheet in prepared_sheets:
+                                                df_prepared = prepared_sheets[workbook_topology.primary_sheet]
+                                                exec_scope[df_name] = df_prepared
+                                                exec_scope["df"] = df_prepared
+                                                exec_scope["data"] = df_prepared
+
+                                            # Safe Excel interceptor for scripts calling pd.read_excel
+                                            try:
+                                                import pandas as _pd
+                                                _real_read_excel = getattr(_pd, "read_excel", None)
+                                                if _real_read_excel:
+                                                    def _intercept_read_excel(io, *args, **kwargs):
+                                                        s_name = kwargs.get("sheet_name", args[0] if args else 0)
+                                                        if isinstance(io, str) and os.path.isfile(io):
+                                                            try:
+                                                                return _real_read_excel(io, *args, **kwargs)
+                                                            except Exception:
+                                                                pass
+                                                        if s_name is None:
+                                                            return prepared_sheets
+                                                        if isinstance(s_name, str) and s_name in prepared_sheets:
+                                                            return prepared_sheets[s_name]
+                                                        if isinstance(s_name, int) and 0 <= s_name < len(prepared_sheets):
+                                                            return list(prepared_sheets.values())[s_name]
+                                                        return _real_read_excel(io, *args, **kwargs)
+                                                    _pd.read_excel = _intercept_read_excel
+                                                    exec_scope["pd"] = _pd
+                                            except Exception:
+                                                pass
+
+                                        execute_code_safely(code_text, exec_scope, timeout_sec=30.0)
                                         append_code_to_pipeline(pipeline_file, code_text)
 
                                         resolved_df, resolution_source = resolve_transformed_dataframe(

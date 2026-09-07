@@ -91,3 +91,26 @@ def test_auto_generalize_dataframe():
     assert rep.min_k >= 5
     assert rep.records_at_risk == 0
 
+
+def test_auto_generalize_preserves_relational_keys_and_metrics():
+    from deepanalyze.kanonymity import auto_generalize_dataframe, resolve_quasi_identifiers
+    df = pl.DataFrame({
+        "Order_id": [101, 102, 103, 104, 105],
+        "customer_id": [74, 54, 71, 56, 79],
+        "product_id": [148, 149, 248, 242, 299],
+        "quantity": [13, 1, 3, 15, 18],
+        "date": ["2024-01-01", "2024-01-01", "2024-01-01", "2024-01-02", "2024-01-03"]
+    })
+    qis = resolve_quasi_identifiers(df)
+    assert "customer_id" not in qis
+    assert "product_id" not in qis
+    assert "quantity" not in qis
+
+    gen_df = auto_generalize_dataframe(df, target_k=3)
+    # Ensure customer_id and product_id are NOT binned to "Other"
+    assert "Other" not in [str(x) for x in gen_df["customer_id"].to_list()]
+    assert "Other" not in [str(x) for x in gen_df["product_id"].to_list()]
+    assert gen_df["customer_id"].to_list() == [74, 54, 71, 56, 79]
+    assert gen_df["product_id"].to_list() == [148, 149, 248, 242, 299]
+
+

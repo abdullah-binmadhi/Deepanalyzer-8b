@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import polars as pl
 
 
-def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[str, Any]]]:
+def profile_engineering_opportunities(df: Any) -> Dict[str, List[Dict[str, Any]]]:
     """Scans cleaned dataset to discover high-value feature engineering opportunities.
 
     Categorizes opportunities into:
@@ -19,6 +19,14 @@ def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[s
       - 'categorical': High-cardinality grouping, frequency encoding, interactions.
       - 'text': String lengths, digit ratios, token extraction.
     """
+    if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
+        try:
+            pl_df = pl.from_pandas(df)
+        except Exception:
+            pl_df = pl.DataFrame(df)
+    else:
+        pl_df = df
+
     opportunities: Dict[str, List[Dict[str, Any]]] = {
         "temporal": [],
         "numerical": [],
@@ -26,9 +34,9 @@ def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[s
         "text": []
     }
 
-    schema = df.schema
+    schema = pl_df.schema
 
-    for col in df.columns:
+    for col in pl_df.columns:
         dtype = schema[col]
         str_dtype = str(dtype).lower()
 
@@ -48,8 +56,8 @@ def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[s
         # 2. Numerical Detection
         elif "int" in str_dtype or "float" in str_dtype or "decimal" in str_dtype:
             try:
-                min_val = df[col].drop_nulls().min()
-                max_val = df[col].drop_nulls().max()
+                min_val = pl_df[col].drop_nulls().min()
+                max_val = pl_df[col].drop_nulls().max()
                 has_skew = False
                 if min_val is not None and max_val is not None and min_val > 0 and (max_val / (min_val + 1e-5)) > 100:
                     has_skew = True
@@ -72,16 +80,16 @@ def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[s
 
         # 3. Categorical & Text Detection
         elif "utf8" in str_dtype or "str" in str_dtype or "cat" in str_dtype:
-            n_unique = df[col].n_unique()
+            n_unique = pl_df[col].n_unique()
             try:
-                avg_len = df[col].drop_nulls().str.len_bytes().mean() or 0
-                sample_vals = [str(v) for v in df[col].drop_nulls()[:5]]
+                avg_len = pl_df[col].drop_nulls().str.len_bytes().mean() or 0
+                sample_vals = [str(v) for v in pl_df[col].drop_nulls()[:5]]
                 has_spaces = any(" " in s for s in sample_vals)
             except Exception:
                 avg_len = 0
                 has_spaces = False
 
-            if avg_len > 15 or (has_spaces and n_unique == df.height):
+            if avg_len > 15 or (has_spaces and n_unique == pl_df.height):
                 # Free-text detection
                 opportunities["text"].append({
                     "column": col,
@@ -106,13 +114,21 @@ def profile_engineering_opportunities(df: pl.DataFrame) -> Dict[str, List[Dict[s
     return opportunities
 
 
-def build_engineering_briefing(df: pl.DataFrame, dataset_name: str = "cleaned_data", user_goal: str = "") -> str:
+def build_engineering_briefing(df: Any, dataset_name: str = "cleaned_data", user_goal: str = "") -> str:
     """Creates a sanitized Engineering Briefing prompt for Frontier models."""
-    opps = profile_engineering_opportunities(df)
+    if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
+        try:
+            pl_df = pl.from_pandas(df)
+        except Exception:
+            pl_df = pl.DataFrame(df)
+    else:
+        pl_df = df
+
+    opps = profile_engineering_opportunities(pl_df)
 
     briefing = [
         f"# Feature Engineering & Predictive Enhancement Briefing: {dataset_name}",
-        f"**Shape**: {df.height} rows x {df.width} columns",
+        f"**Shape**: {pl_df.height} rows x {pl_df.width} columns",
         f"**User Objective**: {user_goal or 'General analytics, clustering, and predictive feature enrichment'}\n",
         "## Cleaned Dataset Schema & Statistics",
         "```json",
@@ -120,10 +136,10 @@ def build_engineering_briefing(df: pl.DataFrame, dataset_name: str = "cleaned_da
     ]
 
     col_entries = []
-    for col in df.columns:
-        dtype = str(df.schema[col])
-        n_null = df[col].null_count()
-        n_uniq = df[col].n_unique()
+    for col in pl_df.columns:
+        dtype = str(pl_df.schema[col])
+        n_null = pl_df[col].null_count()
+        n_uniq = pl_df[col].n_unique()
         col_entries.append(f'  "{col}": {{"type": "{dtype}", "nulls": {n_null}, "unique": {n_uniq}}}')
     briefing.append(",\n".join(col_entries))
     briefing.append("}\n```\n")
@@ -148,15 +164,24 @@ def build_engineering_briefing(df: pl.DataFrame, dataset_name: str = "cleaned_da
     return "\n".join(briefing)
 
 
-def apply_quick_features(df: pl.DataFrame, selected_types: Optional[List[str]] = None) -> Tuple[pl.DataFrame, List[str]]:
+def apply_quick_features(df: Any, selected_types: Optional[List[str]] = None) -> Tuple[Any, List[str]]:
     """Applies high-speed deterministic feature engineering in RAM using pure Polars.
 
     Returns:
         (transformed_df, list_of_new_column_names)
     """
+    is_pandas = hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame)
+    if is_pandas:
+        try:
+            pl_df = pl.from_pandas(df)
+        except Exception:
+            pl_df = pl.DataFrame(df)
+    else:
+        pl_df = df
+
     selected_types = selected_types or ["temporal", "numerical", "categorical", "text"]
-    opps = profile_engineering_opportunities(df)
-    transformed_df = df.clone()
+    opps = profile_engineering_opportunities(pl_df)
+    transformed_df = pl_df.clone()
     new_cols = []
 
     # 1. Temporal
@@ -224,6 +249,11 @@ def apply_quick_features(df: pl.DataFrame, selected_types: Optional[List[str]] =
             except Exception:
                 pass
 
+    if is_pandas:
+        try:
+            return transformed_df.to_pandas(), new_cols
+        except Exception:
+            return transformed_df, new_cols
     return transformed_df, new_cols
 
 
