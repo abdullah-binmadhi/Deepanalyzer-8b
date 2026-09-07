@@ -518,8 +518,8 @@ class DeepAnalyzeCockpitApp(App):
     def on_copy_briefing_pressed(self) -> None:
         try:
             from .wizard import copy_to_clipboard
-            from .profiler import generate_engineering_briefing
-            briefing = generate_engineering_briefing(self.encrypted_df, user_goal="Clean & engineer features")
+            from .data_engineering import build_engineering_briefing
+            briefing = build_engineering_briefing(self.encrypted_df, dataset_name=self.dataset_name, user_goal="Clean & engineer features")
             copy_to_clipboard(briefing)
             self.notify("Engineering Briefing copied to clipboard!", title="Copied", severity="information")
         except Exception as e:
