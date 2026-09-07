@@ -2,6 +2,7 @@
 
 import http.server
 import json
+import os
 import threading
 import time
 from typing import Optional
@@ -368,4 +369,41 @@ def test_magics_fix_direct_transformation_without_prior_failure(monkeypatch, moc
     assert res_df is not None
     assert "total" in res_df.columns
     assert res_df["total"].tolist() == [11, 22]
+
+
+def test_unix_domain_socket_inference():
+    """Validates health check and repair requests over Unix domain sockets."""
+    import socketserver
+    sock_path = f"/tmp/test_llama_{os.getpid()}.sock"
+    if os.path.exists(sock_path):
+        os.remove(sock_path)
+
+    class MockUnixServer(socketserver.UnixStreamServer):
+        pass
+
+    server = MockUnixServer(sock_path, MockLlamaServerHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        MockLlamaServerHandler.mock_diagnosis = "KeyError in dataframe column."
+        MockLlamaServerHandler.mock_code = "df['resolved'] = 42\n"
+
+        # 1. Health probe over unix socket
+        assert check_model_health(server_url=f"unix://{sock_path}") is True
+        assert check_model_health(server_url=sock_path) is True
+
+        # 2. Fix request over unix socket
+        diag, code = request_model_fix(
+            failed_code="df['missing'] += 1",
+            traceback_str="KeyError: 'missing'",
+            autopsy_str="Column missing not found.",
+            target_name="df",
+            server_url=f"unix://{sock_path}"
+        )
+        assert "KeyError" in diag
+        assert "df['resolved'] = 42" in code
+    finally:
+        server.shutdown()
+        server.server_close()
+
 
