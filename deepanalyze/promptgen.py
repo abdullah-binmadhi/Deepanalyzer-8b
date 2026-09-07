@@ -422,9 +422,11 @@ def interactive_prompt_editor(
 
         # 2. Ask if user wants to modify or add more
         modify = Prompt.ask(
-            "\n[bold yellow]Would you like to modify or add instructions to this prompt? [y/N][/bold yellow]",
+            "\n[bold yellow]Would you like to modify or add instructions to this prompt? [Y/N/B][/bold yellow]",
             default="N"
         )
+        if modify.strip().lower() in ("b", "back"):
+            return "__BACK__"
         if not modify.lower().startswith("y"):
             break
 
@@ -433,7 +435,9 @@ def interactive_prompt_editor(
         console.print("  [1] Append custom instructions / business rules")
         console.print("  [2] Open full prompt in text editor ($EDITOR / nano / notepad)")
         console.print("  [3] Replace a specific phrase or section")
-        choice = Prompt.ask("Select option [1-3]", default="1")
+        choice = Prompt.ask("Select option [1-3/B]", default="1")
+        if choice.strip().lower() in ("b", "back"):
+            continue
 
         if choice.strip() == "1":
             console.print("\n[bold]Enter additional instructions[/bold] (Paste text and type 'EOF' or press Ctrl+D when finished):")

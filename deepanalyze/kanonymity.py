@@ -19,15 +19,15 @@ except ImportError:
 
 
 COMMON_QI_PATTERNS = [
-    re.compile(r".*(age|years?_old).*", re.I),
+    re.compile(r".*\b(age|years?_old)\b.*", re.I),
     re.compile(r"^(gender|sex)$", re.I),
-    re.compile(r".*(birth|dob|born).*", re.I),
-    re.compile(r".*(zip|postal|postcode).*", re.I),
-    re.compile(r".*(city|town|municipality|state|province|county|region|country).*", re.I),
-    re.compile(r".*(ethnicity|race|nationality).*", re.I),
-    re.compile(r".*(marital|marriage|spouse).*", re.I),
-    re.compile(r".*(visit_date|admission|discharge|registration_date).*", re.I),
-    re.compile(r".*(department|division|job_title|occupation|rank).*", re.I),
+    re.compile(r".*\b(birth|dob|born)\b.*", re.I),
+    re.compile(r".*\b(zip|postal|postcode)\b.*", re.I),
+    re.compile(r".*\b(city|town|municipality|state|province|county|region|country)\b.*", re.I),
+    re.compile(r".*\b(ethnicity|race|nationality)\b.*", re.I),
+    re.compile(r".*\b(marital|marriage|spouse)\b.*", re.I),
+    re.compile(r".*\b(visit_date|admission|discharge|registration_date)\b.*", re.I),
+    re.compile(r".*\b(department|division|job_title|occupation|rank)\b.*", re.I),
 ]
 
 COMMON_SENSITIVE_PATTERNS = [
@@ -63,8 +63,14 @@ def detect_quasi_identifiers(df: Union[pl.DataFrame, Any]) -> List[str]:
     qis = []
     for col in columns:
         col_str = str(col).strip()
+        # Ignore long questions or survey question items (e.g. "Q6 | ...")
+        if "|" in col_str and len(col_str) > 25:
+            continue
+        if re.match(r"^Q\d+\s*\|", col_str, re.I):
+            continue
+        col_norm = re.sub(r"[_\-–—]+", " ", col_str)
         for pat in COMMON_QI_PATTERNS:
-            if pat.match(col_str):
+            if pat.search(col_str) or pat.search(col_norm):
                 qis.append(col_str)
                 break
     return qis
@@ -260,3 +266,100 @@ def bin_column_series(series: Sequence[Any], bin_size: int = 10) -> List[str]:
         except (ValueError, TypeError):
             binned.append(str(val))
     return binned
+
+
+def auto_generalize_dataframe(
+    df: Union[pl.DataFrame, Any],
+    quasi_identifiers: Optional[Sequence[str]] = None,
+    target_k: int = 5
+) -> pl.DataFrame:
+    """Deterministically auto-generalizes quasi-identifiers and singletons to enforce k-anonymity (k >= target_k).
+
+    1. Masks direct identifier columns (e.g. 'Internal ID', 'id') with surrogate tokens.
+    2. Bins numeric quasi-identifiers (like age) into standardized 10-year intervals.
+    3. Coarsens high-cardinality location/demographic attributes.
+    4. Aggregates rare singleton equivalence classes (< target_k) into an equivalence class bucket
+       so that every row satisfies k >= target_k with zero singled-out records.
+    """
+    if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
+        try:
+            pl_df = pl.from_pandas(df)
+        except Exception:
+            pl_df = pl.DataFrame(df)
+    else:
+        pl_df = df
+
+    if len(pl_df) == 0:
+        return pl_df
+
+    res_df = pl_df.clone()
+
+    # 1. Mask direct identifier columns (e.g. Internal ID, ID, UUID)
+    for col in res_df.columns:
+        col_clean = str(col).strip()
+        if re.search(r"^(internal_?id|id|uuid|record_?id|client_?id)$", col_clean, re.I):
+            surrogates = [f"ID_{i+1:05d}" for i in range(len(res_df))]
+            res_df = res_df.with_columns(pl.Series(col, surrogates))
+
+    # 2. Resolve Quasi-Identifiers
+    qis = list(quasi_identifiers) if quasi_identifiers else detect_quasi_identifiers(res_df)
+    if not qis:
+        return res_df
+
+    # 3. Apply attribute-level coarsening and binning
+    for qi in qis:
+        qi_lower = str(qi).lower()
+        # Age or numeric QIs
+        if "age" in qi_lower or "year" in qi_lower:
+            vals = res_df[qi].to_list()
+            binned = []
+            for v in vals:
+                try:
+                    num = float(v)
+                    if num < 18:
+                        binned.append("<18")
+                    elif num >= 75:
+                        binned.append("75+")
+                    else:
+                        low = int(num // 10) * 10
+                        binned.append(f"{low}-{low+9}")
+                except Exception:
+                    binned.append("Unknown")
+            res_df = res_df.with_columns(pl.Series(qi, binned))
+        # Postal / Zip codes
+        elif any(k in qi_lower for k in ["zip", "postal"]):
+            vals = [f"{str(v).strip()[:3]}XX" if v is not None else "<NULL>" for v in res_df[qi].to_list()]
+            res_df = res_df.with_columns(pl.Series(qi, vals))
+        # Dates
+        elif any(k in qi_lower for k in ["date", "dob", "birth"]):
+            vals = [str(v).strip()[:7] if v is not None and len(str(v).strip()) >= 7 else "<NULL>" for v in res_df[qi].to_list()]
+            res_df = res_df.with_columns(pl.Series(qi, vals))
+        # Categorical / Location QIs
+        else:
+            vc = res_df[qi].value_counts()
+            frequent = set(vc.filter(pl.col("count") >= 15)[qi].drop_nulls().to_list())
+            vals = [str(v).strip() if v in frequent else "Other" for v in res_df[qi].to_list()]
+            res_df = res_df.with_columns(pl.Series(qi, vals))
+
+    # 4. Enforce Equivalence Class Coarsening for k >= target_k
+    exprs = [pl.col(c).cast(pl.Utf8).fill_null("<NULL>") for c in qis]
+    grouped = res_df.with_columns(exprs).group_by(qis).len()
+    small_classes = grouped.filter(pl.col("len") < target_k)
+
+    if small_classes.height > 0:
+        small_tuples = set(tuple(str(r[c]) for c in qis) for r in small_classes.to_dicts())
+        rows = res_df.select([pl.col(c).cast(pl.Utf8).fill_null("<NULL>") for c in qis]).to_dicts()
+        updated_cols = {c: [] for c in qis}
+        for r in rows:
+            tup = tuple(str(r[c]) for c in qis)
+            if tup in small_tuples:
+                for c in qis:
+                    updated_cols[c].append("<GENERALIZED>")
+            else:
+                for c in qis:
+                    updated_cols[c].append(r[c])
+        for c in qis:
+            res_df = res_df.with_columns(pl.Series(c, updated_cols[c]))
+
+    return res_df
+

@@ -73,3 +73,21 @@ def test_bin_column_series():
     assert binned[3] == "30-39"
     assert binned[4] == "40-49"
     assert binned[5] == "<UNKNOWN>"
+
+
+def test_auto_generalize_dataframe():
+    from deepanalyze.kanonymity import auto_generalize_dataframe
+    df = pl.DataFrame({
+        "Internal ID": [f"ID_{i}" for i in range(25)],
+        "age": [20, 21, 22, 23, 24] + [30, 31, 32, 33, 34] + [40, 41, 42, 43, 44] + [50, 51, 52, 53, 54] + [80, 81, 82, 83, 84],
+        "gender": ["M"] * 12 + ["F"] * 13,
+        "salary": [50000 + i * 1000 for i in range(25)]
+    })
+    gen_df = auto_generalize_dataframe(df, quasi_identifiers=["age", "gender"], target_k=5)
+    # Direct IDs should be surrogate-masked
+    assert gen_df["Internal ID"][0].startswith("ID_")
+    # All equivalence classes must satisfy k >= 5
+    rep = analyze_kanonymity(gen_df, quasi_identifiers=["age", "gender"], threshold_k=5)
+    assert rep.min_k >= 5
+    assert rep.records_at_risk == 0
+

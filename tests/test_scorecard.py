@@ -36,3 +36,27 @@ def test_render_quality_scorecard():
     table = render_quality_scorecard(card)
     assert table is not None
     assert table.title == "Data Transformation & Quality Scorecard"
+
+
+def test_three_way_inspection_and_table():
+    from deepanalyze.scorecard import (
+        render_dataframe_sample,
+        render_three_way_comparison_table,
+        render_three_way_airlock_inspection
+    )
+    raw_df = pl.DataFrame({"Client Name": ["Alice", "Bob"], "Income": [1000, 2000]})
+    encrypted_df = pl.DataFrame({"Client Name": ["CUST_001", "CUST_002"], "Income": [1000, 2000]})
+    clean_df = pl.DataFrame({"client_name": ["Alice", "Bob"], "income": [1000.0, 2000.0]})
+
+    sample_table = render_dataframe_sample(raw_df, title="Raw Sample")
+    assert sample_table is not None
+    assert len(sample_table.columns) == 2
+
+    comp_table = render_three_way_comparison_table(raw_df, encrypted_df, clean_df)
+    assert comp_table is not None
+    assert "Original vs Encrypted vs Cleaned" in comp_table.title
+    assert len(comp_table.columns) == 5
+
+    # Test inspection render helper (prints without raising)
+    render_three_way_airlock_inspection(raw_df, encrypted_df, clean_df)
+

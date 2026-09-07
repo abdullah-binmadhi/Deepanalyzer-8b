@@ -356,9 +356,7 @@ def eval_l_diversity(
 
     sens = sensitive_col or detect_sensitive_column(df)
     if not sens or sens not in df.columns or sens in qis:
-        # Find any other non-QI column
-        other_cols = [c for c in df.columns if c not in qis]
-        sens = other_cols[0] if other_cols else None
+        sens = None
 
     if not sens:
         return BenchmarkMetric(
@@ -444,8 +442,7 @@ def eval_t_closeness(
 
     sens = sensitive_col or detect_sensitive_column(df)
     if not sens or sens not in df.columns or sens in qis:
-        other_cols = [c for c in df.columns if c not in qis]
-        sens = other_cols[0] if other_cols else None
+        sens = None
 
     if not sens:
         return BenchmarkMetric(
@@ -891,7 +888,10 @@ def eval_mutual_information(
 
     sens = sensitive_col or detect_sensitive_column(df)
     if not sens or sens not in df.columns or sens in qis:
-        other_cols = [c for c in df.columns if c not in qis]
+        other_cols = [
+            c for c in df.columns
+            if c not in qis and not re.search(r"\b(internal_?id|id|uuid|key|index|token)\b", str(c).strip(), re.I)
+        ]
         sens = other_cols[0] if other_cols else None
 
     if not sens:
@@ -1106,11 +1106,12 @@ def run_tier1_preflight(
     """
     start_time = datetime.datetime.now()
     pol = policy or resolve_policy("Saudi Arabia", "PDPL")
+    target_df = masked_df if masked_df is not None else df
 
     m1 = eval_canary_injection(df, pol)
     m2 = eval_regex_pii_scanner(masked_df, prompt_text)
-    m3 = eval_singling_out_risk(df)
-    m4 = eval_l_diversity(df)
+    m3 = eval_singling_out_risk(target_df)
+    m4 = eval_l_diversity(target_df)
 
     metrics = [m1, m2, m3, m4]
     all_passed = all(m.passed for m in metrics)
@@ -1152,14 +1153,15 @@ def run_tier2_deep_audit(
     """
     start_time = datetime.datetime.now()
     pol = policy or resolve_policy("Saudi Arabia", "PDPL")
+    target_df = masked_df if masked_df is not None else df
 
-    m5 = eval_t_closeness(df)
-    m6 = eval_linkability_risk(df, mock_rows)
-    m7 = eval_nndr_memorization(df, mock_rows)
-    m8 = eval_membership_inference(df, mock_rows)
-    m9 = eval_mutual_information(df)
+    m5 = eval_t_closeness(target_df)
+    m6 = eval_linkability_risk(target_df, mock_rows)
+    m7 = eval_nndr_memorization(target_df, mock_rows)
+    m8 = eval_membership_inference(target_df, mock_rows)
+    m9 = eval_mutual_information(target_df)
     m10 = eval_ast_firewall_policy()
-    m11 = eval_reconciliation_exactness(df, pol)
+    m11 = eval_reconciliation_exactness(target_df, pol)
 
     metrics = [m5, m6, m7, m8, m9, m10, m11]
     all_passed = all(m.passed for m in metrics)

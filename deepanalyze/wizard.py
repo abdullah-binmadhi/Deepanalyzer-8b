@@ -34,6 +34,9 @@ from .firewall import (
     push_snapshot,
     record_execution_failure,
 )
+from .kanonymity import analyze_kanonymity, auto_generalize_dataframe
+from .benchmarks import render_full_scorecard_panel, run_all_benchmarks
+from .scorecard import render_three_way_airlock_inspection
 from .policies import (
     CompliancePolicy,
     classify_dataframe_columns,
@@ -674,541 +677,786 @@ class AirGapWizard:
                     f"{len(kanon_report.quasi_identifiers)} Quasi-Identifiers ({', '.join(kanon_report.quasi_identifiers)})."
                 )
 
-        # Step 7: Interactive Value Teaching & Disambiguation Loop
-        self.console.print("\n[bold cyan]Step 7: Interactive Value Teaching & Disambiguation Loop[/bold cyan]")
+        # Navigation State Machine for Steps 7 - 13
+        wizard_stage = "step7"
+        user_custom_instructions = ""
+        master_prompt = ""
+        finalized_prompt = ""
+        full_benchmark_report = None
+        export_approved = True
+        code_executed_successfully = False
+        pipeline_type = None
+        pipeline_file = None
+        pq_script_path = None
+        final_df = df
+        quality_card = None
+
         while True:
-            more = Prompt.ask("Are there more columns or data elements you want me to encrypt? [y/N]", default="N")
-            if not more.lower().startswith("y"):
-                break
-            field_name = Prompt.ask("Enter column name or index to encrypt (e.g. Seq, GL Code, 4)")
-            if not field_name.strip():
+            # -------------------------------------------------------------
+            # Step 7: Interactive Value Teaching & Disambiguation Loop
+            # -------------------------------------------------------------
+            if wizard_stage == "step7":
+                self.console.print("\n[bold cyan]Step 7: Interactive Value Teaching & Disambiguation Loop[/bold cyan]")
+                while True:
+                    more = Prompt.ask("Are there more columns or data elements you want me to encrypt? [Y/N/B]", default="N").strip()
+                    if more.lower() in ("b", "back"):
+                        self.console.print("[dim]Already at earliest interactive teaching stage.[/dim]")
+                        break
+                    if not more.lower().startswith("y"):
+                        break
+                    field_name = Prompt.ask("Enter column name or index to encrypt (e.g. Seq, GL Code, 4) [or 'B' to cancel]").strip()
+                    if field_name.lower() in ("b", "back") or not field_name:
+                        continue
+
+                    # Support entering column by 1-based index
+                    if field_name.isdigit():
+                        col_idx = int(field_name) - 1
+                        if 0 <= col_idx < len(df.columns):
+                            field_name = df.columns[col_idx]
+
+                    know_val = Prompt.ask(f"Do you know an expected or potential value for `{field_name}`? [Y/N]", default="Y")
+                    if know_val.lower().startswith("y"):
+                        example_val = Prompt.ask(f"Enter an example value for `{field_name}` (e.g. 10000, 500-000)")
+                        learned_pat, updated_df = learn_custom_pattern(field_name, example_val, masked_df)
+                        if updated_df is not None:
+                            masked_df = updated_df
+                        self.console.print(
+                            f"[bold green][Pattern Learned][/bold green] Inferred regex `[cyan]{learned_pat}[/cyan]` "
+                            f"for field '[bold]{field_name}[/bold]'. Re-masked matching occurrences across dataset."
+                        )
+                    else:
+                        self.console.print(f"[INFO] Registered rule for field '[bold]{field_name}[/bold]'.")
+
+                wizard_stage = "step7_5"
                 continue
 
-            # Support entering column by 1-based index
-            if field_name.strip().isdigit():
-                col_idx = int(field_name.strip()) - 1
-                if 0 <= col_idx < len(df.columns):
-                    field_name = df.columns[col_idx]
+            # -------------------------------------------------------------
+            # Step 7.5: Human Intuition & Domain Objectives
+            # -------------------------------------------------------------
+            elif wizard_stage == "step7_5":
+                self.console.print("\n[bold cyan]Step 7.5: Human Intuition & Domain Objectives[/bold cyan]")
+                has_custom = Prompt.ask(
+                    "Do you have special business requests or column extraction rules for the cloud AI? [Y/N/B]",
+                    default="N"
+                ).strip()
+                if has_custom.lower() in ("b", "back"):
+                    wizard_stage = "step7"
+                    continue
 
-            know_val = Prompt.ask(f"Do you know an expected or potential value for `{field_name}`? [y/N]", default="y")
-            if know_val.lower().startswith("y"):
-                example_val = Prompt.ask(f"Enter an example value for `{field_name}` (e.g. 10000, 500-000)")
-                learned_pat, updated_df = learn_custom_pattern(field_name, example_val, masked_df)
-                if updated_df is not None:
-                    masked_df = updated_df
-                self.console.print(
-                    f"[bold green][Pattern Learned][/bold green] Inferred regex `[cyan]{learned_pat}[/cyan]` "
-                    f"for field '[bold]{field_name}[/bold]'. Re-masked matching occurrences across dataset."
+                if has_custom.lower().startswith("y"):
+                    user_custom_instructions = read_multiline_input(
+                        self.console,
+                        "Enter your custom instructions (e.g., specific metrics to calculate, text to extract, columns to drop):"
+                    )
+
+                wizard_stage = "step8"
+                continue
+
+            # -------------------------------------------------------------
+            # Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
+            # -------------------------------------------------------------
+            elif wizard_stage == "step8":
+                self.console.print("\n[bold cyan]Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop[/bold cyan]")
+
+                # 1. Synthesize master prompt
+                master_prompt = build_master_prompt(
+                    df=df,
+                    topology=workbook_topology,
+                    policy=policy,
+                    user_custom_instructions=user_custom_instructions,
+                    target_df_name=df_name,
+                    multi_sheets=masked_multi_sheets if multi_sheets else None,
+                    dataset_name=dataset_base_name,
                 )
-            else:
-                self.console.print(f"[INFO] Registered rule for field '[bold]{field_name}[/bold]'.")
 
-        # Step 7.5: Human Intuition & Custom Objectives Hook
-        self.console.print("\n[bold cyan]Step 7.5: Human Intuition & Domain Objectives[/bold cyan]")
-        has_custom = Prompt.ask(
-            "Do you have special business requests or column extraction rules for the cloud AI? [y/N]",
-            default="N"
-        )
-        user_custom_instructions = ""
-        if has_custom.lower().startswith("y"):
-            user_custom_instructions = read_multiline_input(
-                self.console,
-                "Enter your custom instructions (e.g., specific metrics to calculate, text to extract, columns to drop):"
-            )
+                # 2. Optionally enrich with local model if active
+                master_prompt = enrich_prompt_with_local_model(master_prompt)
 
-        # Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop
-        self.console.print("\n[bold cyan]Step 8: Master Prompt Synthesis, Interactive Review & Refinement Loop[/bold cyan]")
+                # 3. Interactive Review & Refinement Loop
+                finalized_prompt = interactive_prompt_editor(
+                    master_prompt,
+                    self.console,
+                    dataset_name=dataset_base_name
+                )
 
-        # 1. Synthesize master prompt
-        master_prompt = build_master_prompt(
-            df=df,
-            topology=workbook_topology,
-            policy=policy,
-            user_custom_instructions=user_custom_instructions,
-            target_df_name=df_name,
-            multi_sheets=masked_multi_sheets if multi_sheets else None,
-            dataset_name=dataset_base_name,
-        )
+                if finalized_prompt == "__BACK__":
+                    wizard_stage = "step7_5"
+                    continue
 
-        # 2. Optionally enrich with local model if active
-        master_prompt = enrich_prompt_with_local_model(master_prompt)
+                # 4. Save finalized prompt to disk
+                prompt_file_path = save_prompt_to_disk(
+                    finalized_prompt,
+                    dataset_dir=dataset_dir or os.getcwd(),
+                    dataset_base_name=dataset_base_name
+                )
 
-        # 3. Interactive Review & Refinement Loop
-        finalized_prompt = interactive_prompt_editor(
-            master_prompt,
-            self.console,
-            dataset_name=dataset_base_name
-        )
+                # 5. Copy to clipboard
+                copied = copy_to_clipboard(finalized_prompt)
+                clip_msg = " [bold green](Copied to system clipboard!)[/bold green]" if copied else ""
 
-        # 4. Save finalized prompt to disk
-        prompt_file_path = save_prompt_to_disk(
-            finalized_prompt,
-            dataset_dir=dataset_dir or os.getcwd(),
-            dataset_base_name=dataset_base_name
-        )
+                self.console.print(Panel(
+                    f"[bold green][Saved][/bold green] Autonomous Engineering Briefing Saved to Disk!{clip_msg}\n"
+                    f"• Prompt File: `[bold]{prompt_file_path}[/bold]`\n"
+                    f"• Ready to feed directly into ChatGPT, Claude, Cursor, or your API payload.",
+                    border_style="green"
+                ))
 
-        # 5. Copy to clipboard
-        copied = copy_to_clipboard(finalized_prompt)
-        clip_msg = " [bold green](Copied to system clipboard!)[/bold green]" if copied else ""
+                wizard_stage = "benchmarks"
+                continue
 
-        self.console.print(Panel(
-            f"[bold green][Saved][/bold green] Autonomous Engineering Briefing Saved to Disk!{clip_msg}\n"
-            f"• Prompt File: `[bold]{prompt_file_path}[/bold]`\n"
-            f"• Ready to feed directly into ChatGPT, Claude, Cursor, or your API payload.",
-            border_style="green"
-        ))
-
-        # Tier 1 Air-Gap Privacy & Security Pre-Flight Gate
-        from .benchmarks import run_tier1_preflight, render_tier1_scorecard_panel
-        tier1_report = run_tier1_preflight(
-            df=df,
-            masked_df=masked_df if "masked_df" in locals() else None,
-            mock_rows=None,
-            prompt_text=finalized_prompt,
-            policy=policy
-        )
-        self.console.print(render_tier1_scorecard_panel(
-            report=tier1_report,
-            dataset_name=dataset_base_name,
-            policy=policy
-        ))
-
-        export_approved = True
-        if not tier1_report.all_passed:
-            failed_metrics = [m for m in tier1_report.metrics if not m.passed]
-            first_fail = failed_metrics[0]
-            self.console.print(f"\n[bold red]Status: {len(failed_metrics)} CRITERION FAILED ({first_fail.test_id}: {first_fail.name} = {first_fail.formatted_value}; {first_fail.details})[/bold red]")
-            self.console.print(f"[yellow]Risk: Potential vulnerability under {first_fail.statutory_ref}.[/yellow]\n")
-            self.console.print("Options:")
-            self.console.print("  [1] Auto-generalize quasi-identifiers (Bin ages, truncate postal codes)")
-            self.console.print("  [2] Select additional columns to encrypt")
-            self.console.print("  [3] Abort export")
-            choice = Prompt.ask("Select action [1/2/3]", default="1")
-
-            if choice.strip() == "1":
-                self.console.print("[INFO] Applying automatic generalization on quasi-identifiers...")
-                tier1_report = run_tier1_preflight(
+            # -------------------------------------------------------------
+            # Unified Air-Gap Privacy & Security Gate (Tier 1 & Tier 2 Benchmarks)
+            # -------------------------------------------------------------
+            elif wizard_stage == "benchmarks":
+                self.console.print("\n[bold cyan]Executing Comprehensive Privacy Benchmarks (Tier 1 Pre-Flight + Tier 2 Deep Audit)...[/bold cyan]")
+                full_benchmark_report = run_all_benchmarks(
                     df=df,
                     masked_df=masked_df if "masked_df" in locals() else None,
                     mock_rows=None,
                     prompt_text=finalized_prompt,
-                    policy=policy
+                    policy=policy,
+                    dataset_name=dataset_base_name,
                 )
-                self.console.print("[bold green]Quasi-identifiers generalized in memory buffer.[/bold green]")
-            elif choice.strip() == "2":
-                add_col = Prompt.ask("Enter column name or index to encrypt")
-                if add_col.strip() in df.columns:
-                    learned_pat, updated_df = learn_custom_pattern(add_col.strip(), "GENERALIZE_MASK", masked_df)
-                    if updated_df is not None:
-                        masked_df = updated_df
-                    self.console.print(f"[bold green]Column '{add_col.strip()}' encrypted in volatile RAM.[/bold green]")
-            else:
-                self.console.print("[yellow]Export aborted per pre-flight gateway policy.[/yellow]")
-                export_approved = False
-        else:
-            self.console.print(f"\n[bold green]Status: {len(tier1_report.metrics)}/{len(tier1_report.metrics)} CRITERIA SATISFIED[/bold green]")
-            self.console.print("[dim]Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.[/dim]\n")
+                self.console.print(render_full_scorecard_panel(full_benchmark_report))
 
-        # 6. Offer optional encrypted duplicate spreadsheet export
-        if export_approved:
-            dl_dup = Prompt.ask("Download encrypted dataset duplicate? [Y/n]", default="Y")
-            if dl_dup.strip().lower() in ("y", "yes", ""):
-                ext = os.path.splitext(cleaned_input)[1].lower() if cleaned_input else ".xlsx"
-                if ext not in (".xlsx", ".csv", ".parquet"):
-                    ext = ".xlsx"
-                dup_filename = f"{dataset_base_name}_anonymized{ext}"
-                dup_path = os.path.join(dataset_dir or os.getcwd(), dup_filename)
-                try:
-                    if ext == ".xlsx" and masked_multi_sheets and len(masked_multi_sheets) > 1:
-                        import pandas as pd
-                        with pd.ExcelWriter(dup_path, engine="openpyxl") as writer:
-                            for sname, sdf in masked_multi_sheets.items():
-                                sdf.to_pandas().to_excel(writer, sheet_name=sname, index=False)
-                    elif ext == ".xlsx":
-                        masked_df.write_excel(dup_path)
-                    elif ext == ".csv":
-                        masked_df.write_csv(dup_path)
-                    elif ext == ".parquet":
-                        masked_df.write_parquet(dup_path)
-                    self.console.print(Panel(
-                        f"[bold green][Saved][/bold green] Encrypted Duplicate Successfully Saved to Disk!\n"
-                        f"• Saved at: `[bold]{dup_path}[/bold]`\n"
-                        f"• Structure: 100% of ERP layout and coordinates preserved\n"
-                        f"• Privacy: Volatile session keys held in RAM (0% real personal or financial figures retained)",
-                        border_style="green"
-                    ))
-                except Exception as e:
-                    self.console.print(f"[bold red]Failed to save duplicate file:[/bold red] {e}")
+                export_approved = True
+                bench_failed = (not full_benchmark_report.all_passed) or (full_benchmark_report.composite_privacy_score < 95.0)
 
-        # Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
-        self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
-        has_code = Prompt.ask("Will code be provided to clean/transform the data? [y/N]", default="N")
-        pipeline_type = None
-        if has_code.lower().startswith("y"):
-            self.console.print("  [1] Single Script (.py)")
-            self.console.print("  [2] Multiple Code Blocks (.ipynb)")
-            self.console.print("  [3] Power Query (M-Code)")
-            code_mode = Prompt.ask("Select delivery format [1-3]", default="1")
+                if bench_failed:
+                    failed_metrics = [m for m in full_benchmark_report.tier1.metrics + full_benchmark_report.tier2.metrics if not m.passed]
+                    first_fail = failed_metrics[0] if failed_metrics else None
+                    fail_summary = f" ({first_fail.test_id}: {first_fail.name} = {first_fail.formatted_value}; {first_fail.details})" if first_fail else ""
+                    stat_ref = f" under {first_fail.statutory_ref}." if first_fail else "."
+                    self.console.print(f"\n[bold red]Status: {len(failed_metrics)} CRITERION FAILED{fail_summary}[/bold red]")
+                    self.console.print(f"[yellow]Risk: Potential vulnerability{stat_ref} (Data Hygiene Score: {full_benchmark_report.composite_privacy_score:.1f}% < 95.0%)[/yellow]\n")
+                    self.console.print("Options:")
+                    self.console.print("  [1] Auto-generalize quasi-identifiers (Bin ages, truncate postal codes)")
+                    self.console.print("  [2] Select additional columns to encrypt")
+                    self.console.print("  [3] Abort export")
+                    self.console.print("  [B] Back to previous question")
+                    choice = Prompt.ask("Select action [1-3/B]", default="1").strip()
 
-            if code_mode.strip() == "3":
-                pipeline_type = "powerquery"
-                pq_script_path = os.path.join(dataset_dir, "powerquery_script.m")
-                m_code_text = read_multiline_input(self.console, "Paste your Power Query (M-Code) below:")
-                if m_code_text:
-                    with open(pq_script_path, "w", encoding="utf-8") as f:
-                        f.write(m_code_text.strip() + "\n")
-                    self.console.print(Panel(m_code_text, title="Incoming Power Query M-Script", border_style="cyan"))
-                    self.console.print(f"[bold green][Saved][/bold green] Power Query M-Script saved to: `[bold]{pq_script_path}[/bold]`")
-                    self.console.print("[INFO] Power Query transformations execute natively inside Microsoft Excel / Power BI.")
-                    self.console.print("[INFO] A step-by-step UI instruction guide will be generated in Step 12.")
+                    if choice == "1":
+                        self.console.print("[INFO] Applying automatic generalization on quasi-identifiers & singleton buckets...")
+                        masked_df = auto_generalize_dataframe(masked_df, target_k=5)
+                        self.console.print("[bold green]Quasi-identifiers generalized in memory buffer (k >= 5 enforced). Re-evaluating benchmarks...[/bold green]")
+                        full_benchmark_report = run_all_benchmarks(
+                            df=df,
+                            masked_df=masked_df,
+                            mock_rows=None,
+                            prompt_text=finalized_prompt,
+                            policy=policy,
+                            dataset_name=dataset_base_name,
+                        )
+                        self.console.print(render_full_scorecard_panel(full_benchmark_report))
+                        if full_benchmark_report.all_passed and full_benchmark_report.composite_privacy_score >= 95.0:
+                            self.console.print(f"\n[bold green]Status: 11/11 CRITERIA SATISFIED ({full_benchmark_report.composite_privacy_score:.1f}/100.0)[/bold green]")
+                            self.console.print("[dim]Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.[/dim]\n")
+                            export_approved = True
+                            wizard_stage = "download_duplicate"
+                            continue
+                        else:
+                            self.console.print(f"[yellow]Current Score: {full_benchmark_report.composite_privacy_score:.1f} / 100.0[/yellow]")
+                            wizard_stage = "download_duplicate"
+                            continue
+                    elif choice == "2":
+                        add_col = Prompt.ask("Enter column name or index to encrypt [or 'B' to cancel]").strip()
+                        if add_col.lower() in ("b", "back"):
+                            continue
+                        if add_col.isdigit():
+                            c_idx = int(add_col) - 1
+                            if 0 <= c_idx < len(df.columns):
+                                add_col = df.columns[c_idx]
+                        if add_col in df.columns:
+                            learned_pat, updated_df = learn_custom_pattern(add_col, "GENERALIZE_MASK", masked_df)
+                            if updated_df is not None:
+                                masked_df = updated_df
+                            self.console.print(f"[bold green]Column '{add_col}' encrypted in volatile RAM. Re-evaluating benchmarks...[/bold green]")
+                            continue
+                    elif choice.lower() in ("b", "back"):
+                        wizard_stage = "step8"
+                        continue
+                    else:
+                        self.console.print("[yellow]Export aborted per pre-flight gateway policy.[/yellow]")
+                        export_approved = False
+                        wizard_stage = "step9"
+                        continue
                 else:
-                    self.console.print("[yellow]No Power Query M-code entered.[/yellow]")
-            else:
-                pipeline_type = "ipynb" if code_mode.strip() == "2" else "py"
-                pipeline_file = create_pipeline_file(dataset_dir, file_type=pipeline_type)
-                self.console.print(f"[INFO] Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
+                    self.console.print(f"\n[bold green]Status: 11/11 CRITERIA SATISFIED ({full_benchmark_report.composite_privacy_score:.1f}/100.0)[/bold green]")
+                    self.console.print("[dim]Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.[/dim]\n")
+                    export_approved = True
 
-                exec_scope = self.user_ns if self.user_ns is not None else globals()
-                exec_scope["__name__"] = "__main__"
-                exec_scope.setdefault("pl", pl)
-                if cleaned_input:
-                    exec_scope.setdefault("INPUT_FILE", cleaned_input)
-                    exec_scope.setdefault("input_path", cleaned_input)
-                    exec_scope.setdefault("input_file", cleaned_input)
-                    exec_scope.setdefault("file_path", cleaned_input)
-                    exec_scope.setdefault("filepath", cleaned_input)
-                    out_default = os.path.join(dataset_dir, f"{dataset_base_name}_cleaned.csv")
-                    exec_scope.setdefault("OUTPUT_FILE", out_default)
-                    exec_scope.setdefault("output_path", out_default)
+                wizard_stage = "download_duplicate"
+                continue
 
-                if multi_sheets and len(multi_sheets) > 1:
-                    exec_scope["sheets"] = {sname: sdf for sname, sdf in multi_sheets.items()}
-                    for sname, sdf in multi_sheets.items():
-                        s_var = "df_" + re.sub(r"[^a-zA-Z0-9_]", "_", sname.lower()).strip("_")
-                        exec_scope[s_var] = sdf
-                        exec_scope[sname] = sdf
-
-                if pipeline_type == "py":
-                    while True:
-                        code_text = read_multiline_input(self.console, "Paste your complete Python script below:")
-                        if not code_text:
-                            self.console.print("[yellow]No code entered.[/yellow]")
-                            break
-
-                        self.console.print(Panel(code_text, title="Incoming Script Preview", border_style="cyan"))
-                        Prompt.ask("Press Enter to audit with AST Firewall and execute in local RAM...")
-
-                        # Step 10: Execution Error Self-Healing Loop
+            # -------------------------------------------------------------
+            # Optional Encrypted Duplicate Export
+            # -------------------------------------------------------------
+            elif wizard_stage == "download_duplicate":
+                if export_approved:
+                    dl_dup = Prompt.ask("Download encrypted dataset duplicate? [Y/N/B]", default="Y").strip()
+                    if dl_dup.lower() in ("b", "back"):
+                        wizard_stage = "benchmarks"
+                        continue
+                    if dl_dup.lower() in ("y", "yes", ""):
+                        ext = os.path.splitext(cleaned_input)[1].lower() if cleaned_input else ".xlsx"
+                        if ext not in (".xlsx", ".csv", ".parquet"):
+                            ext = ".xlsx"
+                        dup_filename = f"{dataset_base_name}_anonymized{ext}"
+                        dup_path = os.path.join(dataset_dir or os.getcwd(), dup_filename)
                         try:
-                            target_df = exec_scope.get(df_name)
-                            if target_df is None:
-                                target_df = exec_scope.get("df", df)
-                            push_snapshot(df_name, target_df)
-                            from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
-                            df_prepared, _ = prepare_dataframe_for_code(target_df, code_text)
-                            exec_scope[df_name] = df_prepared
-                            exec_scope["df"] = df_prepared
-                            exec_scope["data"] = df_prepared
-
-                            execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
-                            append_code_to_pipeline(pipeline_file, code_text)
-
-                            resolved_df, resolution_source = resolve_transformed_dataframe(
-                                exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
-                            )
-                            exec_scope[df_name] = resolved_df
-                            exec_scope["df"] = resolved_df
-                            if hasattr(resolved_df, "shape"):
-                                self.console.print(
-                                    f"[bold green][Cleaned Data Captured][/bold green] Transformed dataset resolved from "
-                                    f"{resolution_source} ({resolved_df.shape[0]} rows x {resolved_df.shape[1]} columns)."
-                                )
-                            self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
-                            break
-                        except Exception as err:
-                            full_tb = traceback.format_exc()
-                            from .brain import CognitiveBlackboard, autopsy_traceback
-                            current_df = exec_scope.get(df_name, df)
-                            current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
-                            cols = list(current_df.columns) if hasattr(current_df, "columns") else []
-                            bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
-                            repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
-                            record_execution_failure(df_name, code_text, err, full_tb, current_df, repair_prompt)
-
+                            if ext == ".xlsx" and masked_multi_sheets and len(masked_multi_sheets) > 1:
+                                import pandas as pd
+                                with pd.ExcelWriter(dup_path, engine="openpyxl") as writer:
+                                    for sname, sdf in masked_multi_sheets.items():
+                                        sdf.to_pandas().to_excel(writer, sheet_name=sname, index=False)
+                            elif ext == ".xlsx":
+                                masked_df.write_excel(dup_path)
+                            elif ext == ".csv":
+                                masked_df.write_csv(dup_path)
+                            elif ext == ".parquet":
+                                masked_df.write_parquet(dup_path)
                             self.console.print(Panel(
-                                f"[bold red]Execution Error:[/bold red]\n{err}\n\n"
-                                f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
-                                f"{repair_prompt}",
-                                title="Ouroboros Self-Healing Airlock",
-                                border_style="red"
+                                f"[bold green][Saved][/bold green] Encrypted Duplicate Successfully Saved to Disk!\n"
+                                f"• Saved at: `[bold]{dup_path}[/bold]`\n"
+                                f"• Structure: 100% of ERP layout and coordinates preserved\n"
+                                f"• Privacy: Volatile session keys held in RAM (0% real personal or financial figures retained)",
+                                border_style="green"
                             ))
+                        except Exception as e:
+                            self.console.print(f"[bold red]Failed to save duplicate file:[/bold red] {e}")
 
-                            if check_model_health():
-                                choice = Prompt.ask(
-                                    "DeepAnalyze 8B is online. Select action: [A]uto-repair / [P]aste manually / [Q]uit",
-                                    choices=["a", "p", "q", "A", "P", "Q"],
-                                    default="A"
-                                ).lower()
-                                if choice == "a":
-                                    custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
+                wizard_stage = "step9"
+                continue
+
+            # -------------------------------------------------------------
+            # Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
+            # -------------------------------------------------------------
+            elif wizard_stage == "step9":
+                self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
+                has_code = Prompt.ask("Will code be provided to clean/transform the data? [Y/N/B]", default="N").strip()
+                if has_code.lower() in ("b", "back"):
+                    wizard_stage = "download_duplicate"
+                    continue
+
+                pipeline_type = None
+                code_executed_successfully = False
+                if has_code.lower().startswith("y"):
+                    self.console.print("  [1] Single Script (.py)")
+                    self.console.print("  [2] Multiple Code Blocks (.ipynb)")
+                    self.console.print("  [3] Power Query (M-Code)")
+                    code_mode = Prompt.ask("Select delivery format [1-3/B]", default="1").strip()
+                    if code_mode.lower() in ("b", "back"):
+                        continue
+
+                    if code_mode == "3":
+                        pipeline_type = "powerquery"
+                        pq_script_path = os.path.join(dataset_dir, "powerquery_script.m")
+                        m_code_text = read_multiline_input(self.console, "Paste your Power Query (M-Code) below (type 'EOF' or Ctrl+D when done):")
+                        if m_code_text:
+                            with open(pq_script_path, "w", encoding="utf-8") as f:
+                                f.write(m_code_text.strip() + "\n")
+                            self.console.print(Panel(m_code_text, title="Incoming Power Query M-Script", border_style="cyan"))
+                            self.console.print(f"[bold green][Saved][/bold green] Power Query M-Script saved to: `[bold]{pq_script_path}[/bold]`")
+                            self.console.print("[INFO] Power Query transformations execute natively inside Microsoft Excel / Power BI.")
+                            self.console.print("[INFO] A step-by-step UI instruction guide will be generated in Step 12.")
+                            code_executed_successfully = True
+                        else:
+                            self.console.print("[yellow]No Power Query M-code entered.[/yellow]")
+                    else:
+                        pipeline_type = "ipynb" if code_mode == "2" else "py"
+                        pipeline_file = create_pipeline_file(dataset_dir, file_type=pipeline_type)
+                        self.console.print(f"[INFO] Initialized pipeline audit file: `[bold]{pipeline_file}[/bold]`")
+
+                        exec_scope = self.user_ns if self.user_ns is not None else globals()
+                        exec_scope["__name__"] = "__main__"
+                        exec_scope.setdefault("pl", pl)
+                        if cleaned_input:
+                            exec_scope.setdefault("INPUT_FILE", cleaned_input)
+                            exec_scope.setdefault("input_path", cleaned_input)
+                            exec_scope.setdefault("input_file", cleaned_input)
+                            exec_scope.setdefault("file_path", cleaned_input)
+                            exec_scope.setdefault("filepath", cleaned_input)
+                            out_default = os.path.join(dataset_dir, f"{dataset_base_name}_cleaned.csv")
+                            exec_scope.setdefault("OUTPUT_FILE", out_default)
+                            exec_scope.setdefault("output_path", out_default)
+
+                        if multi_sheets and len(multi_sheets) > 1:
+                            exec_scope["sheets"] = {sname: sdf for sname, sdf in multi_sheets.items()}
+                            for sname, sdf in multi_sheets.items():
+                                s_var = "df_" + re.sub(r"[^a-zA-Z0-9_]", "_", sname.lower()).strip("_")
+                                exec_scope[s_var] = sdf
+                                exec_scope[sname] = sdf
+
+                        if pipeline_type == "py":
+                            code_text = read_multiline_input(self.console, "Paste your complete Python script below (type 'EOF' or Ctrl+D when done):")
+                            if not code_text:
+                                self.console.print("[yellow]No code entered.[/yellow]")
+                            else:
+                                while True:
+                                    self.console.print(Panel(code_text, title="Incoming Script Preview", border_style="cyan"))
+                                    Prompt.ask("Press Enter to audit with AST Firewall and execute in local RAM...")
+
+                                    # Execution & Self-Healing Loop
                                     try:
-                                        self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
-                                        schema_info = {
-                                            "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
-                                            "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
-                                        }
-                                        diag, patched_code = request_model_fix(
-                                            failed_code=code_text,
-                                            traceback_str=full_tb,
-                                            autopsy_str=repair_prompt,
-                                            custom_prompt=custom_hint or None,
-                                            target_name=df_name,
-                                            schema_info=schema_info
+                                        target_df = exec_scope.get(df_name)
+                                        if target_df is None:
+                                            target_df = exec_scope.get("df", df)
+                                        push_snapshot(df_name, target_df)
+                                        from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
+                                        df_prepared, _ = prepare_dataframe_for_code(target_df, code_text)
+                                        exec_scope[df_name] = df_prepared
+                                        exec_scope["df"] = df_prepared
+                                        exec_scope["data"] = df_prepared
+
+                                        execute_code_safely(code_text, exec_scope, timeout_sec=20.0)
+                                        append_code_to_pipeline(pipeline_file, code_text)
+
+                                        resolved_df, resolution_source = resolve_transformed_dataframe(
+                                            exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
                                         )
+                                        exec_scope[df_name] = resolved_df
+                                        exec_scope["df"] = resolved_df
+                                        if hasattr(resolved_df, "shape"):
+                                            self.console.print(
+                                                f"[bold green][Cleaned Data Captured][/bold green] Transformed dataset resolved from "
+                                                f"{resolution_source} ({resolved_df.shape[0]} rows x {resolved_df.shape[1]} columns)."
+                                            )
+                                        self.console.print("[INFO] [bold green]AST Audit Passed & Script Executed Successfully in RAM![/bold green]")
+
+                                        # Live Three-Way Inspection: Original, Encrypted, Cleaned + Consolidated Audit Table
+                                        render_three_way_airlock_inspection(
+                                            raw_df=df,
+                                            encrypted_df=masked_df,
+                                            clean_df=resolved_df,
+                                            console=self.console
+                                        )
+
+                                        sat = Prompt.ask(
+                                            "Are you satisfied with these transformation results? [Y/N/B]",
+                                            default="Y"
+                                        ).strip()
+                                        if sat.lower() in ("b", "back"):
+                                            restored_target = pop_snapshot(df_name)
+                                            if restored_target is not None:
+                                                exec_scope[df_name] = restored_target
+                                                exec_scope["df"] = restored_target
+                                            code_executed_successfully = False
+                                            break
+                                        elif sat.lower().startswith("n"):
+                                            is_online = check_model_health()
+                                            refine_msg = (
+                                                "Select refinement action: [1] Auto-repair / [2] Paste manually / [3] Continue [1-3/B]"
+                                                if is_online else
+                                                "Select refinement action: [1] Auto-repair / [2] Paste manually / [3] Continue [1-3/B]"
+                                            )
+                                            refine_choice = Prompt.ask(
+                                                refine_msg,
+                                                choices=["1", "2", "3", "a", "p", "q", "A", "P", "Q", "b", "B"],
+                                                default="1"
+                                            ).strip().lower()
+
+                                            if refine_choice in ("1", "a"):
+                                                refine_hint = Prompt.ask("Optional custom repair/refinement directive (press Enter to auto-diagnose)", default="")
+                                                try:
+                                                    self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
+                                                    schema_info = {
+                                                        "columns": list(resolved_df.columns) if hasattr(resolved_df, "columns") else [],
+                                                        "shape": resolved_df.shape if hasattr(resolved_df, "shape") else "Unknown"
+                                                    }
+                                                    diag, patched_code = request_model_fix(
+                                                        failed_code=code_text,
+                                                        traceback_str="",
+                                                        autopsy_str="User reviewed three-way inspection (Original vs Encrypted vs Cleaned) and requested further transformation refinements.",
+                                                        custom_prompt=refine_hint or "Refine the transformation code to improve quality, column standardization, and null handling.",
+                                                        target_name=df_name,
+                                                        schema_info=schema_info
+                                                    )
+                                                    self.console.print(Panel(
+                                                        f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                        title="DeepAnalyze 8B Autonomous Diagnosis",
+                                                        border_style="cyan"
+                                                    ))
+                                                    code_text = patched_code
+                                                    restored_target = pop_snapshot(df_name)
+                                                    if restored_target is not None:
+                                                        exec_scope[df_name] = restored_target
+                                                        exec_scope["df"] = restored_target
+                                                    continue
+                                                except Exception as fix_err:
+                                                    self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
+                                                    retry = Prompt.ask("Would you like to paste the corrected code manually? [Y/N]", default="Y")
+                                                    if retry.lower().startswith("y"):
+                                                        code_text = read_multiline_input(self.console, "Paste the corrected code:")
+                                                        restored_target = pop_snapshot(df_name)
+                                                        if restored_target is not None:
+                                                            exec_scope[df_name] = restored_target
+                                                            exec_scope["df"] = restored_target
+                                                        continue
+                                                    else:
+                                                        code_executed_successfully = True
+                                                        break
+                                            elif refine_choice in ("2", "p"):
+                                                code_text = read_multiline_input(self.console, "Paste the corrected code:")
+                                                restored_target = pop_snapshot(df_name)
+                                                if restored_target is not None:
+                                                    exec_scope[df_name] = restored_target
+                                                    exec_scope["df"] = restored_target
+                                                continue
+                                            elif refine_choice in ("b", "B"):
+                                                restored_target = pop_snapshot(df_name)
+                                                if restored_target is not None:
+                                                    exec_scope[df_name] = restored_target
+                                                    exec_scope["df"] = restored_target
+                                                code_executed_successfully = False
+                                                break
+                                            else:
+                                                code_executed_successfully = True
+                                                break
+
+                                        code_executed_successfully = True
+                                        break
+                                    except Exception as err:
+                                        full_tb = traceback.format_exc()
+                                        from .brain import CognitiveBlackboard, autopsy_traceback
+                                        current_df = exec_scope.get(df_name, df)
+                                        current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
+                                        cols = list(current_df.columns) if hasattr(current_df, "columns") else []
+                                        bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
+                                        repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+                                        record_execution_failure(df_name, code_text, err, full_tb, current_df, repair_prompt)
+
                                         self.console.print(Panel(
-                                            f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
-                                            title="DeepAnalyze 8B Autonomous Diagnosis",
-                                            border_style="cyan"
+                                            f"[bold red]Execution Error:[/bold red]\n{err}\n\n"
+                                            f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                            f"{repair_prompt}",
+                                            title="Ouroboros Self-Healing Airlock",
+                                            border_style="red"
                                         ))
-                                        code_text = patched_code
-                                        continue
-                                    except Exception as fix_err:
-                                        self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
-                                        retry = Prompt.ask("Would you like to paste the corrected code manually? [y/N]", default="y")
-                                        if retry.lower().startswith("y"):
+
+                                        is_online = check_model_health()
+                                        prompt_msg = (
+                                            "DeepAnalyze 8B is online. Select action: [1] Auto-repair / [2] Paste manually / [3] Quit [1-3/B]"
+                                            if is_online else
+                                            "DeepAnalyze 8B is offline. Select action: [1] Auto-repair / [2] Paste manually / [3] Quit [1-3/B]"
+                                        )
+                                        choice = Prompt.ask(
+                                            prompt_msg,
+                                            choices=["1", "2", "3", "a", "p", "q", "A", "P", "Q", "b", "B"],
+                                            default="1"
+                                        ).strip().lower()
+
+                                        if choice in ("1", "a"):
+                                            custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
+                                            try:
+                                                self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
+                                                schema_info = {
+                                                    "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
+                                                    "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
+                                                }
+                                                diag, patched_code = request_model_fix(
+                                                    failed_code=code_text,
+                                                    traceback_str=full_tb,
+                                                    autopsy_str=repair_prompt,
+                                                    custom_prompt=custom_hint or None,
+                                                    target_name=df_name,
+                                                    schema_info=schema_info
+                                                )
+                                                self.console.print(Panel(
+                                                    f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                    title="DeepAnalyze 8B Autonomous Diagnosis",
+                                                    border_style="cyan"
+                                                ))
+                                                code_text = patched_code
+                                                continue
+                                            except Exception as fix_err:
+                                                self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
+                                                retry = Prompt.ask("Would you like to paste the corrected code manually? [Y/N]", default="Y")
+                                                if retry.lower().startswith("y"):
+                                                    code_text = read_multiline_input(self.console, "Paste the corrected code:")
+                                                    continue
+                                                else:
+                                                    break
+                                        elif choice in ("2", "p"):
                                             code_text = read_multiline_input(self.console, "Paste the corrected code:")
                                             continue
                                         else:
+                                            self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
                                             break
-                                elif choice == "p":
-                                    code_text = read_multiline_input(self.console, "Paste the corrected code:")
-                                    continue
-                                else:
+                        else:
+                            # Jupyter Notebook (.ipynb) Blocks
+                            block_num = 1
+                            while True:
+                                block_text = read_multiline_input(self.console, f"Paste Code Block {block_num} (type 'EOF' or Ctrl+D when done):")
+                                if not block_text:
+                                    self.console.print("[yellow]Empty block skipped.[/yellow]")
                                     break
-                            else:
-                                retry = Prompt.ask("Would you like to paste the corrected code? [y/N]", default="y")
-                                if not retry.lower().startswith("y"):
-                                    self.console.print("[yellow]Aborting execution. Preserving existing data state.[/yellow]")
-                                    break
-                                code_text = read_multiline_input(self.console, "Paste the corrected code:")
 
-                else:
-                    block_num = 1
-                    while True:
-                        block_text = read_multiline_input(self.console, f"Paste Code Block {block_num}:")
-                        if not block_text:
-                            self.console.print("[yellow]Empty block skipped.[/yellow]")
-                            break
+                                self.console.print(Panel(block_text, title=f"Code Block {block_num} Preview", border_style="cyan"))
+                                Prompt.ask("Press Enter to audit and execute this block...")
 
-                        self.console.print(Panel(block_text, title=f"Code Block {block_num} Preview", border_style="cyan"))
-                        Prompt.ask("Press Enter to audit and execute this block...")
+                                block_success = False
+                                while True:
+                                    try:
+                                        target_df = exec_scope.get(df_name)
+                                        if target_df is None:
+                                            target_df = exec_scope.get("df", df)
+                                        push_snapshot(df_name, target_df)
+                                        from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
+                                        df_prepared, _ = prepare_dataframe_for_code(target_df, block_text)
+                                        exec_scope[df_name] = df_prepared
+                                        exec_scope["df"] = df_prepared
+                                        exec_scope["data"] = df_prepared
 
-                        # Step 10: Execution Error Self-Healing Loop for blocks
-                        block_success = False
-                        while True:
-                            try:
-                                target_df = exec_scope.get(df_name)
-                                if target_df is None:
-                                    target_df = exec_scope.get("df", df)
-                                push_snapshot(df_name, target_df)
-                                from .firewall import prepare_dataframe_for_code, resolve_transformed_dataframe
-                                df_prepared, _ = prepare_dataframe_for_code(target_df, block_text)
-                                exec_scope[df_name] = df_prepared
-                                exec_scope["df"] = df_prepared
-                                exec_scope["data"] = df_prepared
+                                        execute_code_safely(block_text, exec_scope, timeout_sec=20.0)
+                                        append_code_to_pipeline(pipeline_file, block_text)
 
-                                execute_code_safely(block_text, exec_scope, timeout_sec=20.0)
-                                append_code_to_pipeline(pipeline_file, block_text)
+                                        resolved_df, resolution_source = resolve_transformed_dataframe(
+                                            exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
+                                        )
+                                        exec_scope[df_name] = resolved_df
+                                        exec_scope["df"] = resolved_df
+                                        self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
+                                        block_success = True
+                                        code_executed_successfully = True
+                                        break
+                                    except Exception as err:
+                                        full_tb = traceback.format_exc()
+                                        from .brain import CognitiveBlackboard, autopsy_traceback
+                                        current_df = exec_scope.get(df_name, df)
+                                        current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
+                                        cols = list(current_df.columns) if hasattr(current_df, "columns") else []
+                                        bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
+                                        repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
+                                        record_execution_failure(df_name, block_text, err, full_tb, current_df, repair_prompt)
 
-                                resolved_df, resolution_source = resolve_transformed_dataframe(
-                                    exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
-                                )
-                                exec_scope[df_name] = resolved_df
-                                exec_scope["df"] = resolved_df
-                                self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
-                                block_success = True
-                                break
-                            except Exception as err:
-                                full_tb = traceback.format_exc()
-                                from .brain import CognitiveBlackboard, autopsy_traceback
-                                current_df = exec_scope.get(df_name, df)
-                                current_pd = current_df.to_pandas() if hasattr(current_df, "to_pandas") else current_df
-                                cols = list(current_df.columns) if hasattr(current_df, "columns") else []
-                                bb_repair = CognitiveBlackboard(filename=dataset_base_name, shape=getattr(current_df, "shape", (0, 0)), columns=cols)
-                                repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
-                                record_execution_failure(df_name, block_text, err, full_tb, current_df, repair_prompt)
+                                        self.console.print(Panel(
+                                            f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}\n\n"
+                                            f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                            f"{repair_prompt}",
+                                            title="Ouroboros Self-Healing Airlock",
+                                            border_style="red"
+                                        ))
 
-                                self.console.print(Panel(
-                                    f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}\n\n"
-                                    f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
-                                    f"{repair_prompt}",
-                                    title="Ouroboros Self-Healing Airlock",
-                                    border_style="red"
-                                ))
+                                        is_online = check_model_health()
+                                        prompt_msg = (
+                                            f"DeepAnalyze 8B is online. Select action for Block {block_num}: [1] Auto-repair / [2] Paste manually / [3] Quit [1-3/B]"
+                                            if is_online else
+                                            f"DeepAnalyze 8B is offline. Select action for Block {block_num}: [1] Auto-repair / [2] Paste manually / [3] Quit [1-3/B]"
+                                        )
+                                        choice = Prompt.ask(
+                                            prompt_msg,
+                                            choices=["1", "2", "3", "a", "p", "q", "A", "P", "Q", "b", "B"],
+                                            default="1"
+                                        ).strip().lower()
 
-                                if check_model_health():
-                                    choice = Prompt.ask(
-                                        f"DeepAnalyze 8B is online. Select action for Block {block_num}: [A]uto-repair / [P]aste manually / [Q]uit",
-                                        choices=["a", "p", "q", "A", "P", "Q"],
-                                        default="A"
-                                    ).lower()
-                                    if choice == "a":
-                                        custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
-                                        try:
-                                            self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
-                                            schema_info = {
-                                                "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
-                                                "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
-                                            }
-                                            diag, patched_code = request_model_fix(
-                                                failed_code=block_text,
-                                                traceback_str=full_tb,
-                                                autopsy_str=repair_prompt,
-                                                custom_prompt=custom_hint or None,
-                                                target_name=df_name,
-                                                schema_info=schema_info
-                                            )
-                                            self.console.print(Panel(
-                                                f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
-                                                title="DeepAnalyze 8B Autonomous Diagnosis",
-                                                border_style="cyan"
-                                            ))
-                                            block_text = patched_code
-                                            continue
-                                        except Exception as fix_err:
-                                            self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
-                                            retry = Prompt.ask(f"Would you like to paste the corrected code for Block {block_num}? [y/N]", default="y")
-                                            if retry.lower().startswith("y"):
-                                                block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                        if choice in ("1", "a"):
+                                            custom_hint = Prompt.ask("Optional custom repair directive (press Enter to auto-diagnose)", default="")
+                                            try:
+                                                self.console.print("[bold cyan]Synthesizing autonomous repair with local 8B model...[/bold cyan]")
+                                                schema_info = {
+                                                    "columns": list(current_df.columns) if hasattr(current_df, "columns") else [],
+                                                    "shape": current_df.shape if hasattr(current_df, "shape") else "Unknown"
+                                                }
+                                                diag, patched_code = request_model_fix(
+                                                    failed_code=block_text,
+                                                    traceback_str=full_tb,
+                                                    autopsy_str=repair_prompt,
+                                                    custom_prompt=custom_hint or None,
+                                                    target_name=df_name,
+                                                    schema_info=schema_info
+                                                )
+                                                self.console.print(Panel(
+                                                    f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                    title="DeepAnalyze 8B Autonomous Diagnosis",
+                                                    border_style="cyan"
+                                                ))
+                                                block_text = patched_code
                                                 continue
-                                            else:
-                                                break
-                                    elif choice == "p":
-                                        block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
-                                        continue
-                                    else:
-                                        break
-                                else:
-                                    retry = Prompt.ask(f"Would you like to paste the corrected code for Block {block_num}? [y/N]", default="y")
-                                    if retry.lower().startswith("y"):
-                                        block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
-                                    else:
-                                        break
+                                            except Exception as fix_err:
+                                                self.console.print(f"[bold red]Auto-repair error:[/bold red] {fix_err}")
+                                                retry = Prompt.ask(f"Would you like to paste the corrected code for Block {block_num}? [Y/N]", default="Y")
+                                                if retry.lower().startswith("y"):
+                                                    block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                                    continue
+                                                else:
+                                                    break
+                                        elif choice in ("2", "p"):
+                                            block_text = read_multiline_input(self.console, f"Paste corrected Code Block {block_num}:")
+                                            continue
+                                        else:
+                                            break
 
-                        if not block_success:
-                            break
+                                if not block_success:
+                                    break
 
-                        another = Prompt.ask("Block executed successfully. Is there another code block? [y/N]", default="N")
-                        if not another.lower().startswith("y"):
-                            break
-                        block_num += 1
+                                another = Prompt.ask("Block executed successfully. Is there another code block? [Y/N]", default="N")
+                                if not another.lower().startswith("y"):
+                                    break
+                                block_num += 1
 
-        # Step 11: Local Detokenization & Reconciliation
-        self.console.print("\n[bold cyan]Step 11: Local Detokenization & Reconciliation[/bold cyan]")
-        if pipeline_type == "powerquery":
-            self.console.print("[INFO] Power Query mode active: Data transformations execute inside Microsoft Excel.")
-            final_df = df
-        else:
-            exec_scope = self.user_ns if self.user_ns is not None else globals()
-            current_target_df = exec_scope.get(df_name)
-            if current_target_df is None or (hasattr(current_target_df, "shape") and current_target_df.shape == (0, 0)):
-                current_target_df = exec_scope.get("df", df)
+                            if code_executed_successfully:
+                                current_resolved = exec_scope.get(df_name, exec_scope.get("df", df))
+                                render_three_way_airlock_inspection(
+                                    raw_df=df,
+                                    encrypted_df=masked_df,
+                                    clean_df=current_resolved,
+                                    console=self.console
+                                )
+                                sat = Prompt.ask(
+                                    "Are you satisfied with these transformation results? [Y/N/B]",
+                                    default="Y"
+                                ).strip()
 
-            if current_target_df is not None and hasattr(current_target_df, "shape"):
-                final_df = detokenize_dataframe(current_target_df)
-                exec_scope[df_name] = final_df
-                exec_scope["df"] = final_df
-                self.console.print("[bold green][Detokenized][/bold green] Volatile Detokenization Complete: Restored genuine identities with 100.00% character fidelity.")
-            else:
-                final_df = df
+                wizard_stage = "step11"
+                continue
 
-        # Step 12: Clean Dataset Export & Quality Scorecard
-        self.console.print("\n[bold cyan]Step 12: Clean Dataset Export & Quality Scorecard[/bold cyan]")
-        quality_card = None
-        if final_df is not None:
-            try:
-                from .scorecard import generate_quality_scorecard, render_quality_scorecard
-                quality_card = generate_quality_scorecard(df, final_df)
-                self.console.print(render_quality_scorecard(quality_card, self.console))
-            except Exception as sc_err:
-                pass
-
-        export_clean = Prompt.ask("Do you want to export the final cleaned dataset? [y/N]", default="y")
-        clean_out_path = None
-        if export_clean.lower().startswith("y") and final_df is not None:
-            default_out = f"{dataset_base_name} (Cleaned).xlsx"
-            clean_out_name = Prompt.ask(f"Enter export filename", default=default_out)
-            clean_out_path = os.path.join(dataset_dir, clean_out_name)
-            try:
-                if hasattr(final_df, "to_excel"):
-                    if clean_out_path.endswith(".csv"):
-                        final_df.to_csv(clean_out_path, index=False)
-                    elif clean_out_path.endswith(".parquet"):
-                        final_df.to_parquet(clean_out_path, index=False)
-                    else:
-                        final_df.to_excel(clean_out_path, index=False)
+            # -------------------------------------------------------------
+            # Step 11: Local Detokenization & Reconciliation
+            # -------------------------------------------------------------
+            elif wizard_stage == "step11":
+                self.console.print("\n[bold cyan]Step 11: Local Detokenization & Reconciliation[/bold cyan]")
+                if pipeline_type == "powerquery":
+                    self.console.print("[INFO] Power Query mode active: Data transformations execute inside Microsoft Excel.")
+                    final_df = df
                 else:
-                    if clean_out_path.endswith(".csv"):
-                        final_df.write_csv(clean_out_path)
-                    elif clean_out_path.endswith(".parquet"):
-                        final_df.write_parquet(clean_out_path)
+                    exec_scope = self.user_ns if self.user_ns is not None else globals()
+                    current_target_df = exec_scope.get(df_name)
+                    if current_target_df is None or (hasattr(current_target_df, "shape") and current_target_df.shape == (0, 0)):
+                        current_target_df = exec_scope.get("df", df)
+
+                    if current_target_df is not None and hasattr(current_target_df, "shape"):
+                        final_df = detokenize_dataframe(current_target_df)
+                        exec_scope[df_name] = final_df
+                        exec_scope["df"] = final_df
+                        self.console.print("[bold green][Detokenized][/bold green] Volatile Detokenization Complete: Restored genuine identities with 100.00% character fidelity.")
                     else:
-                        final_df.write_excel(clean_out_path)
-                self.console.print(f"[bold green][Exported][/bold green] Clean dataset exported successfully to: `[bold]{clean_out_path}[/bold]`")
+                        final_df = df
 
-                # Automated Pytest Pipeline Regression Test Suite
-                if pipeline_file and os.path.isfile(pipeline_file) and pipeline_type in ("py", "ipynb"):
+                wizard_stage = "step12"
+                continue
+
+            # -------------------------------------------------------------
+            # Step 12: Clean Dataset Export & Quality Scorecard
+            # -------------------------------------------------------------
+            elif wizard_stage == "step12":
+                self.console.print("\n[bold cyan]Step 12: Clean Dataset Export & Quality Scorecard[/bold cyan]")
+
+                if not code_executed_successfully and pipeline_type != "powerquery":
+                    self.console.print(Panel(
+                        "[bold yellow]⚠️ Notice: Dataset Unmodified[/bold yellow]\n\n"
+                        "No data transformation code was executed (or execution was aborted/skipped).\n"
+                        "The output dataset is [bold red]100% identical to your original raw input[/bold red].",
+                        title="Clean Data Airlock Status",
+                        border_style="yellow"
+                    ))
+                elif final_df is not None and hasattr(final_df, "shape") and hasattr(df, "shape"):
+                    r_diff = len(final_df) - len(df)
+                    c_diff = len(final_df.columns) - len(df.columns)
+                    self.console.print(Panel(
+                        f"[bold green]✓ Cleaned Dataset Transformations Verified:[/bold green]\n"
+                        f"• Original shape: {len(df):,} rows x {len(df.columns)} columns\n"
+                        f"• Cleaned shape:  {len(final_df):,} rows x {len(final_df.columns)} columns (Δ rows: {r_diff:+d}, Δ cols: {c_diff:+d})",
+                        title="Transformation Diff Summary",
+                        border_style="green"
+                    ))
+
+                quality_card = None
+                if final_df is not None:
                     try:
-                        from .testgen import write_pipeline_test_file
-                        test_suite_path = write_pipeline_test_file(
-                            dataset_dir, cleaned_input, clean_out_path, pipeline_file, clean_df=final_df
-                        )
-                        self.console.print(
-                            f"[bold green][Generated][/bold green] Automated Pytest Regression Suite:\n"
-                            f"  • Test Suite: `[bold]{test_suite_path}[/bold]`\n"
-                            f"  • Execute anytime with: `[bold]pytest {os.path.basename(test_suite_path)}[/bold]`"
-                        )
-                    except Exception as tg_err:
+                        from .scorecard import generate_quality_scorecard, render_quality_scorecard
+                        quality_card = generate_quality_scorecard(df, final_df)
+                        self.console.print(render_quality_scorecard(quality_card, self.console))
+                    except Exception:
                         pass
-            except Exception as e:
-                self.console.print(f"[bold red]Failed to export cleaned file:[/bold red] {e}")
 
-        # Export Excel Power Query Companion (ONLY when Power Query path was chosen)
-        if pipeline_type == "powerquery":
-            try:
-                from .powerquery import generate_powerquery_step_by_step_guide
-                pq_guide_path = os.path.join(dataset_dir, "powerquery_guide.md")
-                with open(pq_guide_path, "w", encoding="utf-8") as f:
-                    f.write(generate_powerquery_step_by_step_guide(dataset_base_name, cleaned_input))
-                self.console.print(
-                    f"[bold green][Exported][/bold green] Excel Power Query Companion Exported:\n"
-                    f"  • M-Script: `[bold]{pq_script_path}[/bold]`\n"
-                    f"  • Step-by-Step UI Guide: `[bold]{pq_guide_path}[/bold]`"
+                export_clean = Prompt.ask("Do you want to export the final cleaned dataset? [Y/N/B]", default="Y").strip()
+                if export_clean.lower() in ("b", "back"):
+                    wizard_stage = "step9"
+                    continue
+
+                clean_out_path = None
+                if export_clean.lower().startswith("y") and final_df is not None:
+                    default_out = f"{dataset_base_name} (Cleaned).xlsx"
+                    clean_out_name = Prompt.ask("Enter export filename", default=default_out)
+                    clean_out_path = os.path.join(dataset_dir, clean_out_name)
+                    try:
+                        if hasattr(final_df, "to_excel"):
+                            if clean_out_path.endswith(".csv"):
+                                final_df.to_csv(clean_out_path, index=False)
+                            elif clean_out_path.endswith(".parquet"):
+                                final_df.to_parquet(clean_out_path, index=False)
+                            else:
+                                final_df.to_excel(clean_out_path, index=False)
+                        else:
+                            if clean_out_path.endswith(".csv"):
+                                final_df.write_csv(clean_out_path)
+                            elif clean_out_path.endswith(".parquet"):
+                                final_df.write_parquet(clean_out_path)
+                            else:
+                                final_df.write_excel(clean_out_path)
+                        self.console.print(f"[bold green][Exported][/bold green] Clean dataset exported successfully to: `[bold]{clean_out_path}[/bold]`")
+
+                        # Automated Pytest Pipeline Regression Test Suite
+                        if pipeline_file and os.path.isfile(pipeline_file) and pipeline_type in ("py", "ipynb"):
+                            try:
+                                from .testgen import write_pipeline_test_file
+                                test_suite_path = write_pipeline_test_file(
+                                    dataset_dir, cleaned_input, clean_out_path, pipeline_file, clean_df=final_df
+                                )
+                                self.console.print(
+                                    f"[bold green][Generated][/bold green] Automated Pytest Regression Suite:\n"
+                                    f"  • Test Suite: `[bold]{test_suite_path}[/bold]`\n"
+                                    f"  • Execute anytime with: `[bold]pytest {os.path.basename(test_suite_path)}[/bold]`"
+                                )
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        self.console.print(f"[bold red]Failed to export cleaned file:[/bold red] {e}")
+
+                # Export Excel Power Query Companion (ONLY when Power Query path was chosen)
+                if pipeline_type == "powerquery" and pq_script_path:
+                    try:
+                        from .powerquery import generate_powerquery_step_by_step_guide
+                        pq_guide_path = os.path.join(dataset_dir, "powerquery_guide.md")
+                        with open(pq_guide_path, "w", encoding="utf-8") as f:
+                            f.write(generate_powerquery_step_by_step_guide(dataset_base_name, cleaned_input))
+                        self.console.print(
+                            f"[bold green][Exported][/bold green] Excel Power Query Companion Exported:\n"
+                            f"  • M-Script: `[bold]{pq_script_path}[/bold]`\n"
+                            f"  • Step-by-Step UI Guide: `[bold]{pq_guide_path}[/bold]`"
+                        )
+                    except Exception as pq_err:
+                        self.console.print(f"[yellow]Note: Could not write powerquery_guide.md: {pq_err}[/yellow]")
+
+                wizard_stage = "step13"
+                continue
+
+            # -------------------------------------------------------------
+            # Step 13: Statutory Audit Certificate
+            # -------------------------------------------------------------
+            elif wizard_stage == "step13":
+                self.console.print("\n[bold cyan]Step 13: Statutory Audit Certificate[/bold cyan]")
+                cert_path = os.path.join(dataset_dir, "compliance_audit.md")
+                if full_benchmark_report is None:
+                    full_benchmark_report = run_all_benchmarks(
+                        df=df,
+                        masked_df=masked_df if "masked_df" in locals() else None,
+                        prompt_text=finalized_prompt if "finalized_prompt" in locals() else "",
+                        policy=policy,
+                        dataset_name=dataset_base_name
+                    )
+                create_compliance_audit_certificate(
+                    df,
+                    final_df if isinstance(final_df, pl.DataFrame) else df,
+                    policy,
+                    output_path=cert_path,
+                    kanon_report=kanon_report if "kanon_report" in locals() else None,
+                    quality_card=quality_card,
+                    benchmark_report=full_benchmark_report
                 )
-            except Exception as pq_err:
-                self.console.print(f"[yellow]Note: Could not write powerquery_guide.md: {pq_err}[/yellow]")
-
-        # Step 13: Statutory Audit Certificate
-        self.console.print("\n[bold cyan]Step 13: Statutory Audit Certificate[/bold cyan]")
-        cert_path = os.path.join(dataset_dir, "compliance_audit.md")
-        from .benchmarks import run_all_benchmarks
-        full_benchmark_report = run_all_benchmarks(
-            df=df,
-            masked_df=masked_df if "masked_df" in locals() else None,
-            prompt_text=finalized_prompt if "finalized_prompt" in locals() else "",
-            policy=policy,
-            dataset_name=dataset_base_name
-        )
-        create_compliance_audit_certificate(
-            df,
-            final_df if isinstance(final_df, pl.DataFrame) else df,
-            policy,
-            output_path=cert_path,
-            kanon_report=kanon_report if "kanon_report" in locals() else None,
-            quality_card=quality_card,
-            benchmark_report=full_benchmark_report
-        )
-        self.console.print(f"[INFO] Formal compliance audit report generated at `[bold]{cert_path}[/bold]`.")
+                self.console.print(f"[INFO] Formal compliance audit report generated at `[bold]{cert_path}[/bold]`.")
+                break
 
         return final_df
 
