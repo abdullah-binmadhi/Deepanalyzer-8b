@@ -84,6 +84,7 @@ from .wizard import (
     generate_airgap_payload,
     wizard,
 )
+from .cockpit_tui import launch_cockpit_tui, DeepAnalyzeCockpitApp
 from .benchmarks import (
     BenchmarkMetric,
     TierReport,
@@ -164,6 +165,7 @@ __all__ = [
     "enrich_prompt_with_local_model",
     "AirGapWizard",
     "wizard",
+    "launch_cockpit_tui",
     "generate_airgap_payload",
     "create_compliance_audit_certificate",
     "copy_to_clipboard",
@@ -191,11 +193,23 @@ def _deepanalyze_magic(line: str, cell: Any = None) -> Any:
     return deepanalyze_magic_handler(line, cell=cell, ipython=ip)
 
 
+def _deepanalyze_dash_magic(line: str, cell: Any = None) -> Any:
+    """Entry point for %deepanalyze_dash IPython magic."""
+    try:
+        from IPython import get_ipython
+        ip = get_ipython()
+    except ImportError:
+        ip = None
+    dash_line = f"--dash {line}".strip()
+    return deepanalyze_magic_handler(dash_line, cell=cell, ipython=ip)
+
+
 def load_ipython_extension(ipython: Any) -> None:
     """Called automatically by IPython when running %load_ext deepanalyze."""
     ipython.register_magic_function(_deepanalyze_magic, magic_kind="line_cell", magic_name="deepanalyze")
+    ipython.register_magic_function(_deepanalyze_dash_magic, magic_kind="line", magic_name="deepanalyze_dash")
     print(f"DeepAnalyze Air-Gap Gateway (v{__version__}) loaded successfully.")
-    print("   Run `%deepanalyze` for the interactive wizard, or `--help` for syntax.")
+    print("   Run `%deepanalyze` for the interactive wizard, or `%deepanalyze_dash` for the Interactive Cockpit.")
 
 
 def unload_ipython_extension(ipython: Any) -> None:

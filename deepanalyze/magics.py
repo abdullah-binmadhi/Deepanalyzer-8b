@@ -59,6 +59,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
     args_list = shlex.split(line.strip()) if line.strip() else []
 
     parser = argparse.ArgumentParser(prog="deepanalyze", add_help=False)
+    parser.add_argument("--dash", action="store_true", help="Launch full-screen Interactive Textual Cockpit TUI")
     parser.add_argument("--airgap", action="store_true", help="Generate zero-risk prompt payload to clipboard")
     parser.add_argument("--run", action="store_true", help="Audit and execute external AI code in local RAM")
     parser.add_argument("--fix", nargs="?", const="", default=None, help="Diagnose and auto-repair execution errors with local model or custom prompt")
@@ -98,6 +99,24 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         user_ns.setdefault("np", np)
     except ImportError:
         pass
+
+    # =========================================================================
+    # DIRECTIVE 0: INTERACTIVE TEXTUAL COCKPIT TUI (%deepanalyze --dash or %deepanalyze_dash)
+    # =========================================================================
+    if parsed.dash:
+        target_name = parsed.target or (unknown[0] if unknown else "df")
+        target_df = user_ns.get(target_name)
+        policy = resolve_policy(parsed.origin, parsed.jurisdiction or parsed.origin)
+        from .cockpit_tui import launch_cockpit_tui
+        res_df = launch_cockpit_tui(
+            raw_df=target_df,
+            policy=policy,
+            dataset_name=target_name,
+            user_ns=user_ns
+        )
+        if res_df is not None and target_name in user_ns:
+            user_ns[target_name] = res_df
+        return res_df
 
     # =========================================================================
     # DIRECTIVE 4: AUTONOMOUS DIAGNOSIS & REPAIR (%deepanalyze --fix)

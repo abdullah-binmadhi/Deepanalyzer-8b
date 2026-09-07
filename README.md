@@ -426,6 +426,9 @@ Analyze DataFrames inside Jupyter Notebook, JupyterLab, or VS Code:
 
 # Cell 2: Launch the interactive zero-code wizard
 %deepanalyze
+
+# Cell 3: Launch the full-screen Interactive Cockpit TUI (Textual Dashboard)
+%deepanalyze_dash --target df
 ```
 
 #### Fast Directives (Direct Execution):
@@ -810,8 +813,12 @@ deepanalyze/
 ├── scorecard.py     # Real-Time Data Diff & Quality Scorecard Engine
 ├── testgen.py       # Automated Pytest Pipeline Generator (Schema/Domain/Nulls)
 ├── powerquery.py    # Excel Power Query M-Code & Step-by-Step UI Guide Generator
+├── cockpit_tui.py   # Full-Screen Textual Interactive Cockpit TUI (TCSS Grid & Widgets)
+├── cockpit.py       # Terminal ANSI KPI Scorecard & Column Shift Inspector
+├── frontier.py      # Frontier Model API Airlock Gateway (BYOK Direct Execution with Zero-PII Guarantee)
+├── data_engineering.py # Automated Feature Discovery & Polars Predictive Enhancement Engine
 ├── transformer.py   # High-Performance Deterministic ERP Flattening Engines
-├── magics.py        # IPython Directives (%deepanalyze, --airgap, --run, --fix, --undo, --audit)
+├── magics.py        # IPython Directives (%deepanalyze, %deepanalyze_dash, --airgap, --run, --fix, --undo, --audit)
 ├── client.py        # Offline Inference Client, Health Probes & Autonomous Repair Synthesizer
 └── server.py        # Universal CLI & Local GGUF Inference Manager (Metal/CUDA/Socket)
 ```
