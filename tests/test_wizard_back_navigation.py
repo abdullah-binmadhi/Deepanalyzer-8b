@@ -31,6 +31,8 @@ class TestWizardEnhancements(unittest.TestCase):
         def dynamic_ask(prompt_text, **kwargs):
             nonlocal step7_calls, step7_5_calls, step9_calls
             p = str(prompt_text).lower()
+            if "select mode" in p or "execution mode" in p:
+                return "2"
             if "country" in p or "origin" in p:
                 return "5"
             if "statute" in p or "framework" in p:
@@ -86,6 +88,8 @@ class TestWizardEnhancements(unittest.TestCase):
         def dynamic_ask(prompt_text, **kwargs):
             nonlocal option1_selected
             p = str(prompt_text).lower()
+            if "select mode" in p or "execution mode" in p:
+                return "2"
             if "country" in p or "origin" in p:
                 return "5"
             if "statute" in p or "framework" in p:
@@ -129,6 +133,8 @@ class TestWizardEnhancements(unittest.TestCase):
         def dynamic_ask(prompt_text, **kwargs):
             nonlocal deepanalyze_prompt_seen
             p = str(prompt_text).lower()
+            if "select mode" in p or "execution mode" in p:
+                return "2"
             if "country" in p or "origin" in p:
                 return "5"
             if "statute" in p or "framework" in p:
@@ -179,6 +185,8 @@ class TestWizardEnhancements(unittest.TestCase):
         def dynamic_ask(prompt_text, **kwargs):
             nonlocal satisfied_prompt_seen
             p = str(prompt_text).lower()
+            if "select mode" in p or "execution mode" in p:
+                return "2"
             if "country" in p or "origin" in p:
                 return "5"
             if "statute" in p or "framework" in p:
@@ -231,6 +239,8 @@ class TestWizardEnhancements(unittest.TestCase):
         def dynamic_ask(prompt_text, **kwargs):
             nonlocal sat_count, refine_prompt_seen
             p = str(prompt_text).lower()
+            if "select mode" in p or "execution mode" in p:
+                return "2"
             if "country" in p or "origin" in p:
                 return "5"
             if "statute" in p or "framework" in p:

@@ -82,6 +82,7 @@ from .wizard import (
     copy_to_clipboard,
     create_compliance_audit_certificate,
     generate_airgap_payload,
+    wizard,
 )
 from .benchmarks import (
     BenchmarkMetric,
@@ -162,6 +163,7 @@ __all__ = [
     "interactive_prompt_editor",
     "enrich_prompt_with_local_model",
     "AirGapWizard",
+    "wizard",
     "generate_airgap_payload",
     "create_compliance_audit_certificate",
     "copy_to_clipboard",

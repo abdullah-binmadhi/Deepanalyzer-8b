@@ -37,6 +37,14 @@ from .firewall import (
 from .kanonymity import analyze_kanonymity, auto_generalize_dataframe
 from .benchmarks import render_full_scorecard_panel, run_all_benchmarks
 from .scorecard import render_three_way_airlock_inspection
+from .frontier import detect_available_providers, call_frontier_model
+from .data_engineering import (
+    profile_engineering_opportunities,
+    build_engineering_briefing,
+    apply_quick_features,
+    stitch_code_with_local_model,
+)
+from .cockpit import launch_interactive_terminal_cockpit
 from .policies import (
     CompliancePolicy,
     classify_dataframe_columns,
@@ -388,8 +396,8 @@ class AirGapWizard:
         self.console = console_instance or console
         self.user_ns = user_ns
 
-    def run(self, df: Optional[Any] = None, df_name: str = "df") -> Optional[pl.DataFrame]:
-        """Runs the 13-step interactive zero-code Air-Gap Wizard."""
+    def run(self, df: Optional[Any] = None, df_name: str = "df", mode: Optional[str] = None) -> Optional[pl.DataFrame]:
+        """Runs the interactive zero-code Air-Gap Wizard with Express Clean and Enterprise modes."""
         self.console.print(Panel.fit(
             "[bold cyan]DEEPANALYZE AIR-GAP COMPLIANCE GATEWAY (v4.0)[/bold cyan]\n"
             "[dim]Deterministic DLP • Volatile Memory Isolation • Statutory Cross-Border Airlock[/dim]",
@@ -436,6 +444,18 @@ class AirGapWizard:
             if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
                 df = pl.from_pandas(df)
 
+        # Mode Selection: Express Clean vs Enterprise Auditor Mode
+        if mode is None:
+            self.console.print("\n[bold cyan]Select Execution Mode:[/bold cyan]")
+            self.console.print("  [1] Express Clean (Auto-detect policy, auto-generalize PII, 1-click clean)")
+            self.console.print("  [2] Enterprise / Auditor Mode (Full 13-step granular compliance control)")
+            mode_choice = Prompt.ask("Select mode [1-2/B]", default="1").strip()
+            if mode_choice.lower() in ("b", "back"):
+                return None
+            is_express_mode = (mode_choice == "1" or "express" in mode_choice.lower())
+        else:
+            is_express_mode = (str(mode).lower() in ("1", "express", "quick"))
+
         workbook_topology = None
         multi_sheets = None
         if cleaned_input and os.path.isfile(cleaned_input):
@@ -448,143 +468,158 @@ class AirGapWizard:
                 except Exception:
                     workbook_topology = None
 
-        # Step 2: Country of Origin (Question 1)
-        self.console.print("\n[bold cyan]Step 2: Country of Origin (Question 1)[/bold cyan]")
-        self.console.print("  [1] Saudi Arabia (KSA)")
-        self.console.print("  [2] Poland (EU)")
-        self.console.print("  [3] United States (US)")
-        self.console.print("  [4] United Kingdom (UK)")
-        self.console.print("  [5] Universal / Other")
-        origin_choice = Prompt.ask("Where are you currently operating from? [1-5 or enter country name]", default="1")
-
-        country_map = {
-            "1": "Saudi Arabia",
-            "2": "Poland",
-            "3": "United States",
-            "4": "United Kingdom",
-            "5": "Universal"
-        }
-        origin_country = country_map.get(origin_choice.strip(), origin_choice.strip())
-        self.console.print(f"[INFO] Origin Location: [bold green]{origin_country}[/bold green]")
-
-        # Step 3: Dynamic Compliance Framework (Question 2)
-        self.console.print("\n[bold cyan]Step 3: Governing Compliance Framework (Question 2)[/bold cyan]")
-        options = get_statute_options_for_country(origin_country)
-        for idx, opt in enumerate(options, 1):
-            self.console.print(f"  [{idx}] {opt}")
-
-        framework_choice = Prompt.ask(f"Select governing framework [1-{len(options)}]", default=str(len(options)))
-        is_not_sure = (
-            framework_choice.strip() == str(len(options)) or
-            "not sure" in framework_choice.lower()
-        )
-
-        if is_not_sure:
-            statute_name = detect_statute_for_country(origin_country)
-            self.console.print(
-                f"[bold green][Analysis][/bold green] Detected best framework for [bold]{origin_country}[/bold] is "
-                f"'[bold cyan]{statute_name}[/bold cyan]'. Enforcing this framework."
-            )
+        if is_express_mode:
+            origin_country = "Saudi Arabia"
+            statute_name = "PDPL"
+            self.console.print(f"[INFO] [bold green]Express Clean Active:[/bold green] Auto-enforcing [bold cyan]{statute_name}[/bold cyan] ({origin_country}).")
+            policy = resolve_policy(origin_country, statute_name)
         else:
-            try:
-                chosen_idx = int(framework_choice.strip()) - 1
-                statute_name = options[chosen_idx]
-            except Exception:
-                statute_name = framework_choice.strip()
-            self.console.print(f"[INFO] Enforcing Statute: [bold green]{statute_name}[/bold green]")
+            # Step 2: Country of Origin (Question 1)
+            self.console.print("\n[bold cyan]Step 2: Country of Origin (Question 1)[/bold cyan]")
+            self.console.print("  [1] Saudi Arabia (KSA)")
+            self.console.print("  [2] Poland (EU)")
+            self.console.print("  [3] United States (US)")
+            self.console.print("  [4] United Kingdom (UK)")
+            self.console.print("  [5] Universal / Other")
+            origin_choice = Prompt.ask("Where are you currently operating from? [1-5 or enter country name]", default="1")
 
-        policy = resolve_policy(origin_country, statute_name)
+            country_map = {
+                "1": "Saudi Arabia",
+                "2": "Poland",
+                "3": "United States",
+                "4": "United Kingdom",
+                "5": "Universal"
+            }
+            origin_country = country_map.get(origin_choice.strip(), origin_choice.strip())
+            self.console.print(f"[INFO] Origin Location: [bold green]{origin_country}[/bold green]")
+
+            # Step 3: Dynamic Compliance Framework (Question 2)
+            self.console.print("\n[bold cyan]Step 3: Governing Compliance Framework (Question 2)[/bold cyan]")
+            options = get_statute_options_for_country(origin_country)
+            for idx, opt in enumerate(options, 1):
+                self.console.print(f"  [{idx}] {opt}")
+
+            framework_choice = Prompt.ask(f"Select governing framework [1-{len(options)}]", default=str(len(options)))
+            is_not_sure = (
+                framework_choice.strip() == str(len(options)) or
+                "not sure" in framework_choice.lower()
+            )
+
+            if is_not_sure:
+                statute_name = detect_statute_for_country(origin_country)
+                self.console.print(
+                    f"[bold green][Analysis][/bold green] Detected best framework for [bold]{origin_country}[/bold] is "
+                    f"'[bold cyan]{statute_name}[/bold cyan]'. Enforcing this framework."
+                )
+            else:
+                try:
+                    chosen_idx = int(framework_choice.strip()) - 1
+                    statute_name = options[chosen_idx]
+                except Exception:
+                    statute_name = framework_choice.strip()
+                self.console.print(f"[INFO] Enforcing Statute: [bold green]{statute_name}[/bold green]")
+
+            policy = resolve_policy(origin_country, statute_name)
 
         # Step 4: Dataset Architecture & Geometry Discovery (Question 3)
         self.console.print("\n[bold cyan]Step 4: Dataset Architecture & Geometry Discovery (Question 3)[/bold cyan]")
 
-        # Multi-sheet workbook detection & interaction
-        if workbook_topology and len(workbook_topology.sheets) > 1:
-            sheet_rows_text = "\n".join([f"  • Sheet '[bold]{sname}[/bold]' ({sp.row_count:,} rows x {sp.col_count} cols) -> Role: [yellow]{sp.role.value}[/yellow]" for sname, sp in workbook_topology.sheets.items()])
-            links_text = ("\n\n[bold cyan]Inferred Relational Keys:[/bold cyan]\n" + "\n".join([f"  • `{fk.from_sheet}.{fk.from_col}` <-> `{fk.to_sheet}.{fk.to_col}` ({fk.overlap_pct}% match)" for fk in workbook_topology.foreign_keys])) if workbook_topology.foreign_keys else ""
-            self.console.print(Panel(
-                f"[bold cyan]Multi-Sheet Workbook Architecture Detected ({len(workbook_topology.sheets)} Sheets):[/bold cyan]\n" +
-                sheet_rows_text + links_text,
-                border_style="cyan"
-            ))
-            self.console.print("\nHow would you like to process this multi-sheet workbook?")
-            self.console.print("  [1] Automatically consolidate and clean all sheets together (Recommended)")
-            self.console.print(f"  [2] Process primary sheet '{workbook_topology.primary_sheet}' only")
-            self.console.print("  [3] Choose a specific sheet to process")
-            ms_choice = Prompt.ask("Select multi-sheet mode [1-3]", default="1")
-
-            if ms_choice.strip() == "2":
-                multi_sheets = None
+        if is_express_mode:
+            if workbook_topology and len(workbook_topology.sheets) > 1:
                 df = workbook_topology.sheets[workbook_topology.primary_sheet].df
                 df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
-            elif ms_choice.strip() == "3":
-                s_names = list(workbook_topology.sheets.keys())
-                for idx, sn in enumerate(s_names, 1):
-                    self.console.print(f"  [{idx}] {sn}")
-                chosen_s = Prompt.ask(f"Select sheet [1-{len(s_names)}]", default="1")
-                try:
-                    chosen_name = s_names[int(chosen_s) - 1]
-                except Exception:
-                    chosen_name = s_names[0]
                 multi_sheets = None
-                df = workbook_topology.sheets[chosen_name].df
-                df_name = re.sub(r"[^a-zA-Z0-9_]", "_", chosen_name).strip("_").lower() or "df"
-            else:
-                df = workbook_topology.sheets[workbook_topology.primary_sheet].df
-                df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
-                self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
-        else:
-            single_prof = profile_dataframe(df, name=df_name)
-            workbook_topology = WorkbookTopology(
-                file_path=cleaned_input or "",
-                sheets={df_name: single_prof},
-                primary_sheet=df_name,
-                foreign_keys=[],
-                recommended_pipeline_steps=[]
-            )
-            diagnostics = []
-            for col in single_prof.columns:
-                if len(col.date_formats) > 1:
-                    diagnostics.append(f"`{col.name}`: mixed date formats ({', '.join(col.date_formats)})")
-                if col.has_accounting_negatives:
-                    diagnostics.append(f"`{col.name}`: accounting negative brackets `(1,000.00)`")
-                if col.has_dirty_currency:
-                    diagnostics.append(f"`{col.name}`: currency symbols needing stripping")
-            if single_prof.subtotal_rows:
-                diagnostics.append(f"{len(single_prof.subtotal_rows)} subtotal/summary row(s) identified")
-            if single_prof.header_row_offset > 0:
-                diagnostics.append(f"top {single_prof.header_row_offset} metadata rows preceding true table headers")
-
-            if diagnostics:
-                self.console.print(f"[bold cyan][Data Intelligence Diagnostics][/bold cyan] Found {len(diagnostics)} data anomalies:")
-                for diag in diagnostics[:5]:
-                    self.console.print(f"  • {diag}")
-
-        arch_options = [
-            "Clean Relational / Tabular (Standard Columns)",
-            "Hierarchical / Ragged ERP Report (Invoices, GL Ledgers, Multi-Row Headers)",
-            "Healthcare EHR / Clinical Notes",
-            "Not Sure (Auto-Detect)"
-        ]
-        for idx, opt in enumerate(arch_options, 1):
-            self.console.print(f"  [{idx}] {opt}")
-
-        arch_choice = Prompt.ask("Select dataset structure [1-4]", default="4")
-        if arch_choice.strip() == "4" or "not sure" in arch_choice.lower():
             detected_key, human_name, explanation = detect_dataset_architecture(df)
             arch_key = detected_key
-            self.console.print(
-                f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. "
-                f"{explanation} Activating specialized privacy airlock."
-            )
-        elif arch_choice.strip() == "1":
-            arch_key = "CLEAN_TABULAR"
-        elif arch_choice.strip() == "2":
-            arch_key = "ERP_RAGGED"
-        elif arch_choice.strip() == "3":
-            arch_key = "HEALTHCARE_EHR"
+            self.console.print(f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. {explanation}")
         else:
-            arch_key = "CLEAN_TABULAR"
+            # Multi-sheet workbook detection & interaction
+            if workbook_topology and len(workbook_topology.sheets) > 1:
+                sheet_rows_text = "\n".join([f"  • Sheet '[bold]{sname}[/bold]' ({sp.row_count:,} rows x {sp.col_count} cols) -> Role: [yellow]{sp.role.value}[/yellow]" for sname, sp in workbook_topology.sheets.items()])
+                links_text = ("\n\n[bold cyan]Inferred Relational Keys:[/bold cyan]\n" + "\n".join([f"  • `{fk.from_sheet}.{fk.from_col}` <-> `{fk.to_sheet}.{fk.to_col}` ({fk.overlap_pct}% match)" for fk in workbook_topology.foreign_keys])) if workbook_topology.foreign_keys else ""
+                self.console.print(Panel(
+                    f"[bold cyan]Multi-Sheet Workbook Architecture Detected ({len(workbook_topology.sheets)} Sheets):[/bold cyan]\n" +
+                    sheet_rows_text + links_text,
+                    border_style="cyan"
+                ))
+                self.console.print("\nHow would you like to process this multi-sheet workbook?")
+                self.console.print("  [1] Automatically consolidate and clean all sheets together (Recommended)")
+                self.console.print(f"  [2] Process primary sheet '{workbook_topology.primary_sheet}' only")
+                self.console.print("  [3] Choose a specific sheet to process")
+                ms_choice = Prompt.ask("Select multi-sheet mode [1-3]", default="1")
+
+                if ms_choice.strip() == "2":
+                    multi_sheets = None
+                    df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                    df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
+                elif ms_choice.strip() == "3":
+                    s_names = list(workbook_topology.sheets.keys())
+                    for idx, sn in enumerate(s_names, 1):
+                        self.console.print(f"  [{idx}] {sn}")
+                    chosen_s = Prompt.ask(f"Select sheet [1-{len(s_names)}]", default="1")
+                    try:
+                        chosen_name = s_names[int(chosen_s) - 1]
+                    except Exception:
+                        chosen_name = s_names[0]
+                    multi_sheets = None
+                    df = workbook_topology.sheets[chosen_name].df
+                    df_name = re.sub(r"[^a-zA-Z0-9_]", "_", chosen_name).strip("_").lower() or "df"
+                else:
+                    df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                    df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
+                    self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
+            else:
+                single_prof = profile_dataframe(df, name=df_name)
+                workbook_topology = WorkbookTopology(
+                    file_path=cleaned_input or "",
+                    sheets={df_name: single_prof},
+                    primary_sheet=df_name,
+                    foreign_keys=[],
+                    recommended_pipeline_steps=[]
+                )
+                diagnostics = []
+                for col in single_prof.columns:
+                    if len(col.date_formats) > 1:
+                        diagnostics.append(f"`{col.name}`: mixed date formats ({', '.join(col.date_formats)})")
+                    if col.has_accounting_negatives:
+                        diagnostics.append(f"`{col.name}`: accounting negative brackets `(1,000.00)`")
+                    if col.has_dirty_currency:
+                        diagnostics.append(f"`{col.name}`: currency symbols needing stripping")
+                    if single_prof.subtotal_rows:
+                        diagnostics.append(f"{len(single_prof.subtotal_rows)} subtotal/summary row(s) identified")
+                    if single_prof.header_row_offset > 0:
+                        diagnostics.append(f"top {single_prof.header_row_offset} metadata rows preceding true table headers")
+
+                if diagnostics:
+                    self.console.print(f"[bold cyan][Data Intelligence Diagnostics][/bold cyan] Found {len(diagnostics)} data anomalies:")
+                    for diag in diagnostics[:5]:
+                        self.console.print(f"  • {diag}")
+
+            arch_options = [
+                "Clean Relational / Tabular (Standard Columns)",
+                "Hierarchical / Ragged ERP Report (Invoices, GL Ledgers, Multi-Row Headers)",
+                "Healthcare EHR / Clinical Notes",
+                "Not Sure (Auto-Detect)"
+            ]
+            for idx, opt in enumerate(arch_options, 1):
+                self.console.print(f"  [{idx}] {opt}")
+
+            arch_choice = Prompt.ask("Select dataset structure [1-4]", default="4")
+            if arch_choice.strip() == "4" or "not sure" in arch_choice.lower():
+                detected_key, human_name, explanation = detect_dataset_architecture(df)
+                arch_key = detected_key
+                self.console.print(
+                    f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. "
+                    f"{explanation} Activating specialized privacy airlock."
+                )
+            elif arch_choice.strip() == "1":
+                arch_key = "CLEAN_TABULAR"
+            elif arch_choice.strip() == "2":
+                arch_key = "ERP_RAGGED"
+            elif arch_choice.strip() == "3":
+                arch_key = "HEALTHCARE_EHR"
+            else:
+                arch_key = "CLEAN_TABULAR"
 
         # Step 5: Full-File Deep Scan & Pattern Categorization
         self.console.print("\n[bold cyan]Step 5: Full-File Deep Scan & Pattern Categorization[/bold cyan]")
@@ -696,6 +731,10 @@ class AirGapWizard:
             # Step 7: Interactive Value Teaching & Disambiguation Loop
             # -------------------------------------------------------------
             if wizard_stage == "step7":
+                if is_express_mode:
+                    wizard_stage = "step8"
+                    continue
+
                 self.console.print("\n[bold cyan]Step 7: Interactive Value Teaching & Disambiguation Loop[/bold cyan]")
                 while True:
                     more = Prompt.ask("Are there more columns or data elements you want me to encrypt? [Y/N/B]", default="N").strip()
@@ -734,6 +773,10 @@ class AirGapWizard:
             # Step 7.5: Human Intuition & Domain Objectives
             # -------------------------------------------------------------
             elif wizard_stage == "step7_5":
+                if is_express_mode:
+                    wizard_stage = "step8"
+                    continue
+
                 self.console.print("\n[bold cyan]Step 7.5: Human Intuition & Domain Objectives[/bold cyan]")
                 has_custom = Prompt.ask(
                     "Do you have special business requests or column extraction rules for the cloud AI? [Y/N/B]",
@@ -773,15 +816,18 @@ class AirGapWizard:
                 master_prompt = enrich_prompt_with_local_model(master_prompt)
 
                 # 3. Interactive Review & Refinement Loop
-                finalized_prompt = interactive_prompt_editor(
-                    master_prompt,
-                    self.console,
-                    dataset_name=dataset_base_name
-                )
+                if is_express_mode:
+                    finalized_prompt = master_prompt
+                else:
+                    finalized_prompt = interactive_prompt_editor(
+                        master_prompt,
+                        self.console,
+                        dataset_name=dataset_base_name
+                    )
 
-                if finalized_prompt == "__BACK__":
-                    wizard_stage = "step7_5"
-                    continue
+                    if finalized_prompt == "__BACK__":
+                        wizard_stage = "step7_5"
+                        continue
 
                 # 4. Save finalized prompt to disk
                 prompt_file_path = save_prompt_to_disk(
@@ -823,6 +869,22 @@ class AirGapWizard:
                 bench_failed = (not full_benchmark_report.all_passed) or (full_benchmark_report.composite_privacy_score < 95.0)
 
                 if bench_failed:
+                    if is_express_mode:
+                        self.console.print("[INFO] Express Clean: Auto-generalizing quasi-identifiers (k >= 5) to satisfy statutory benchmarks...")
+                        masked_df = auto_generalize_dataframe(masked_df, target_k=5)
+                        full_benchmark_report = run_all_benchmarks(
+                            df=df,
+                            masked_df=masked_df,
+                            mock_rows=None,
+                            prompt_text=finalized_prompt,
+                            policy=policy,
+                            dataset_name=dataset_base_name,
+                        )
+                        self.console.print(render_full_scorecard_panel(full_benchmark_report))
+                        export_approved = True
+                        wizard_stage = "download_duplicate"
+                        continue
+
                     failed_metrics = [m for m in full_benchmark_report.tier1.metrics + full_benchmark_report.tier2.metrics if not m.passed]
                     first_fail = failed_metrics[0] if failed_metrics else None
                     fail_summary = f" ({first_fail.test_id}: {first_fail.name} = {first_fail.formatted_value}; {first_fail.details})" if first_fail else ""
@@ -893,6 +955,10 @@ class AirGapWizard:
             # Optional Encrypted Duplicate Export
             # -------------------------------------------------------------
             elif wizard_stage == "download_duplicate":
+                if is_express_mode:
+                    wizard_stage = "step9"
+                    continue
+
                 if export_approved:
                     dl_dup = Prompt.ask("Download encrypted dataset duplicate? [Y/N/B]", default="Y").strip()
                     if dl_dup.lower() in ("b", "back"):
@@ -936,18 +1002,40 @@ class AirGapWizard:
                 self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
                 has_code = Prompt.ask("Will code be provided to clean/transform the data? [Y/N/B]", default="N").strip()
                 if has_code.lower() in ("b", "back"):
-                    wizard_stage = "download_duplicate"
+                    wizard_stage = "benchmarks" if is_express_mode else "download_duplicate"
                     continue
 
                 pipeline_type = None
                 code_executed_successfully = False
                 if has_code.lower().startswith("y"):
-                    self.console.print("  [1] Single Script (.py)")
-                    self.console.print("  [2] Multiple Code Blocks (.ipynb)")
-                    self.console.print("  [3] Power Query (M-Code)")
-                    code_mode = Prompt.ask("Select delivery format [1-3/B]", default="1").strip()
-                    if code_mode.lower() in ("b", "back"):
-                        continue
+                    frontier_providers = detect_available_providers()
+                    direct_code = None
+                    if frontier_providers:
+                        prov_list = ", ".join(p["name"] for p in frontier_providers.values())
+                        self.console.print(f"\n[bold cyan]Frontier API Gateway Detected ({prov_list})[/bold cyan]")
+                        self.console.print("  [1] Direct Frontier Execution (Zero-Copy-Paste BYOK API)")
+                        self.console.print("  [2] Manual Code Delivery (.py / .ipynb / .m)")
+                        deliv_choice = Prompt.ask("Select delivery method [1-2/B]", default="1").strip()
+                        if deliv_choice.lower() in ("b", "back"):
+                            continue
+                        if deliv_choice == "1":
+                            self.console.print("[bold cyan]Submitting sanitized briefing to Frontier Model with zero-PII guarantee...[/bold cyan]")
+                            api_ok, api_code, api_resp = call_frontier_model(finalized_prompt)
+                            if api_ok and api_code:
+                                self.console.print(Panel(api_code, title="Frontier Generated Transformation Script", border_style="cyan"))
+                                direct_code = api_code
+                            else:
+                                self.console.print(f"[bold yellow]Frontier API Notice:[/bold yellow] {api_resp}. Falling back to manual delivery.")
+
+                    if direct_code:
+                        code_mode = "1"
+                    else:
+                        self.console.print("  [1] Single Script (.py)")
+                        self.console.print("  [2] Multiple Code Blocks (.ipynb)")
+                        self.console.print("  [3] Power Query (M-Code)")
+                        code_mode = Prompt.ask("Select delivery format [1-3/B]", default="1").strip()
+                        if code_mode.lower() in ("b", "back"):
+                            continue
 
                     if code_mode == "3":
                         pipeline_type = "powerquery"
@@ -989,7 +1077,10 @@ class AirGapWizard:
                                 exec_scope[sname] = sdf
 
                         if pipeline_type == "py":
-                            code_text = read_multiline_input(self.console, "Paste your complete Python script below (type 'EOF' or Ctrl+D when done):")
+                            if direct_code:
+                                code_text = direct_code
+                            else:
+                                code_text = read_multiline_input(self.console, "Paste your complete Python script below (type 'EOF' or Ctrl+D when done):")
                             if not code_text:
                                 self.console.print("[yellow]No code entered.[/yellow]")
                             else:
@@ -1333,6 +1424,69 @@ class AirGapWizard:
                     else:
                         final_df = df
 
+                wizard_stage = "step10"
+                continue
+
+            # -------------------------------------------------------------
+            # Step 10: Automated Data Engineering & Feature Synthesis Engine
+            # -------------------------------------------------------------
+            elif wizard_stage == "step10":
+                self.console.print("\n[bold cyan]Step 10: Automated Data Engineering & Feature Synthesis Engine[/bold cyan]")
+                if final_df is not None and hasattr(final_df, "columns"):
+                    opps = profile_engineering_opportunities(final_df)
+                    total_opps = sum(len(v) for v in opps.values())
+
+                    if total_opps > 0 and not is_express_mode:
+                        self.console.print(f"[INFO] Discovered [bold green]{total_opps}[/bold green] high-value feature engineering opportunities in cleaned dataset.")
+                        do_fe = Prompt.ask("Would you like to synthesize derived analytical features? [Y/N/B]", default="N").strip()
+                        if do_fe.lower() in ("b", "back"):
+                            wizard_stage = "step9"
+                            continue
+                        if do_fe.lower().startswith("y"):
+                            self.console.print("  [1] Quick In-RAM Synthesis (Pure Polars: Temporal, Outlier IQR, Log-Scaling, Frequency)")
+                            self.console.print("  [2] Frontier Macro Engineering Recipe (Stitched locally with DeepAnalyze 8B)")
+                            self.console.print("  [3] Skip Feature Engineering")
+                            fe_choice = Prompt.ask("Select engineering mode [1-3/B]", default="1").strip()
+                            if fe_choice.lower() in ("b", "back"):
+                                continue
+                            if fe_choice == "1":
+                                final_df, new_cols = apply_quick_features(final_df)
+                                self.console.print(Panel(
+                                    f"[bold green]Feature Engineering Complete:[/bold green] Created {len(new_cols)} new features:\n" +
+                                    ", ".join(f"`{c}`" for c in new_cols),
+                                    title="Polars RAM Feature Synthesis",
+                                    border_style="green"
+                                ))
+                                exec_scope[df_name] = final_df
+                                exec_scope["df"] = final_df
+                            elif fe_choice == "2":
+                                fe_briefing = build_engineering_briefing(final_df, dataset_name=dataset_base_name)
+                                frontier_providers = detect_available_providers()
+                                fe_code = ""
+                                if frontier_providers:
+                                    self.console.print("[bold cyan]Requesting Macro Feature Recipe from Frontier API...[/bold cyan]")
+                                    s_ok, f_code, _ = call_frontier_model(fe_briefing)
+                                    if s_ok:
+                                        fe_code = f_code
+                                if not fe_code:
+                                    copy_to_clipboard(fe_briefing)
+                                    self.console.print(Panel(fe_briefing, title="Sanitized Engineering Briefing (Copied to Clipboard)", border_style="cyan"))
+                                    fe_code = read_multiline_input(self.console, "Paste Frontier Feature Engineering Script below:")
+
+                                if fe_code:
+                                    self.console.print("[bold cyan]Aligning and stitching columns with local DeepAnalyze 8B model...[/bold cyan]")
+                                    s_stitch, stitched_fe, diag = stitch_code_with_local_model(fe_code, final_df, df_var=df_name)
+                                    self.console.print(Panel(stitched_fe, title="Stitched Engineering Code (Polars/Pandas)", border_style="cyan"))
+                                    fe_scope = {"df": final_df, df_name: final_df, "pl": pl}
+                                    try:
+                                        execute_code_safely(stitched_fe, fe_scope, timeout_sec=20.0)
+                                        final_df = fe_scope.get(df_name, fe_scope.get("df", final_df))
+                                        exec_scope[df_name] = final_df
+                                        exec_scope["df"] = final_df
+                                        self.console.print(f"[bold green]Frontier Feature Engineering Successfully Stitched & Executed in RAM![/bold green] ({final_df.width} columns)")
+                                    except Exception as fe_err:
+                                        self.console.print(f"[bold red]Feature execution error:[/bold red] {fe_err}")
+
                 wizard_stage = "step12"
                 continue
 
@@ -1370,9 +1524,25 @@ class AirGapWizard:
                     except Exception:
                         pass
 
+                if not is_express_mode:
+                    cockpit_choice = Prompt.ask("Open Interactive Terminal Cockpit dashboard? [Y/N/B]", default="Y").strip()
+                    if cockpit_choice.lower() in ("b", "back"):
+                        wizard_stage = "step10"
+                        continue
+                    if cockpit_choice.lower().startswith("y"):
+                        try:
+                            final_df = launch_interactive_terminal_cockpit(
+                                raw_df=df,
+                                clean_df=final_df,
+                                encrypted_df=masked_df if "masked_df" in locals() else None,
+                                console=self.console
+                            )
+                        except Exception as c_err:
+                            self.console.print(f"[bold red]Cockpit error:[/bold red] {c_err}")
+
                 export_clean = Prompt.ask("Do you want to export the final cleaned dataset? [Y/N/B]", default="Y").strip()
                 if export_clean.lower() in ("b", "back"):
-                    wizard_stage = "step9"
+                    wizard_stage = "step10" if not is_express_mode else "step9"
                     continue
 
                 clean_out_path = None
@@ -1459,6 +1629,15 @@ class AirGapWizard:
                 break
 
         return final_df
+
+
+def wizard(df: Optional[Any] = None, df_name: str = "df", **kwargs: Any) -> Any:
+    """Convenience functional entry point to launch the DeepAnalyze Air-Gap Wizard:
+        >>> import deepanalyze as da
+        >>> da.wizard()
+        >>> da.wizard(df)
+    """
+    return AirGapWizard(**kwargs).run(df=df, df_name=df_name)
 
 
 if __name__ == "__main__":

@@ -490,13 +490,15 @@ clean_df.to_excel("Clean_payroll.xlsx", index=False)
 
 ---
 
-## 5. The Complete 13-Step Interactive Wizard Walkthrough
+## 5. The Complete Interactive Wizard Walkthrough
 
-When you run `%deepanalyze` or `deepanalyze wizard`, the system executes a deterministic 13-step pipeline:
+When you run `%deepanalyze`, `da.wizard()`, or `python -m deepanalyze`, the system starts with dual-path execution:
 
-### Step 1: Resilient Ingestion & Multi-Sheet Discovery
-* **Prompt**: File path (`CSV`, `XLSX`, `TSV`, `Parquet`, `JSON`) or variable name.
-* **Engine Action**: Strips quotes/spaces, discovers all sheet tabs, and detects top metadata offsets while preserving all 16+ columns.
+### Step 1: Mode Selection & Resilient Ingestion
+* **Prompt**: Select execution path:
+  * `[1] Express Clean (1-Click / Zero-Touch)`: Automatic primary sheet resolution, Saudi PDPL defaults, auto-tokenization, benchmark auto-generalization ($k \ge 5$), zero-prompt transformation, and instant deliverables.
+  * `[2] Enterprise / Auditor Mode (Full 13-Step Control)`: Full granular compliance arbitration, statutory overrides, interactive teaching loops, and custom DLP rule engineering.
+* **Engine Action**: Strips quotes/spaces, discovers all sheet tabs, and detects top metadata offsets while preserving all columns in local volatile RAM.
 * **Output**: Ingested raw table in local RAM.
 
 ### Step 2: Country of Origin (Question 1)
@@ -571,22 +573,29 @@ Status: 4/4 CRITERIA SATISFIED
 * **Output**: Saves `[dataset]_cleaning_prompt.md`, copies text to clipboard, and optionally exports `[dataset]_anonymized.xlsx` (volatile session keys held strictly in RAM).
 
 ### Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
-* **Prompt**: Choose execution mode: `[1] Single Script (.py)`, `[2] Multiple Blocks (.ipynb)`, or `[3] Power Query (M-Code)`.
+* **Prompt**: Choose delivery format: `[1] Single Script (.py)`, `[2] Multiple Blocks (.ipynb)`, or `[3] Power Query (M-Code)`.
+* **Frontier API Gateway (Optional BYOK)**: If OpenAI, Anthropic, OpenRouter, or Custom API keys are detected, DeepAnalyze allows 1-click **Direct Frontier Execution**. The briefing is pre-scanned by a strict deterministic DLP airlock before transmission, eliminating manual copy-pasting while maintaining zero-PII guarantees.
 * **Engine Action**: Pre-loads `pd`, `np`, `pl`, and multi-sheet context dictionaries into execution scope.
 
-### Step 10: Syntax Preview & AST Security Sandbox
-* **Prompt**: Displays syntax-highlighted code preview; user presses Enter to proceed.
+### Step 10: Automated Data Engineering Engine
+* **Prompt**: Proposes post-cleaning predictive feature enrichment.
+* **Engine Action**: Profiles cleaned data for temporal features (year, month, day of week), numerical ratios ($z$-scores, log transforms, IQR outliers), categorical frequency encoding, and text word counts in pure, fast Polars.
+* **Dual-Model Stitcher**: Adapts and aligns foreign frontier code to the exact local schema using the local 8B model with division-by-zero protection.
+
+### Step 11: Syntax Preview, AST Security Sandbox & Autonomous Healing
+* **Prompt**: Displays syntax-highlighted code preview.
 * **Engine Action**: Audits AST syntax tree, blocking network libraries, environment variables (`os.environ`), and sensitive paths (`/etc/`, `~/.ssh/`).
-* **Output**: Approved sandboxed execution in volatile RAM.
+* **Auto-Repair**: On execution crash, the local model autonomously synthesizes a corrected patch in volatile RAM.
 
-### Step 11: Execution Error Self-Healing Loop
-* **Prompt**: If an error occurs, displays traceback and asks: *"Would you like to paste the corrected code? [y/N]"*
-* **Engine Action**: Activates **Ouroboros Crash Autopsy**, isolating missing keys or type errors and generating surgical repair micro-prompts without session loss.
-
-### Step 12: Real-Time Quality Scorecard, Export & Test Suite Generation
-* **Prompt**: Displays side-by-side tabular diff and asks for export filename (e.g. `Clean_file.xlsx`).
-* **Engine Action**: Reconciles genuine data in RAM with 100.00% fidelity and generates automated Pytest validation suite.
-* **Output**: Clean dataset export, `test_clean_pipeline.py`, and Power Query companions (`powerquery_script.m`, `powerquery_guide.md`).
+### Step 12: Real-Time Quality Scorecard & Interactive Terminal Cockpit
+* **Prompt**: Displays side-by-side tabular diff and prompts to open the **Interactive Terminal Cockpit**.
+* **Terminal Cockpit (ANSI Dashboard)**:
+  * **Structural Geometry, Hygiene & Purity, and Airlock Trust KPI Cards**.
+  * **3-Way Sample Previews**: Head snapshots of Original, Encrypted Buffer, and Cleaned datasets.
+  * **Consolidated Audit Matrix**: Comprehensive side-by-side metrics table.
+  * **Column Shift Inspector**: Audits column-by-column null drops and data type evolutions.
+  * **Feature Studio**: Instant one-click Polars feature generation.
+* **Output**: Clean dataset export (`Clean_file.xlsx` / `.csv` / `.parquet`), `test_clean_pipeline.py`, and Power Query companions.
 
 ### Step 13: Statutory Compliance Audit Certificate
 * **Prompt**: Automatic generation upon completion.
