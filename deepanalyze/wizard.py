@@ -56,6 +56,7 @@ from .policies import (
 from .profiler import (
     SheetRole,
     WorkbookTopology,
+    find_header_row,
     generate_engineering_briefing,
     profile_dataframe,
     profile_workbook,
@@ -463,6 +464,12 @@ class AirGapWizard:
             if ext in (".xlsx", ".xls", ".xlsm"):
                 try:
                     workbook_topology = profile_workbook(cleaned_input)
+                    if workbook_topology and workbook_topology.primary_sheet:
+                        primary_p = workbook_topology.sheets.get(workbook_topology.primary_sheet)
+                        if primary_p and primary_p.df is not None:
+                            df = primary_p.df
+                            if self.user_ns is not None:
+                                self.user_ns[df_name] = df
                     if len(workbook_topology.sheets) > 1:
                         multi_sheets = {s: p.df for s, p in workbook_topology.sheets.items() if p.df is not None}
                 except Exception:
@@ -955,10 +962,6 @@ class AirGapWizard:
             # Optional Encrypted Duplicate Export
             # -------------------------------------------------------------
             elif wizard_stage == "download_duplicate":
-                if is_express_mode:
-                    wizard_stage = "step9"
-                    continue
-
                 if export_approved:
                     dl_dup = Prompt.ask("Download encrypted dataset duplicate? [Y/N/B]", default="Y").strip()
                     if dl_dup.lower() in ("b", "back"):
@@ -1002,7 +1005,7 @@ class AirGapWizard:
                 self.console.print("\n[bold cyan]Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)[/bold cyan]")
                 has_code = Prompt.ask("Will code be provided to clean/transform the data? [Y/N/B]", default="N").strip()
                 if has_code.lower() in ("b", "back"):
-                    wizard_stage = "benchmarks" if is_express_mode else "download_duplicate"
+                    wizard_stage = "download_duplicate"
                     continue
 
                 pipeline_type = None

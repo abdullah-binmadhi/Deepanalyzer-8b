@@ -47,13 +47,13 @@ class TestExpressMode(unittest.TestCase):
         res = self.wizard.run(self.df, mode="express")
         self.assertIsNotNone(res)
 
-        # In express mode, intermediate manual questions MUST be bypassed:
+        # In express mode, manual configuration questions are bypassed, but the encrypted duplicate prompt MUST be offered before Step 9:
         self.assertFalse(any("operating from" in p for p in prompts_seen), "Country question should be skipped in Express mode")
         self.assertFalse(any("governing framework" in p for p in prompts_seen), "Statute question should be skipped in Express mode")
         self.assertFalse(any("dataset structure" in p for p in prompts_seen), "Architecture question should be skipped in Express mode")
         self.assertFalse(any("more columns" in p for p in prompts_seen), "Teaching loop should be skipped in Express mode")
         self.assertFalse(any("modify or add instructions" in p for p in prompts_seen), "Prompt editor should be skipped in Express mode")
-        self.assertFalse(any("download encrypted dataset duplicate" in p for p in prompts_seen), "Duplicate prompt should be skipped in Express mode")
+        self.assertTrue(any("download encrypted dataset duplicate" in p for p in prompts_seen), "Duplicate prompt must be offered before Step 9 in Express mode")
 
         # Step 9 satisfaction check must have been reached
         self.assertTrue(any("satisfied with these transformation results" in p for p in prompts_seen))

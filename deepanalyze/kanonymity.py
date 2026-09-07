@@ -87,13 +87,54 @@ def detect_sensitive_column(df: Union[pl.DataFrame, Any]) -> Optional[str]:
     return None
 
 
+def resolve_quasi_identifiers(
+    df: Union[pl.DataFrame, Any],
+    quasi_identifiers: Optional[Sequence[str]] = None
+) -> List[str]:
+    """Resolves quasi-identifiers for k-anonymity analysis and auto-generalization,
+
+    falling back to low/medium cardinality columns if no recognized QIs are detected.
+    """
+    if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
+        try:
+            pl_df = pl.from_pandas(df)
+        except Exception:
+            pl_df = pl.DataFrame(df)
+    else:
+        pl_df = df
+
+    total_records = len(pl_df)
+    valid_cols = set(pl_df.columns)
+    if quasi_identifiers:
+        qis = [c for c in quasi_identifiers if c in valid_cols]
+    else:
+        qis = detect_quasi_identifiers(pl_df)
+
+    # Fallback: if no recognized QIs, take low/medium cardinality columns
+    if not qis and total_records > 0:
+        candidate_qis = []
+        for c in pl_df.columns:
+            try:
+                # Exclude columns that are already direct ID masks
+                if re.search(r"^(internal_?id|id|uuid|record_?id|client_?id)$", str(c).strip(), re.I):
+                    continue
+                n_unique = pl_df[c].n_unique()
+                if 2 <= n_unique <= min(100, max(2, total_records // 2)):
+                    candidate_qis.append(c)
+            except Exception:
+                pass
+        qis = candidate_qis[:3]
+
+    return qis
+
+
 def analyze_kanonymity(
     df: Union[pl.DataFrame, Any],
     quasi_identifiers: Optional[Sequence[str]] = None,
     sensitive_col: Optional[str] = None,
     threshold_k: int = 3
 ) -> KAnonymityReport:
-    """Computes k-Anonymity equivalence classes and l-Diversity for a DataFrame."""
+    """Computes k-anonymity across identified or user-supplied quasi-identifiers."""
     if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
         try:
             pl_df = pl.from_pandas(df)
@@ -117,24 +158,9 @@ def analyze_kanonymity(
             recommendations=["Dataset is empty."]
         )
 
-    # Resolve QIs
+    # Resolve QIs using unified logic
     valid_cols = set(pl_df.columns)
-    if quasi_identifiers:
-        qis = [c for c in quasi_identifiers if c in valid_cols]
-    else:
-        qis = detect_quasi_identifiers(pl_df)
-
-    # Fallback: if no recognized QIs, take low/medium cardinality columns
-    if not qis:
-        candidate_qis = []
-        for c in pl_df.columns:
-            try:
-                n_unique = pl_df[c].n_unique()
-                if 2 <= n_unique <= min(100, max(2, total_records // 2)):
-                    candidate_qis.append(c)
-            except Exception:
-                pass
-        qis = candidate_qis[:3]
+    qis = resolve_quasi_identifiers(pl_df, quasi_identifiers)
 
     if not qis:
         return KAnonymityReport(
@@ -302,7 +328,7 @@ def auto_generalize_dataframe(
             res_df = res_df.with_columns(pl.Series(col, surrogates))
 
     # 2. Resolve Quasi-Identifiers
-    qis = list(quasi_identifiers) if quasi_identifiers else detect_quasi_identifiers(res_df)
+    qis = resolve_quasi_identifiers(res_df, quasi_identifiers)
     if not qis:
         return res_df
 
