@@ -109,13 +109,32 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
     if parsed.dash:
         target_name = parsed.target or (unknown[0] if unknown else "df")
         target_df = user_ns.get(target_name)
+        multi_sheets = user_ns.get("sheets") or user_ns.get("multi_sheets")
+        if isinstance(target_df, dict):
+            multi_sheets = target_df
+            target_df = next(iter(target_df.values())) if target_df else None
+        elif target_df is None and isinstance(target_name, str) and os.path.exists(target_name):
+            try:
+                if target_name.endswith((".xlsx", ".xls")):
+                    import openpyxl
+                    wb = openpyxl.load_workbook(target_name, read_only=True)
+                    multi_sheets = {}
+                    for s in wb.sheetnames:
+                        multi_sheets[s] = pl.read_excel(target_name, sheet_name=s, engine="openpyxl")
+                    target_df = next(iter(multi_sheets.values())) if multi_sheets else None
+                elif target_name.endswith(".csv"):
+                    target_df = pl.read_csv(target_name)
+            except Exception:
+                pass
+
         policy = resolve_policy(parsed.origin, parsed.jurisdiction or parsed.origin)
         from .cockpit_tui import launch_cockpit_tui
         res_df = launch_cockpit_tui(
             raw_df=target_df,
             policy=policy,
-            dataset_name=target_name,
-            user_ns=user_ns
+            dataset_name=os.path.basename(target_name) if isinstance(target_name, str) else "Dataset",
+            user_ns=user_ns,
+            multi_sheets=multi_sheets
         )
         if res_df is not None and target_name in user_ns:
             user_ns[target_name] = res_df

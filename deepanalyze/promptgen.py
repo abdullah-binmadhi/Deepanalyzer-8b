@@ -185,6 +185,9 @@ def build_master_prompt(
     )
     sections.append("\n---")
 
+    from .policies import detect_dataset_architecture
+    arch_key, arch_title, arch_desc = detect_dataset_architecture(df)
+
     # Section 2: Structural Report Topology & Column Anomalies
     sections.append("\n### 2. STRUCTURAL REPORT TOPOLOGY & FIELD ANOMALIES")
     if topology.foreign_keys:
@@ -195,9 +198,19 @@ def build_master_prompt(
 
     sections.append("\n**Detected Column Anomalies & Formatting Variances:**")
     anomaly_detected = False
+    if arch_key == "ERP_RAGGED":
+        anomaly_detected = True
+        sections.append(
+            "- **Hierarchical ERP Master-Detail Architecture:** Two-tier interleaved document report detected.\n"
+            "  • Tier 1 (Document Master Headers): Document No (e.g. `Doc. No` / `IV-...`), Document Date, Customer Code, Customer Name, and Document Total.\n"
+            "  • Tier 2 (Line Items): Sequence (`1000`, `2000`), GL-Code (`500-...`), Quantity, UOM, Unit Price, and Item Amount.\n"
+            "  • Tier 3 (Continuation Lines): Wrapped description rows without sequence numbers.\n"
+            "  • **CRITICAL:** Do NOT skip or delete master header rows! They contain the invoice headers which must be forward-filled (`ffill`) across their child line items."
+        )
+
     for sname, profile in topology.sheets.items():
         prefix = f"[{sname}] " if sheet_count > 1 else ""
-        if profile.header_row_offset > 0:
+        if profile.header_row_offset > 0 and arch_key != "ERP_RAGGED":
             anomaly_detected = True
             sections.append(f"- {prefix}Top Metadata Offset: Skip first {profile.header_row_offset} rows to access true table headers.")
         if profile.subtotal_rows:
@@ -244,7 +257,18 @@ def build_master_prompt(
     step_num = 1
 
     primary_prof = topology.sheets.get(topology.primary_sheet, next(iter(topology.sheets.values())))
-    if primary_prof.header_row_offset > 0:
+    if arch_key == "ERP_RAGGED":
+        sections.append(
+            f"{step_num}. **Hierarchical Master-Detail Report Deconstruction & Flattening:**\n"
+            "   - Parse the raw table maintaining state: `current_doc_no`, `current_doc_date`, `current_customer_code`, `current_customer_name`, and `current_invoice_total`.\n"
+            "   - When a row contains a document header (e.g. `Doc. No` or pattern `IV-...`), update active master header fields.\n"
+            "   - When a row contains a detail line item (valid numeric `Sequence` like `1000`, `2000`, or non-null `Item Amount`/`Quantity`), create a line item record merged with the current active master header fields (forward-filling master attributes).\n"
+            "   - When a continuation row appears (description text with empty sequence/price), concatenate its text into the preceding line item's `Full_Description`.\n"
+            "   - Filter out duplicate report titles, column header repeats, and summary/subtotal rows.\n"
+            "   - Standardize flattened dataset to the canonical schema: `['Sequence', 'GL-Code', 'Quantity', 'UOM', 'Unit Price', 'Item Amount', 'doc_no', 'doc_date', 'customer_code', 'customer_name', 'invoice_total', 'Full_Description']`."
+        )
+        step_num += 1
+    elif primary_prof.header_row_offset > 0:
         sections.append(f"{step_num}. Skip top {primary_prof.header_row_offset} metadata rows and promote true column names.")
         step_num += 1
 
@@ -281,7 +305,6 @@ def build_master_prompt(
     sections.append("\n---")
 
     # Section 4: Domain Feature Engineering Specification
-    arch_key = "ERP_RAGGED" if primary_prof.header_row_offset > 0 else "CLEAN_TABULAR"
     eng_features = infer_domain_feature_engineering(df, topology, arch_key)
 
     if bb and bb.engineered_features:
@@ -339,6 +362,30 @@ def build_master_prompt(
             f"- **DO NOT call `pd.read_csv()` or `pd.read_excel()`.** Work directly on `{target_df_name}`.\n"
         )
 
+    erp_blueprint = ""
+    if arch_key == "ERP_RAGGED":
+        erp_blueprint = (
+            "\n\n**HIERARCHICAL ERP REFERENCE IMPLEMENTATION PATTERN (PANDAS):**\n"
+            "```python\n"
+            "# Reference blueprint for deconstructing two-tier ERP master-detail reports:\n"
+            "import re\n"
+            "import pandas as pd\n"
+            "import numpy as np\n"
+            "\n"
+            "# 1. Scan rows while tracking active document master state\n"
+            "records = []\n"
+            "master = {'doc_no': None, 'doc_date': None, 'customer_code': None, 'customer_name': None, 'invoice_total': None}\n"
+            "last_rec = None\n"
+            "\n"
+            "# 2. Loop through input rows to capture master headers and line items\n"
+            "# - Detect document ID (e.g. 'IV-11319' or 'Doc. No') -> update master dict\n"
+            "# - Detect line item (numeric Sequence '1000', '2000' or non-null Item Amount) -> append dict merged with master\n"
+            "# - Detect wrapped description line -> concatenate to last_rec['Full_Description']\n"
+            "# 3. Standardize output columns:\n"
+            "# ['Sequence', 'GL-Code', 'Quantity', 'UOM', 'Unit Price', 'Item Amount', 'doc_no', 'doc_date', 'customer_code', 'customer_name', 'invoice_total', 'Full_Description']\n"
+            "```"
+        )
+
     sections.append("\n### 7. CODE OUTPUT & SECURITY CONSTRAINTS (RUNTIME EXECUTION CONTRACT)")
     sections.append(
         f"{multi_sheet_details}\n"
@@ -348,7 +395,7 @@ def build_master_prompt(
         "3. **Regex & String Safety:** When stripping whitespaces or non-standard characters, ALWAYS use raw string regex (e.g. `r'[\\s\\u2009\\u00a0]+'` or `r'[^0-9.]'`). Avoid invalid escape sequences.\n"
         "4. **Pandas 2.x/3.x Safe Types:** When selecting string columns, use `df.select_dtypes(include=['object', 'string'])` (avoid specifying only `'object'` which triggers deprecation warnings).\n"
         "5. **AST Firewall Sandbox Restrictions:** Do NOT perform disk reads, network calls (`requests`, `urllib`), environment queries (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), or timing sleep loops (`time.sleep`). The code runs inside an AST security sandbox.\n"
-        "6. **Formatting:** Wrap your complete executable script inside a single ```python ... ``` fence."
+        f"6. **Formatting:** Wrap your complete executable script inside a single ```python ... ``` fence.{erp_blueprint}"
     )
 
     return "\n".join(sections)

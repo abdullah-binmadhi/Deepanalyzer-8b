@@ -252,7 +252,16 @@ def detect_sheet_role(df: pl.DataFrame, sheet_name: str) -> Tuple[SheetRole, int
 
     # Check header row offset (ERP unflattened metadata rows at the top)
     header_offset = 0
-    if col_count >= 2:
+    # If the sheet contains hierarchical ERP master markers, do NOT skip top rows
+    has_erp_markers = False
+    try:
+        sample_text = " ".join([str(v).lower() for c in df.columns for v in df[c].head(25).drop_nulls().to_list()])
+        if any(k in sample_text for k in ["doc. no", "doc no", "invoice no", "gl code", "voucher no", "po no", "document no"]):
+            has_erp_markers = True
+    except Exception:
+        pass
+
+    if not has_erp_markers and col_count >= 2:
         for r_idx in range(min(row_count, 25)):
             row_vals = [df[c][r_idx] for c in df.columns]
             non_nulls = sum(1 for v in row_vals if v is not None and str(v).strip() != "")

@@ -403,6 +403,13 @@ def auto_generalize_dataframe(
     small_classes = grouped.filter(pl.col("len") < target_k)
 
     if small_classes.height > 0:
+        total_small_rows = int(small_classes["len"].sum())
+        large_classes = grouped.filter(pl.col("len") >= target_k).sort("len", descending=True)
+        if total_small_rows < target_k and large_classes.height > 0:
+            target_replacement = {c: str(large_classes[c][0]) for c in qis}
+        else:
+            target_replacement = {c: "<GENERALIZED>" for c in qis}
+
         small_tuples = set(tuple(str(r[c]) for c in qis) for r in small_classes.to_dicts())
         rows = res_df.select([pl.col(c).cast(pl.Utf8).fill_null("<NULL>") for c in qis]).to_dicts()
         updated_cols = {c: [] for c in qis}
@@ -410,7 +417,7 @@ def auto_generalize_dataframe(
             tup = tuple(str(r[c]) for c in qis)
             if tup in small_tuples:
                 for c in qis:
-                    updated_cols[c].append("<GENERALIZED>")
+                    updated_cols[c].append(target_replacement[c])
             else:
                 for c in qis:
                     updated_cols[c].append(r[c])

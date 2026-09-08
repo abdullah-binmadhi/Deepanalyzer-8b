@@ -86,6 +86,56 @@ class TestCockpitTUI(unittest.TestCase):
 
         asyncio.run(run_pilot())
 
+    def test_dynamic_topology_population_multi_sheet(self):
+        async def run_multi_sheet():
+            multi_sheets = {
+                "Invoices": pl.DataFrame({
+                    "invoice_id": ["INV-1", "INV-2"],
+                    "customer_id": ["C1", "C2"],
+                    "total": [100.0, 200.0]
+                }),
+                "Customers": pl.DataFrame({
+                    "customer_id": ["C1", "C2"],
+                    "name": ["Acme Corp", "Beta LLC"]
+                })
+            }
+            app = DeepAnalyzeCockpitApp(
+                raw_df=multi_sheets["Invoices"],
+                multi_sheets=multi_sheets,
+                dataset_name="MultiSheetTest"
+            )
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.click("#tab-topology")
+                table = pilot.app.query_one("#dt-topology-audit")
+                # Table rows should reflect actual sheets
+                row_names = [table.get_row_at(r)[0] for r in range(table.row_count)]
+                self.assertIn("INVOICES", row_names)
+                self.assertIn("CUSTOMERS", row_names)
+                self.assertNotIn("Orders / Main", row_names)
+                self.assertNotIn("Products_Ref", row_names)
+
+        asyncio.run(run_multi_sheet())
+
+    def test_dynamic_topology_population_hierarchical_single_sheet(self):
+        async def run_hierarchical():
+            erp_df = pl.DataFrame({
+                "doc_no": ["IV-100", "IV-100"],
+                "doc_date": ["2025-08-01", "2025-08-01"],
+                "Sequence": [1000, 2000],
+                "Item Amount": [50.0, 75.0]
+            })
+            app = DeepAnalyzeCockpitApp(raw_df=erp_df, dataset_name="ERP_Test")
+            async with app.run_test(size=(160, 50)) as pilot:
+                await pilot.click("#tab-topology")
+                table = pilot.app.query_one("#dt-topology-audit")
+                row_names = [table.get_row_at(r)[0] for r in range(table.row_count)]
+                self.assertTrue(any("DOCUMENT_MASTER" in r for r in row_names))
+                self.assertTrue(any("LINE_ITEMS" in r for r in row_names))
+                self.assertNotIn("Orders / Main", row_names)
+                self.assertNotIn("Products_Ref", row_names)
+
+        asyncio.run(run_hierarchical())
+
 
 if __name__ == "__main__":
     unittest.main()

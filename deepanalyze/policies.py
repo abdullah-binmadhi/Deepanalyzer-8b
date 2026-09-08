@@ -245,6 +245,19 @@ def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
                 keyword_hits += 1
 
     if (unnamed_count >= 1 and (colon_cell_count >= 2 or keyword_hits >= 2)) or colon_cell_count >= 5 or keyword_hits >= 4:
+        # Check for two-tier hierarchical master-detail ERP report
+        sample_text = " ".join([" ".join(peek_df[c].drop_nulls().to_list()) for c in peek_df.columns]).lower()
+        has_master_marker = any(k in sample_text for k in ["doc. no", "doc no", "invoice no", "voucher no", "po no", "document no"])
+        has_detail_marker = any(k in sample_text for k in ["gl code", "seq", "uom", "unit price", "item code"])
+        has_doc_ids = any(re.search(r"\b[A-Z]{2,4}-\d{4,}\b", " ".join(peek_df[c].drop_nulls().to_list())) for c in peek_df.columns)
+
+        if (has_master_marker and (has_detail_marker or has_doc_ids)) or (keyword_hits >= 4 and has_master_marker):
+            explanation = (
+                "Detected two-tier hierarchical ERP document structure with interleaved master headers "
+                "(Doc. No, Date, Customer) and detail line items (Seq, GL Code, UOM, Quantity, Price)."
+            )
+            return ("ERP_RAGGED", "Hierarchical / Ragged ERP Report", explanation)
+
         explanation = (
             f"Detected ragged layout with {unnamed_count} unnamed/ragged headers, "
             f"{colon_cell_count} metadata colon markers, and {keyword_hits} structural ERP anchors."
