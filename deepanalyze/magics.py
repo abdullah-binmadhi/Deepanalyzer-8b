@@ -18,8 +18,11 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 import polars as pl
-from rich.console import Console
+from rich.console import Console, Group
+from rich.markup import escape
 from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.text import Text
 
 from .client import check_model_health, request_model_fix, request_model_transformation
 from .firewall import (
@@ -185,9 +188,12 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
 
                 repaired_code = clean_markdown_code_blocks(repaired_code)
 
+                diag_esc = escape(str(diagnosis))
                 console.print(Panel(
-                    f"[bold cyan]Forensic Diagnosis:[/bold cyan]\n{diagnosis}\n\n"
-                    f"[bold green]Patched Code Synthesized:[/bold green]\n```python\n{repaired_code}\n```",
+                    Group(
+                        Text.from_markup(f"[bold cyan]Forensic Diagnosis:[/bold cyan]\n{diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
+                        Syntax(repaired_code, "python", theme="monokai", line_numbers=True)
+                    ),
                     title="DeepAnalyze 8B Autonomous Diagnosis",
                     border_style="cyan"
                 ))
@@ -231,16 +237,22 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
                 return user_ns.get(target_name)
 
             except ASTSecurityViolation as err:
+                err_esc = escape(str(err))
                 console.print(Panel(
-                    f"[bold red]REPAIR BLOCKED BY AST FIREWALL[/bold red]\n{err}\n\n"
-                    "The model-synthesized script attempted an action prohibited by local RAM airlock policies.",
+                    Text.from_markup(
+                        f"[bold red]REPAIR BLOCKED BY AST FIREWALL[/bold red]\n{err_esc}\n\n"
+                        "The model-synthesized script attempted an action prohibited by local RAM airlock policies."
+                    ),
                     border_style="red"
                 ))
                 return None
             except Exception as err:
+                err_esc = escape(str(err))
                 console.print(Panel(
-                    f"[bold red]Repair Execution Error:[/bold red] {err}\n\n"
-                    "Re-run %deepanalyze --fix with additional steering instructions to refine the repair.",
+                    Text.from_markup(
+                        f"[bold red]Repair Execution Error:[/bold red] {err_esc}\n\n"
+                        "Re-run %deepanalyze --fix with additional steering instructions to refine the repair."
+                    ),
                     border_style="red"
                 ))
                 return None
@@ -261,9 +273,10 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
                 repair_prompt = "\n".join(repair_prompt_parts)
 
                 copied = copy_to_clipboard(repair_prompt)
+                last_err_esc = escape(str(last_failure.error))
                 fallback_msg = (
                     f"[bold yellow]Local Inference Server Offline[/bold yellow]\n\n"
-                    f"• Root Cause: [red]{last_failure.error}[/red]\n"
+                    f"• Root Cause: [red]{last_err_esc}[/red]\n"
                 )
                 if copied:
                     fallback_msg += "• [bold green]Surgical repair prompt copied to system clipboard.[/bold green] Paste directly into ChatGPT/Claude.\n\n"
@@ -350,9 +363,12 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             autopsy_rep = autopsy_traceback(full_tb, bb=bb_repair, df=target_df.to_pandas() if hasattr(target_df, "to_pandas") else target_df)
             record_execution_failure(target_name, code_to_run, err, full_tb, target_df, autopsy_rep)
 
+            err_esc = escape(str(err))
             console.print(Panel(
-                f"[bold red]EXECUTION BLOCKED BY AST FIREWALL[/bold red]\n{err}\n\n"
-                f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model.",
+                Text.from_markup(
+                    f"[bold red]EXECUTION BLOCKED BY AST FIREWALL[/bold red]\n{err_esc}\n\n"
+                    f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model."
+                ),
                 border_style="red"
             ))
             return None
@@ -364,9 +380,12 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
             autopsy_rep = autopsy_traceback(full_tb, bb=bb_repair, df=target_df.to_pandas() if hasattr(target_df, "to_pandas") else target_df)
             record_execution_failure(target_name, code_to_run, err, full_tb, target_df, autopsy_rep)
 
+            err_esc = escape(str(err))
             console.print(Panel(
-                f"[bold red]Execution Error:[/bold red] {err}\n\n"
-                f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model.",
+                Text.from_markup(
+                    f"[bold red]Execution Error:[/bold red] {err_esc}\n\n"
+                    f"[bold cyan]Hint:[/bold cyan] Run [bold]%deepanalyze --fix[/bold] to autonomously diagnose and repair with local model."
+                ),
                 border_style="red"
             ))
             return None

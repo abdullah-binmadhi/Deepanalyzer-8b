@@ -18,10 +18,13 @@ import traceback
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import polars as pl
-from rich.console import Console
+from rich.console import Console, Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 from .client import check_model_health, request_model_fix
 from .firewall import (
@@ -1030,7 +1033,7 @@ class AirGapWizard:
                             self.console.print("[bold cyan]Submitting sanitized briefing to Frontier Model with zero-PII guarantee...[/bold cyan]")
                             api_ok, api_code, api_resp = call_frontier_model(finalized_prompt)
                             if api_ok and api_code:
-                                self.console.print(Panel(api_code, title="Frontier Generated Transformation Script", border_style="cyan"))
+                                self.console.print(Panel(Syntax(api_code, "python", theme="monokai", line_numbers=True), title="Frontier Generated Transformation Script", border_style="cyan"))
                                 direct_code = api_code
                             else:
                                 self.console.print(f"[bold yellow]Frontier API Notice:[/bold yellow] {api_resp}. Falling back to manual delivery.")
@@ -1052,7 +1055,7 @@ class AirGapWizard:
                         if m_code_text:
                             with open(pq_script_path, "w", encoding="utf-8") as f:
                                 f.write(m_code_text.strip() + "\n")
-                            self.console.print(Panel(m_code_text, title="Incoming Power Query M-Script", border_style="cyan"))
+                            self.console.print(Panel(Syntax(m_code_text, "powerquery", theme="monokai", line_numbers=True), title="Incoming Power Query M-Script", border_style="cyan"))
                             self.console.print(f"[bold green][Saved][/bold green] Power Query M-Script saved to: `[bold]{pq_script_path}[/bold]`")
                             self.console.print("[INFO] Power Query transformations execute natively inside Microsoft Excel / Power BI.")
                             self.console.print("[INFO] A step-by-step UI instruction guide will be generated in Step 12.")
@@ -1093,7 +1096,7 @@ class AirGapWizard:
                                 self.console.print("[yellow]No code entered.[/yellow]")
                             else:
                                 while True:
-                                    self.console.print(Panel(code_text, title="Incoming Script Preview", border_style="cyan"))
+                                    self.console.print(Panel(Syntax(code_text, "python", theme="monokai", line_numbers=True), title="Incoming Script Preview", border_style="cyan"))
                                     Prompt.ask("Press Enter to audit with AST Firewall and execute in local RAM...")
 
                                     # Execution & Self-Healing Loop
@@ -1211,8 +1214,12 @@ class AirGapWizard:
                                                         target_name=df_name,
                                                         schema_info=schema_info
                                                     )
+                                                    diag_esc = escape(str(diag))
                                                     self.console.print(Panel(
-                                                        f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                        Group(
+                                                            Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
+                                                            Syntax(patched_code, "python", theme="monokai", line_numbers=True)
+                                                        ),
                                                         title="DeepAnalyze 8B Autonomous Diagnosis",
                                                         border_style="cyan"
                                                     ))
@@ -1265,10 +1272,14 @@ class AirGapWizard:
                                         repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
                                         record_execution_failure(df_name, code_text, err, full_tb, current_df, repair_prompt)
 
+                                        err_esc = escape(str(err))
+                                        rep_esc = escape(str(repair_prompt))
                                         self.console.print(Panel(
-                                            f"[bold red]Execution Error:[/bold red]\n{err}\n\n"
-                                            f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
-                                            f"{repair_prompt}",
+                                            Text.from_markup(
+                                                f"[bold red]Execution Error:[/bold red]\n{err_esc}\n\n"
+                                                f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                                f"{rep_esc}"
+                                            ),
                                             title="Ouroboros Self-Healing Airlock",
                                             border_style="red"
                                         ))
@@ -1301,8 +1312,12 @@ class AirGapWizard:
                                                     target_name=df_name,
                                                     schema_info=schema_info
                                                 )
+                                                diag_esc = escape(str(diag))
                                                 self.console.print(Panel(
-                                                    f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                    Group(
+                                                        Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
+                                                        Syntax(patched_code, "python", theme="monokai", line_numbers=True)
+                                                    ),
                                                     title="DeepAnalyze 8B Autonomous Diagnosis",
                                                     border_style="cyan"
                                                 ))
@@ -1331,7 +1346,7 @@ class AirGapWizard:
                                     self.console.print("[yellow]Empty block skipped.[/yellow]")
                                     break
 
-                                self.console.print(Panel(block_text, title=f"Code Block {block_num} Preview", border_style="cyan"))
+                                self.console.print(Panel(Syntax(block_text, "python", theme="monokai", line_numbers=True), title=f"Code Block {block_num} Preview", border_style="cyan"))
                                 Prompt.ask("Press Enter to audit and execute this block...")
 
                                 block_success = False
@@ -1369,10 +1384,14 @@ class AirGapWizard:
                                         repair_prompt = autopsy_traceback(full_tb, bb=bb_repair, df=current_pd)
                                         record_execution_failure(df_name, block_text, err, full_tb, current_df, repair_prompt)
 
+                                        err_esc = escape(str(err))
+                                        rep_esc = escape(str(repair_prompt))
                                         self.console.print(Panel(
-                                            f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err}\n\n"
-                                            f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
-                                            f"{repair_prompt}",
+                                            Text.from_markup(
+                                                f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err_esc}\n\n"
+                                                f"[bold cyan]Ouroboros Self-Healing Autopsy & Repair Prompt:[/bold cyan]\n"
+                                                f"{rep_esc}"
+                                            ),
                                             title="Ouroboros Self-Healing Airlock",
                                             border_style="red"
                                         ))
@@ -1405,8 +1424,12 @@ class AirGapWizard:
                                                     target_name=df_name,
                                                     schema_info=schema_info
                                                 )
+                                                diag_esc = escape(str(diag))
                                                 self.console.print(Panel(
-                                                    f"[bold cyan]Diagnosis:[/bold cyan] {diag}\n\n[bold green]Patched Code Synthesized:[/bold green]\n```python\n{patched_code}\n```",
+                                                    Group(
+                                                        Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
+                                                        Syntax(patched_code, "python", theme="monokai", line_numbers=True)
+                                                    ),
                                                     title="DeepAnalyze 8B Autonomous Diagnosis",
                                                     border_style="cyan"
                                                 ))
@@ -1518,13 +1541,13 @@ class AirGapWizard:
                                         fe_code = f_code
                                 if not fe_code:
                                     copy_to_clipboard(fe_briefing)
-                                    self.console.print(Panel(fe_briefing, title="Sanitized Engineering Briefing (Copied to Clipboard)", border_style="cyan"))
+                                    self.console.print(Panel(Syntax(fe_briefing, "markdown", theme="monokai", line_numbers=False), title="Sanitized Engineering Briefing (Copied to Clipboard)", border_style="cyan"))
                                     fe_code = read_multiline_input(self.console, "Paste Frontier Feature Engineering Script below:")
 
                                 if fe_code:
                                     self.console.print("[bold cyan]Aligning and stitching columns with local DeepAnalyze 8B model...[/bold cyan]")
                                     s_stitch, stitched_fe, diag = stitch_code_with_local_model(fe_code, final_df, df_var=df_name)
-                                    self.console.print(Panel(stitched_fe, title="Stitched Engineering Code (Polars/Pandas)", border_style="cyan"))
+                                    self.console.print(Panel(Syntax(stitched_fe, "python", theme="monokai", line_numbers=True), title="Stitched Engineering Code (Polars/Pandas)", border_style="cyan"))
                                     fe_scope = {"df": final_df, df_name: final_df, "pl": pl}
                                     try:
                                         execute_code_safely(stitched_fe, fe_scope, timeout_sec=20.0)
