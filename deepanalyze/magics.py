@@ -10,6 +10,7 @@ Implements the six streamlined directives:
 """
 
 import argparse
+import os
 import re
 import shlex
 import sys
