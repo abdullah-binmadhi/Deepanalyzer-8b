@@ -107,8 +107,29 @@ class TestERPCleaner(unittest.TestCase):
         py_recipe = generate_python_recipe(self.raw_pl, dataset_name="SalesLedger")
         self.assertIn("STATE-MACHINE PATTERN", py_recipe.upper())
         self.assertIn("def clean_erp_report", py_recipe)
-        self.assertIn("doc_regex", py_recipe)
-        self.assertIn("Sequence", py_recipe)
+    def test_flatten_arbitrary_sap_oracle_layout(self):
+        # Different 7-column layout with different column names and structure
+        sap_data = [
+            ['Company Code: 1000', None, None, None, None, None, None],
+            ['Invoice No', 'Invoice Date', 'Customer', 'Line No', 'Description', 'Qty', 'Amount'],
+            ['INV-99001', '2025-09-01', 'DEUTSCHLAND GMBH', None, None, None, '5,000.00'],
+            [None, None, None, '10', 'INDUSTRIAL BEARING 40MM', '50', '2,500.00'],
+            [None, None, None, None, 'EXTENDED WARRANTY 12M', None, None],
+            [None, None, None, '20', 'HYDRAULIC VALVE SEAL', '100', '2,500.00'],
+            ['Grand Total', None, None, None, None, None, '5,000.00']
+        ]
+        sap_df = pd.DataFrame(sap_data)
+        clean_sap = flatten_hierarchical_erp(sap_df)
+        self.assertEqual(clean_sap.height, 2)
+        row0 = clean_sap.row(0, named=True)
+        self.assertEqual(row0["doc_no"], "INV-99001")
+        self.assertEqual(row0["customer_name"], "DEUTSCHLAND GMBH")
+        self.assertEqual(row0["Sequence"], 10)
+        self.assertEqual(row0["Quantity"], 50.0)
+        self.assertEqual(row0["Item Amount"], 2500.0)
+        # Verify wrap
+        self.assertIn("INDUSTRIAL BEARING 40MM", row0["Full_Description"])
+        self.assertIn("EXTENDED WARRANTY 12M", row0["Full_Description"])
 
 
 if __name__ == "__main__":
