@@ -1,7 +1,6 @@
 {
   "python.pyrefly.disableTypeErrors": true,
   "python.pyrefly.typeCheckingMode": "off",
-  "python.pyrefly.displayTypeErrors": "force-off",
   "python.analysis.diagnosticMode": "openFilesOnly",
   "python.analysis.ignore": [
     "**/__pyrefly_virtual__/**",
