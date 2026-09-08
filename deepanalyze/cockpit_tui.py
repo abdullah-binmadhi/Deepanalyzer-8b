@@ -1306,7 +1306,7 @@ class DeepAnalyzeCockpitApp(App):
             # Single DataFrame analysis: check for hierarchical master-detail or fact-dimension structure
             cols = target_df.columns
             cols_low = [c.lower() for c in cols]
-            is_hierarchical = any(k in cols_low for k in ["doc_no", "doc no", "sequence", "seq", "gl-code", "gl_code", "full_description"]) or any("iv-" in str(v).lower() for c in cols[:3] for v in target_df[c].head(10).drop_nulls().to_list())
+            is_hierarchical = any(k in cols_low for k in ["doc_no", "doc no", "sequence", "seq", "gl-code", "gl_code", "full_description", "invoice_no", "voucher", "order_no"]) or detect_ragged_erp(target_df)[0]
 
             if is_hierarchical:
                 hdr_cols = [c for c in cols if any(k in c.lower() for k in ["doc", "inv", "customer", "date", "total", "client", "party"])]

@@ -3,78 +3,108 @@
 
 Provides non-technical users, financial controllers, and accountants with
 ready-to-paste Power Query M-code and an explicit, click-by-click UI walkthrough
-to clean unflattened ERP spreadsheets directly in Microsoft Excel.
+to clean unflattened ERP spreadsheets directly in Microsoft Excel dynamically.
 """
 
-from typing import Optional
+import os
+from typing import Optional, Union
+import pandas as pd
+import polars as pl
 
 
-def generate_powerquery_m_code(file_path: str, sheet_name: str = "Report") -> str:
+def generate_powerquery_m_code(
+    file_path: str,
+    sheet_name: str = "Report",
+    df: Optional[Union[pd.DataFrame, pl.DataFrame]] = None,
+) -> str:
     """Generates ready-to-paste Power Query M-code for the Excel Advanced Editor."""
+    from .erp_cleaner import sniff_erp_layout, ERPLayoutSchema
+
     normalized_path = file_path.replace("\\", "/")
+
+    schema = None
+    if df is not None:
+        schema = sniff_erp_layout(df)
+    elif os.path.isfile(file_path):
+        try:
+            schema = sniff_erp_layout(file_path)
+        except Exception:
+            schema = ERPLayoutSchema()
+    else:
+        schema = ERPLayoutSchema()
+
+    col_doc = f"Column{schema.doc_col + 1}"
+    col_date = f"Column{schema.date_col + 1}" if schema.date_col is not None else "Column3"
+    col_code = f"Column{schema.entity_code_col + 1}" if schema.entity_code_col is not None else "Column5"
+    col_name = f"Column{schema.entity_name_col + 1}" if schema.entity_name_col is not None else "Column7"
+    col_total = f"Column{schema.total_col + 1}" if schema.total_col is not None else "Column16"
+    col_desc = f"Column{schema.desc_col + 1}"
+    col_qty = f"Column{schema.qty_col + 1}" if schema.qty_col is not None else "Column11"
+    col_uom = f"Column{schema.uom_col + 1}" if schema.uom_col is not None else "Column12"
+    col_price = f"Column{schema.price_col + 1}" if schema.price_col is not None else "Column13"
+    col_amt = f"Column{schema.amount_col + 1}" if schema.amount_col is not None else "Column14"
+
+    prefix_checks = " or ".join([
+        f'Text.StartsWith([{col_doc}], "{p}")' for p in schema.doc_prefixes
+    ])
 
     m_code = f"""let
     // 1. Ingest Excel Workbook
     Source = Excel.Workbook(File.Contents("{normalized_path}"), null, true),
     Navigation = Source{{[Item="{sheet_name}", Kind="Sheet"]}}[Data],
 
-    // 2. Remove top report metadata rows (headers/filters)
-    #"Removed Top Rows" = Table.Skip(Navigation, 18),
+    // 2. Filter out summary grand totals and page headers dynamically without hardcoded row slicing
+    #"Changed Type Col1" = Table.TransformColumnTypes(Navigation, {{{{"{col_doc}", type text}}}}),
+    #"Filtered Grand Total" = Table.SelectRows(#"Changed Type Col1", each ([{col_doc}] = null or (not Text.Contains([{col_doc}], "Grand Total") and not Text.Contains([{col_doc}], "Page ")))),
 
-    // 3. Ensure column 1 is treated as text for pattern matching (nested list syntax)
-    #"Changed Type Col1" = Table.TransformColumnTypes(#"Removed Top Rows", {{{{"Column1", type text}}}}),
+    // 3. Extract document-level headers dynamically using null-safe conditional columns
+    #"Add {schema.doc_name}" = Table.AddColumn(#"Filtered Grand Total", "{schema.doc_name}", each if [{col_doc}] <> null and ({prefix_checks}) then [{col_doc}] else null),
+    #"Add {schema.date_name}" = Table.AddColumn(#"Add {schema.doc_name}", "{schema.date_name}", each if [{schema.doc_name}] <> null then [{col_date}] else null),
+    #"Add {schema.entity_code_name}" = Table.AddColumn(#"Add {schema.date_name}", "{schema.entity_code_name}", each if [{schema.doc_name}] <> null then [{col_code}] else null),
+    #"Add {schema.entity_name_name}" = Table.AddColumn(#"Add {schema.entity_code_name}", "{schema.entity_name_name}", each if [{schema.doc_name}] <> null then [{col_name}] else null),
+    #"Add {schema.total_name}" = Table.AddColumn(#"Add {schema.entity_name_name}", "{schema.total_name}", each if [{schema.doc_name}] <> null then [{col_total}] else null),
 
-    // 4. Exclude summary grand totals (null-safe guard)
-    #"Filtered Grand Total" = Table.SelectRows(#"Changed Type Col1", each ([Column1] = null or not Text.Contains([Column1], "Grand Total"))),
+    // 4. Forward-fill document headers down to all transaction line items
+    #"Filled Down Headers" = Table.FillDown(#"Add {schema.total_name}", {{"{schema.doc_name}", "{schema.date_name}", "{schema.entity_code_name}", "{schema.entity_name_name}", "{schema.total_name}"}}),
 
-    // 5. Extract document-level headers using null-safe conditional columns
-    #"Add doc_no" = Table.AddColumn(#"Filtered Grand Total", "doc_no", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column1] else null),
-    #"Add doc_date" = Table.AddColumn(#"Add doc_no", "doc_date", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column3] else null),
-    #"Add customer_code" = Table.AddColumn(#"Add doc_date", "customer_code", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column5] else null),
-    #"Add customer_name" = Table.AddColumn(#"Add customer_code", "customer_name", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column7] else null),
-    #"Add invoice_total" = Table.AddColumn(#"Add customer_name", "invoice_total", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column16] else null),
+    // 5. Extract line items and filter out non-item rows
+    #"Type Sequence" = Table.TransformColumnTypes(#"Filled Down Headers", {{{{"{col_doc}", Int64.Type}}}}),
+    #"Handled Errors" = Table.ReplaceErrorValues(#"Type Sequence", {{{{"{col_doc}", null}}}}),
+    #"Filtered Line Items" = Table.SelectRows(#"Handled Errors", each ([{col_doc}] <> null)),
 
-    // 6. Forward-fill document headers down to all transaction line items
-    #"Filled Down Headers" = Table.FillDown(#"Add invoice_total", {{"doc_no", "doc_date", "customer_code", "customer_name", "invoice_total"}}),
-
-    // 7. Extract numeric sequence items and filter out non-item rows (nested list syntax)
-    #"Type Sequence" = Table.TransformColumnTypes(#"Filled Down Headers", {{{{"Column1", Int64.Type}}}}),
-    #"Handled Errors" = Table.ReplaceErrorValues(#"Type Sequence", {{"Column1", null}}),
-    #"Filtered Line Items" = Table.SelectRows(#"Handled Errors", each ([Column1] <> null)),
-
-    // 8. Select and rename final 12 business columns
+    // 6. Select and rename business columns
     #"Selected Columns" = Table.SelectColumns(#"Filtered Line Items", {{
-        "Column1", "Column2", "Column11", "Column12", "Column13", "Column14",
-        "doc_no", "doc_date", "customer_code", "customer_name", "invoice_total", "Column4"
+        "{col_doc}", "{col_code}", "{col_qty}", "{col_uom}", "{col_price}", "{col_amt}",
+        "{schema.doc_name}", "{schema.date_name}", "{schema.entity_code_name}", "{schema.entity_name_name}", "{schema.total_name}", "{col_desc}"
     }}),
     #"Renamed Columns" = Table.RenameColumns(#"Selected Columns", {{
-        {{"Column1", "Sequence"}},
-        {{"Column2", "GL-Code"}},
-        {{"Column11", "Quantity"}},
-        {{"Column12", "UOM"}},
-        {{"Column13", "Unit Price"}},
-        {{"Column14", "Item Amount"}},
-        {{"Column4", "Full_Description"}}
+        {{"{col_doc}", "{schema.seq_name}"}},
+        {{"{col_code}", "{schema.item_code_name}"}},
+        {{"{col_qty}", "{schema.qty_name}"}},
+        {{"{col_uom}", "{schema.uom_name}"}},
+        {{"{col_price}", "{schema.price_name}"}},
+        {{"{col_amt}", "{schema.amount_name}"}},
+        {{"{col_desc}", "{schema.desc_name}"}}
     }}),
 
-    // 9. Enforce strict types
+    // 7. Enforce strict types
     #"Final Types" = Table.TransformColumnTypes(#"Renamed Columns", {{
-        {{"Sequence", Int64.Type}},
-        {{"GL-Code", type text}},
-        {{"Quantity", type number}},
-        {{"UOM", type text}},
-        {{"Unit Price", type number}},
-        {{"Item Amount", type number}},
-        {{"doc_no", type text}},
-        {{"doc_date", type date}},
-        {{"customer_code", type text}},
-        {{"customer_name", type text}},
-        {{"invoice_total", type number}},
-        {{"Full_Description", type text}}
+        {{"{schema.seq_name}", Int64.Type}},
+        {{"{schema.item_code_name}", type text}},
+        {{"{schema.qty_name}", type number}},
+        {{"{schema.uom_name}", type text}},
+        {{"{schema.price_name}", type number}},
+        {{"{schema.amount_name}", type number}},
+        {{"{schema.doc_name}", type text}},
+        {{"{schema.date_name}", type date}},
+        {{"{schema.entity_code_name}", type text}},
+        {{"{schema.entity_name_name}", type text}},
+        {{"{schema.total_name}", type number}},
+        {{"{schema.desc_name}", type text}}
     }}),
 
-    // 10. Sort descending by Invoice Total
-    #"Sorted Rows" = Table.Sort(#"Final Types", {{{{ "invoice_total", Order.Descending }}}})
+    // 8. Sort descending by Document Total
+    #"Sorted Rows" = Table.Sort(#"Final Types", {{{{ "{schema.total_name}", Order.Descending }}}})
 in
     #"Sorted Rows"
 """
@@ -83,15 +113,33 @@ in
 
 def generate_powerquery_step_by_step_guide(
     dataset_name: str,
-    file_path: Optional[str] = None
+    file_path: Optional[str] = None,
+    df: Optional[Union[pd.DataFrame, pl.DataFrame]] = None,
 ) -> str:
-    """Generates a complete markdown guide with click-by-click UI steps.
+    """Generates a complete markdown guide with click-by-click UI steps."""
+    from .erp_cleaner import sniff_erp_layout, ERPLayoutSchema
 
-    No redundant script is embedded since the M-code is provided directly in powerquery_script.m.
-    """
     display_path = file_path or f"/path/to/{dataset_name}"
     is_csv = display_path.lower().endswith(".csv")
     file_type_label = "From Text/CSV" if is_csv else "From Excel Workbook"
+
+    schema = None
+    if df is not None:
+        schema = sniff_erp_layout(df)
+    elif file_path and os.path.isfile(file_path):
+        try:
+            schema = sniff_erp_layout(file_path)
+        except Exception:
+            schema = ERPLayoutSchema()
+    else:
+        schema = ERPLayoutSchema()
+
+    col_doc = f"Column{schema.doc_col + 1}"
+    col_date = f"Column{schema.date_col + 1}" if schema.date_col is not None else "Column3"
+    col_code = f"Column{schema.entity_code_col + 1}" if schema.entity_code_col is not None else "Column5"
+    col_name = f"Column{schema.entity_name_col + 1}" if schema.entity_name_col is not None else "Column7"
+    col_total = f"Column{schema.total_col + 1}" if schema.total_col is not None else "Column16"
+    col_desc = f"Column{schema.desc_col + 1}"
 
     guide = f"""# Excel Power Query Step-by-Step Data Cleaning Guide
 
@@ -118,64 +166,59 @@ This guide explains how to flatten and clean **{dataset_name}** directly inside 
 
 If you want to understand or build the steps manually using Excel buttons:
 
-### Step 1: Remove Top Report Headers
-* Click **Home** tab -> **Remove Rows** -> **Remove Top Rows**.
-* Enter `18` and click OK.
+### Step 1: Remove Non-Data Headers / Filter Noise
+* If there are title or filter banner rows before table columns, click **Home** tab -> **Remove Rows** -> **Remove Top Rows** (or use text filtering).
+* Avoid excessive row skips so early transactions are preserved.
 
-### Step 2: Filter Out Grand Total
-* Click the dropdown arrow on **Column1**.
+### Step 2: Filter Out Summary Footers
+* Click the dropdown arrow on **{col_doc}**.
 * Go to **Text Filters** -> **Does Not Contain...**
 * Type `Grand Total` and click OK.
 
-### Step 3: Extract Invoice Header Data into New Columns
+### Step 3: Extract Document Header Data into New Columns
 * Click the **Add Column** tab -> **Conditional Column**.
-* Create the following 5 columns one by one:
-  1. **doc_no**:
-     * *If* `Column1` *begins with* `IV-`
-     * *Then* select column: `Column1`
+* Create the following columns:
+  1. **{schema.doc_name}**:
+     * *If* `{col_doc}` *begins with* document prefix (e.g. `{"`, `".join(schema.doc_prefixes[:3])}`)
+     * *Then* select column: `{col_doc}`
      * *Else* leave empty (null).
-  2. **doc_date**:
-     * *If* `Column1` *begins with* `IV-`
-     * *Then* select column: `Column3`
+  2. **{schema.date_name}**:
+     * *If* `{col_doc}` *begins with* document prefix
+     * *Then* select column: `{col_date}`
      * *Else* leave empty (null).
-  3. **customer_code**:
-     * *If* `Column1` *begins with* `IV-`
-     * *Then* select column: `Column5`
+  3. **{schema.entity_code_name}**:
+     * *If* `{col_doc}` *begins with* document prefix
+     * *Then* select column: `{col_code}`
      * *Else* leave empty (null).
-  4. **customer_name**:
-     * *If* `Column1` *begins with* `IV-`
-     * *Then* select column: `Column7`
+  4. **{schema.entity_name_name}**:
+     * *If* `{col_doc}` *begins with* document prefix
+     * *Then* select column: `{col_name}`
      * *Else* leave empty (null).
-  5. **invoice_total**:
-     * *If* `Column1` *begins with* `IV-`
-     * *Then* select column: `Column16`
+  5. **{schema.total_name}**:
+     * *If* `{col_doc}` *begins with* document prefix
+     * *Then* select column: `{col_total}`
      * *Else* leave empty (null).
 
 ### Step 4: Fill Down Header Data
-* Hold `Ctrl` (or `Cmd` on Mac) and select the 5 new columns: `doc_no`, `doc_date`, `customer_code`, `customer_name`, `invoice_total`.
+* Hold `Ctrl` (or `Cmd` on Mac) and select the master columns: `{schema.doc_name}`, `{schema.date_name}`, `{schema.entity_code_name}`, `{schema.entity_name_name}`, `{schema.total_name}`.
 * Go to the **Transform** tab -> click **Fill** -> **Down**.
-* Notice how the invoice number and customer names now appear on every single line item!
+* Notice how the document number and customer/account attributes now appear on every single line item!
 
 ### Step 5: Filter for Line Items (Numeric Sequence)
-* Select **Column1** -> click **Transform** tab -> **Data Type** -> choose **Whole Number**.
-* Any non-numeric rows (like Seq or empty cells) will turn into errors.
-* Right-click the **Column1** header -> select **Replace Errors** -> type `null`.
-* Click the filter dropdown on **Column1** -> uncheck `(null)` so only numbers (1000, 2000, etc.) remain.
+* Select **{col_doc}** -> click **Transform** tab -> **Data Type** -> choose **Whole Number**.
+* Any non-numeric rows (like headers or empty cells) will turn into errors.
+* Right-click the **{col_doc}** header -> select **Replace Errors** -> type `null`.
+* Click the filter dropdown on **{col_doc}** -> uncheck `(null)` so only numbers remain.
 
 ### Step 6: Choose and Rename Columns
 * Click **Home** tab -> **Choose Columns**.
-* Keep only: `Column1`, `Column2`, `Column11`, `Column12`, `Column13`, `Column14`, `doc_no`, `doc_date`, `customer_code`, `customer_name`, `invoice_total`, `Column4`.
-* Double-click each header to rename:
-  * `Column1` -> **Sequence**
-  * `Column2` -> **GL-Code**
-  * `Column11` -> **Quantity**
-  * `Column12` -> **UOM**
-  * `Column13` -> **Unit Price**
-  * `Column14` -> **Item Amount**
-  * `Column4` -> **Full_Description**
+* Keep business columns and rename them to standard canonical names:
+  * `{col_doc}` -> **{schema.seq_name}**
+  * `{col_desc}` -> **{schema.desc_name}**
+  * `{col_total}` -> **{schema.total_name}**
 
 ### Step 7: Sort and Load
-* Click the dropdown arrow on **invoice_total** -> select **Sort Descending**.
+* Click the dropdown arrow on **{schema.total_name}** -> select **Sort Descending**.
 * Click **Home** tab -> **Close & Load**.
 """
     return guide.strip()

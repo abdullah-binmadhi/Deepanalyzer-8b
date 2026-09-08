@@ -691,7 +691,7 @@ class AirGapWizard:
                     self.console.print(f"[bold yellow]Note:[/bold yellow] Could not write file ({e}).")
                 self.console.print(Panel.fit(
                     "[bold cyan]Power Query Step-by-Step Guide Preview[/bold cyan]\n"
-                    "- Ingest without `Table.Skip(18)` (preserves early invoices like IV-11319)\n"
+                    "- Ingest without hardcoded row skips (preserves all early transactions without data loss)\n"
                     "- Conditional columns for Doc No, Date, Customer Code/Name, Total\n"
                     "- Fill Down master columns across child line items\n"
                     "- Filter noise, set canonical types and copy-paste ready M-code",
@@ -1740,10 +1740,10 @@ class AirGapWizard:
                 # Export Excel Power Query Companion (ONLY when Power Query path was chosen)
                 if pipeline_type == "powerquery" and pq_script_path:
                     try:
-                        from .powerquery import generate_powerquery_step_by_step_guide
+                        from .erp_cleaner import generate_guided_cleaning_markdown
                         pq_guide_path = os.path.join(dataset_dir, "powerquery_guide.md")
                         with open(pq_guide_path, "w", encoding="utf-8") as f:
-                            f.write(generate_powerquery_step_by_step_guide(dataset_base_name, cleaned_input))
+                            f.write(generate_guided_cleaning_markdown(df, dataset_name=dataset_base_name, file_path=cleaned_input))
                         self.console.print(
                             f"[bold green][Exported][/bold green] Excel Power Query Companion Exported:\n"
                             f"  • M-Script: `[bold]{pq_script_path}[/bold]`\n"

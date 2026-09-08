@@ -7,6 +7,7 @@ Operates strictly in-memory in RAM, with zero disk leaks and guaranteed zero dat
 """
 
 from dataclasses import dataclass, field
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -43,7 +44,10 @@ class ERPLayoutSchema:
     amount_col: Optional[int] = None
     amount_name: str = "Item_Amount"
 
-    doc_regex_pattern: str = r"^(IV|INV|CN|DN|PO|SO|BILL|REC|PV|RV|VOUCH|ORD)[-_\s]?\d+"
+    doc_prefixes: List[str] = field(default_factory=lambda: [
+        "IV-", "INV-", "CN-", "DN-", "PO-", "SO-", "BILL-", "REC-", "PV-", "RV-", "VOUCH-", "ORD-"
+    ])
+    doc_regex_pattern: str = r"^(IV|INV|CN|DN|PO|SO|BILL|REC|PV|RV|VOUCH|ORD)[-_\s]?\d+|^[A-Za-z]{1,6}[-_/\s]\d{3,12}"
     noise_keywords: List[str] = field(default_factory=lambda: [
         "Doc. No", "Seq", "Account Summary", "Grand Total", "Sub Total", "Total:",
         "GL Code", "Page ", "Print Date", "Report Date", "Selection:", "Parameters:"
@@ -58,9 +62,16 @@ KNOWN_UOMS = {
 }
 
 
-def sniff_erp_layout(df: Union[pl.DataFrame, pd.DataFrame]) -> ERPLayoutSchema:
+def sniff_erp_layout(df: Union[str, pl.DataFrame, pd.DataFrame]) -> ERPLayoutSchema:
     """Dynamically sniffs column roles, header bands, and field coordinates from raw data."""
-    if isinstance(df, pl.DataFrame):
+    if isinstance(df, str):
+        if not os.path.isfile(df):
+            raise FileNotFoundError(f"File not found: {df}")
+        if df.lower().endswith((".xlsx", ".xls")):
+            pdf = pd.read_excel(df, header=None, nrows=150)
+        else:
+            pdf = pd.read_csv(df, header=None, nrows=150)
+    elif isinstance(df, pl.DataFrame):
         pdf = df.head(150).to_pandas()
     else:
         pdf = df.head(150).copy()
@@ -106,20 +117,20 @@ def sniff_erp_layout(df: Union[pl.DataFrame, pd.DataFrame]) -> ERPLayoutSchema:
         c_row = pdf.iloc[child_header_row]
         for c in range(num_cols):
             v_str = str(c_row.iloc[c]).strip().lower() if pd.notna(c_row.iloc[c]) else ""
-            if any(k in v_str for k in ["seq", "line no", "line", "item no", "sl no", "item"]):
+            if any(k in v_str for k in ["seq", "line no", "line", "item no", "sl no"]):
                 schema.seq_col = c
-            elif any(k in v_str for k in ["gl code", "item code", "code", "part no", "sku"]) and c != schema.doc_col:
+            elif any(k in v_str for k in ["gl code", "item code", "part no", "sku"]) and c != schema.doc_col:
                 schema.item_code_col = c
             elif any(k in v_str for k in ["description", "narration", "particulars", "item name"]):
                 schema.desc_col = c
             elif any(k in v_str for k in ["qty", "quantity", "units", "hours"]):
                 schema.qty_col = c
-            elif any(k in v_str for k in ["uom", "unit", "measure"]):
-                schema.uom_col = c
-            elif any(k in v_str for k in ["unit price", "price", "rate", "cost"]):
+            elif any(k in v_str for k in ["unit price", "unit cost", "unit rate", "price", "rate", "cost"]):
                 schema.price_col = c
             elif any(k in v_str for k in ["item amount", "line amount", "amount", "line total"]):
                 schema.amount_col = c
+            elif any(k in v_str for k in ["uom", "measure"]) or v_str in ["unit", "units"]:
+                schema.uom_col = c
             elif "total" in v_str and schema.total_col is None:
                 schema.total_col = c
 
@@ -209,6 +220,16 @@ def sniff_erp_layout(df: Union[pl.DataFrame, pd.DataFrame]) -> ERPLayoutSchema:
             # Highest index or largest magnitude is usually the total
             schema.total_col = col_indices[-1]
 
+    # Discover actual document prefixes present in the dataset's document column
+    doc_series = pdf.iloc[:, schema.doc_col].dropna().astype(str).str.strip()
+    prefix_pattern = re.compile(r"^([A-Za-z]{1,8}[-_/\s])\d+")
+    discovered_prefixes = set(schema.doc_prefixes)
+    for v in doc_series:
+        m = prefix_pattern.match(v)
+        if m:
+            discovered_prefixes.add(m.group(1).upper())
+    schema.doc_prefixes = sorted(list(discovered_prefixes))
+
     return schema
 
 
@@ -277,11 +298,11 @@ def detect_ragged_erp(
 
 
 def flatten_hierarchical_erp(
-    df: Union[pl.DataFrame, pd.DataFrame],
+    df: Union[str, pl.DataFrame, pd.DataFrame],
+    custom_schema: Optional[ERPLayoutSchema] = None,
     return_polars: bool = True,
-    custom_schema: Optional[ERPLayoutSchema] = None
 ) -> Union[pl.DataFrame, pd.DataFrame]:
-    """Deconstructs unflattened master-detail ERP exports into canonical tabular format using dynamic sniffing.
+    """Universal state-machine flattener for unflattened, ragged ERP matrices.
 
     Universally handles:
     - Dynamic Header Detection: Automatically aligns to parent & child schema without hardcoded indices.
@@ -295,7 +316,14 @@ def flatten_hierarchical_erp(
         empty_df = pl.DataFrame() if return_polars else pd.DataFrame()
         return empty_df
 
-    if isinstance(df, pl.DataFrame):
+    if isinstance(df, str):
+        if not os.path.isfile(df):
+            raise FileNotFoundError(f"Source file not found: {df}")
+        if df.lower().endswith((".xlsx", ".xls")):
+            pdf = pd.read_excel(df, header=None)
+        else:
+            pdf = pd.read_csv(df, header=None)
+    elif isinstance(df, pl.DataFrame):
         if df.height == 0 or df.width == 0:
             return df if return_polars else df.to_pandas()
         pdf = df.to_pandas()
@@ -491,7 +519,7 @@ def flatten_hierarchical_erp(
             curr_line = {
                 **curr_master,
                 schema.seq_name: seq_num,
-                schema.item_code_name: item_code if item_code else "500-000",
+                schema.item_code_name: item_code,
                 schema.desc_name: val_desc,
                 schema.qty_name: qty,
                 schema.uom_name: uom,
@@ -527,21 +555,13 @@ def flatten_hierarchical_erp(
         rename_dict["Item_Code"] = "GL-Code"
     clean_pdf = clean_pdf.rename(columns=rename_dict)
 
-    # Fill internal nulls to guarantee 0 nulls across the entire DataFrame
-    fill_defaults = {
-        "Sequence": 1000,
-        "GL-Code": "500-000",
-        "Quantity": 1.0,
-        "UOM": "CTN",
-        "Unit Price": 0.0,
-        "Item Amount": 0.0,
-        schema.doc_name: "",
-        schema.date_name: "",
-        schema.entity_code_name: "",
-        schema.entity_name_name: "",
-        schema.total_name: 0.0,
-        schema.desc_name: "",
-    }
+    # Dynamic fill defaults based on column types to guarantee 0 nulls
+    fill_defaults = {}
+    for col in clean_pdf.columns:
+        if col in ["Quantity", "Unit Price", "Item Amount", "Sequence", schema.total_name]:
+            fill_defaults[col] = 0.0 if col != "Sequence" else 1000
+        else:
+            fill_defaults[col] = ""
     clean_pdf = clean_pdf.fillna(fill_defaults).fillna("")
 
     # Cast canonical column types
@@ -596,8 +616,8 @@ def generate_powerquery_recipe(
 
 ### EXECUTIVE SUMMARY & PITFALL WARNING
 > [!CAUTION]
-> **Avoid Hardcoded `Table.Skip(18)` or Arbitrary Row Deletions:**
-> In unflattened ERP listings, hardcoding fixed row skips permanently discards valid transactions.
+> **Avoid Hardcoded `Table.Skip(N)` or Arbitrary Row Deletions:**
+> In unflattened ERP listings, hardcoding fixed row skips permanently discards valid transactions (e.g. early invoices/orders situated before standard table bodies).
 > DeepAnalyze automatically sniffed your layout:
 > - Document Identifier Column: `{col_doc}`
 > - Master Date Column: `{col_date}`
@@ -611,12 +631,12 @@ def generate_powerquery_recipe(
 ### PART 1: STEP-BY-STEP POWER QUERY GUI WALKTHROUGH
 
 #### Step 1: Ingest Raw Data Without Promoting Headers
-1. In Excel / Power BI, choose **Data** $\\rightarrow$ **Get Data** $\\rightarrow$ **From File** $\\rightarrow$ **From Excel Workbook**.
+1. In Excel / Power BI, choose **Data** $\rightarrow$ **Get Data** $\rightarrow$ **From File** $\rightarrow$ **From Excel Workbook**.
 2. Select your worksheet and click **Transform Data**.
 3. Keep default generic indexed columns (`Column1`, `Column2`, etc.) to parse multi-level structures.
 
 #### Step 2: Extract Document Header Information (Conditional Columns)
-1. Go to **Add Column** $\\rightarrow$ **Conditional Column**:
+1. Go to **Add Column** $\rightarrow$ **Conditional Column**:
    - Column Name: `doc_no`
    - Condition: If `{col_doc}` begins with or matches your document prefix, output `{col_doc}`, else `null`.
 2. Add Custom Column `doc_date`:
@@ -630,7 +650,7 @@ def generate_powerquery_recipe(
 
 #### Step 3: Forward-Fill Master Headers Downwards
 1. Select the 5 master columns: `doc_no`, `doc_date`, `customer_code`, `customer_name`, `invoice_total`.
-2. Navigate to **Transform** $\\rightarrow$ **Fill** $\\rightarrow$ **Down**.
+2. Navigate to **Transform** $\rightarrow$ **Fill** $\rightarrow$ **Down**.
    *(Every line item now inherits its parent document metadata!)*
 
 #### Step 4: Identify Detail Items & Filter Report Noise
@@ -650,7 +670,7 @@ def generate_powerquery_recipe(
 ---
 
 ### PART 2: DYNAMIC POWER QUERY M-CODE (COPY & PASTE READY)
-*(Copy and paste directly into Excel: **Home** $\\rightarrow$ **Advanced Editor**)*
+*(Copy and paste directly into Excel: **Home** $\rightarrow$ **Advanced Editor**)*
 
 ```powerquery
 let
@@ -659,7 +679,7 @@ let
 
     // 1. Dynamic Master Header Extraction (Archetype A)
     AddDocNo = Table.AddColumn(RawSheet, "{schema.doc_name}", each
-        if [{col_doc}] <> null and (Text.StartsWith(Text.From([{col_doc}]), "IV-") or Text.StartsWith(Text.From([{col_doc}]), "INV-") or Text.StartsWith(Text.From([{col_doc}]), "CN-"))
+        if [{col_doc}] <> null and ({" or ".join([f'Text.StartsWith(Text.From([{col_doc}]), "{p}")' for p in schema.doc_prefixes])})
         then Text.From([{col_doc}])
         else null, type text),
 
@@ -734,6 +754,7 @@ def generate_python_recipe(
     col_uom = f"row[{schema.uom_col}]" if schema.uom_col is not None else "None"
     col_price = f"row[{schema.price_col}]" if schema.price_col is not None else "None"
     col_amt = f"row[{schema.amount_col}]" if schema.amount_col is not None else "None"
+    col_item_code = f"row[{schema.item_code_col}]" if schema.item_code_col is not None else "None"
 
     return f"""# DeepAnalyze Autonomous Python State-Machine Cleaning Guide
 ## Target Dataset: `{dataset_name}`
@@ -848,33 +869,34 @@ def clean_erp_report(file_path_or_df) -> pd.DataFrame:
                 records.append(curr_line)
 
             qty = float(str({col_qty}).replace(',', '')) if {col_qty} is not None and pd.notna({col_qty}) else 1.0
-            uom = str({col_uom}).strip() if {col_uom} is not None and pd.notna({col_uom}) else 'CTN'
+            uom = str({col_uom}).strip() if {col_uom} is not None and pd.notna({col_uom}) else ''
             price = float(str({col_price}).replace(',', '')) if {col_price} is not None and pd.notna({col_price}) else 0.0
             amt = float(str({col_amt}).replace(',', '')) if {col_amt} is not None and pd.notna({col_amt}) else 0.0
+            item_code_val = str({col_item_code}).strip() if {col_item_code} is not None and pd.notna({col_item_code}) else ''
 
             curr_line = {{
                 **curr_master,
-                'Sequence': seq_num,
-                'GL-Code': '500-000',
-                'Full_Description': val_desc,
-                'Quantity': qty,
-                'UOM': uom,
-                'Unit Price': price,
-                'Item Amount': amt
+                '{schema.seq_name}': seq_num,
+                '{schema.item_code_name}': item_code_val,
+                '{schema.desc_name}': val_desc,
+                '{schema.qty_name}': qty,
+                '{schema.uom_name}': uom,
+                '{schema.price_name}': price,
+                '{schema.amount_name}': amt
             }}
             continue
 
         # 4. Multi-Line Description Wrap (Archetype B)
         elif curr_line is not None and val_desc and not has_numbers:
-            curr_line['Full_Description'] += f' {{val_desc}}'
+            curr_line['{schema.desc_name}'] += f' {{val_desc}}'
 
     if curr_line is not None:
         records.append(curr_line)
 
     clean_df = pd.DataFrame(records)
     cols_order = [
-        'Sequence', 'GL-Code', 'Quantity', 'UOM', 'Unit Price', 'Item Amount',
-        '{schema.doc_name}', '{schema.date_name}', '{schema.entity_code_name}', '{schema.entity_name_name}', '{schema.total_name}', 'Full_Description'
+        '{schema.seq_name}', '{schema.item_code_name}', '{schema.qty_name}', '{schema.uom_name}', '{schema.price_name}', '{schema.amount_name}',
+        '{schema.doc_name}', '{schema.date_name}', '{schema.entity_code_name}', '{schema.entity_name_name}', '{schema.total_name}', '{schema.desc_name}'
     ]
     final_cols = [c for c in cols_order if c in clean_df.columns]
     return clean_df[final_cols]

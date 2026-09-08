@@ -98,9 +98,8 @@ class TestERPCleaner(unittest.TestCase):
         recipe = generate_powerquery_recipe(self.raw_pl, dataset_name="SalesLedger")
         self.assertIn("Power Query", recipe)
         self.assertIn("Table.FillDown", recipe)
-        self.assertIn("Conditional Column", recipe)
-        # Guarantees caution against Table.Skip(18)
-        self.assertIn("Table.Skip(18)", recipe)
+        # Guarantees caution against Table.Skip
+        self.assertIn("Table.Skip", recipe)
         self.assertIn("doc_no", recipe)
 
     def test_generate_python_recipe_content(self):

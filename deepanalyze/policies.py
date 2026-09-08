@@ -249,7 +249,7 @@ def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
         sample_text = " ".join([" ".join(peek_df[c].drop_nulls().to_list()) for c in peek_df.columns]).lower()
         has_master_marker = any(k in sample_text for k in ["doc. no", "doc no", "invoice no", "voucher no", "po no", "document no"])
         has_detail_marker = any(k in sample_text for k in ["gl code", "seq", "uom", "unit price", "item code"])
-        has_doc_ids = any(re.search(r"\b[A-Z]{2,4}-\d{4,}\b", " ".join(peek_df[c].drop_nulls().to_list())) for c in peek_df.columns)
+        has_doc_ids = any(re.search(r"\b[A-Za-z]{1,6}[-_/\s]?\d{3,12}\b", " ".join(peek_df[c].drop_nulls().to_list())) for c in peek_df.columns)
 
         if (has_master_marker and (has_detail_marker or has_doc_ids)) or (keyword_hits >= 4 and has_master_marker):
             explanation = (
