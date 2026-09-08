@@ -48,6 +48,12 @@ from .data_engineering import (
     stitch_code_with_local_model,
 )
 from .cockpit import launch_interactive_terminal_cockpit
+from .erp_cleaner import (
+    detect_ragged_erp,
+    flatten_hierarchical_erp,
+    generate_powerquery_recipe,
+    generate_python_recipe,
+)
 from .policies import (
     CompliancePolicy,
     classify_dataframe_columns,
@@ -631,6 +637,82 @@ class AirGapWizard:
                 arch_key = "HEALTHCARE_EHR"
             else:
                 arch_key = "CLEAN_TABULAR"
+
+        # Step 4.5: Guided Data Cleaning & De-Ragging Strategy
+        is_ragged_dataset = (arch_key == "ERP_RAGGED")
+        if not is_ragged_dataset:
+            ragged_check, _ = detect_ragged_erp(df)
+            if ragged_check:
+                is_ragged_dataset = True
+
+        if is_ragged_dataset and not is_express_mode:
+            self.console.print("\n[bold cyan]Step 4.5: Guided Data Cleaning & De-Ragging Strategy[/bold cyan]")
+            self.console.print(
+                "[dim]Hierarchical ERP reports (invoices, GL ledgers) contain ragged master-detail layouts,\n"
+                "multi-line item wraps, and subtotal noise. DeepAnalyze provides targeted cleaning pathways:[/dim]\n"
+            )
+            clean_options = [
+                "[bold green]Autonomous In-Memory Python Flattening[/bold green] [dim](RAM state-machine, 0 nulls, instant)[/dim]",
+                "[bold cyan]Step-by-Step Power Query Excel Guide[/bold cyan] [dim](GUI clicks + M-code recipe for Excel/Power BI)[/dim]",
+                "[bold yellow]Step-by-Step Python Data Engineering Guide[/bold yellow] [dim](Clean standalone script + tutorial)[/dim]",
+                "[bold magenta]Standard Cloud Airlock[/bold magenta] [dim](Structural Masking & Frontier LLM Prompting)[/dim]",
+                "Skip Guided Cleaning & Continue Standard Wizard"
+            ]
+            for idx, opt in enumerate(clean_options, 1):
+                self.console.print(f"  [{idx}] {opt}")
+
+            clean_choice = Prompt.ask("Select cleaning approach [1-5]", default="1").strip()
+            if clean_choice == "1":
+                self.console.print("\n[bold green]Executing Autonomous In-Memory Flattening...[/bold green]")
+                cleaned_df = flatten_hierarchical_erp(df)
+                total_nulls = sum([cleaned_df[c].null_count() for c in cleaned_df.columns])
+                self.console.print(
+                    f"[bold green]SUCCESS:[/bold green] Deconstructed into [bold cyan]{cleaned_df.height:,}[/bold cyan] rows "
+                    f"and [bold cyan]{cleaned_df.width}[/bold cyan] canonical columns with [bold green]{total_nulls} nulls[/bold green] in RAM!"
+                )
+                export_choice = Prompt.ask("Export flattened canonical dataset to Excel (.xlsx)? [Y/N]", default="N").strip().lower()
+                if export_choice in ("y", "yes"):
+                    out_path = os.path.join(dataset_dir, f"{dataset_base_name}_flattened.xlsx")
+                    cleaned_df.write_excel(out_path)
+                    self.console.print(f"[bold green]Exported to:[/bold green] {out_path}")
+
+                df = cleaned_df
+                arch_key = "CLEAN_TABULAR"
+                if self.user_ns is not None:
+                    self.user_ns[df_name] = df
+            elif clean_choice == "2":
+                recipe_md = generate_powerquery_recipe(df, dataset_name=dataset_base_name)
+                guide_path = os.path.join(dataset_dir, f"{dataset_base_name}_powerquery_guide.md")
+                try:
+                    with open(guide_path, "w", encoding="utf-8") as f:
+                        f.write(recipe_md)
+                    self.console.print(f"[bold green]Generated Power Query Guide:[/bold green] {guide_path}")
+                except Exception as e:
+                    self.console.print(f"[bold yellow]Note:[/bold yellow] Could not write file ({e}).")
+                self.console.print(Panel.fit(
+                    "[bold cyan]Power Query Step-by-Step Guide Preview[/bold cyan]\n"
+                    "- Ingest without `Table.Skip(18)` (preserves early invoices like IV-11319)\n"
+                    "- Conditional columns for Doc No, Date, Customer Code/Name, Total\n"
+                    "- Fill Down master columns across child line items\n"
+                    "- Filter noise, set canonical types and copy-paste ready M-code",
+                    border_style="cyan"
+                ))
+            elif clean_choice == "3":
+                py_md = generate_python_recipe(df, dataset_name=dataset_base_name)
+                guide_path = os.path.join(dataset_dir, f"{dataset_base_name}_python_guide.md")
+                try:
+                    with open(guide_path, "w", encoding="utf-8") as f:
+                        f.write(py_md)
+                    self.console.print(f"[bold green]Generated Python Guide:[/bold green] {guide_path}")
+                except Exception as e:
+                    self.console.print(f"[bold yellow]Note:[/bold yellow] Could not write file ({e}).")
+                self.console.print(Panel.fit(
+                    "[bold cyan]Python State-Machine Guide Preview[/bold cyan]\n"
+                    "- Row-by-row state machine in RAM\n"
+                    "- Handles Archetypes A (Master Header), B (Wrap), C (Sparse), D (Noise)\n"
+                    "- Zero null guarantee",
+                    border_style="cyan"
+                ))
 
         # Step 5: Full-File Deep Scan & Pattern Categorization
         self.console.print("\n[bold cyan]Step 5: Full-File Deep Scan & Pattern Categorization[/bold cyan]")

@@ -96,6 +96,12 @@ from .benchmarks import (
     render_full_scorecard_panel,
     render_markdown_audit_report,
 )
+from .erp_cleaner import (
+    detect_ragged_erp,
+    flatten_hierarchical_erp,
+    generate_powerquery_recipe,
+    generate_python_recipe,
+)
 
 __version__ = "4.0.0"
 

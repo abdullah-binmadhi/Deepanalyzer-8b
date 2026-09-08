@@ -65,6 +65,13 @@ from .charts import (
     export_chart_script,
 )
 from .wizard import copy_to_clipboard
+from .sentinel import mask_structural_erp
+from .erp_cleaner import (
+    detect_ragged_erp,
+    flatten_hierarchical_erp,
+    generate_powerquery_recipe,
+    generate_python_recipe,
+)
 
 
 class ValueTeachingModal(ModalScreen[Optional[str]]):
@@ -208,6 +215,118 @@ class CloudPromptModal(ModalScreen[None]):
         self.dismiss(None)
 
 
+class CleaningRecipeModal(ModalScreen):
+    """Modal displaying guided Power Query, Python State Machine recipes, and 1-click in-RAM deconstruction."""
+
+    DEFAULT_CSS = """
+    CleaningRecipeModal {
+        align: center middle;
+        background: rgba(6, 18, 13, 0.88);
+    }
+    #recipe-dialog {
+        width: 88%;
+        height: 85%;
+        border: solid #00ff9d;
+        background: #0c2118;
+        padding: 1 2;
+    }
+    #recipe-title {
+        text-style: bold;
+        color: #00ff9d;
+        margin-bottom: 1;
+    }
+    #recipe-tab-bar {
+        height: 3;
+        margin-bottom: 1;
+    }
+    .recipe-tab-btn {
+        margin-right: 1;
+        background: #0f2d20;
+        color: #ecfdf5;
+        border: solid #225740;
+    }
+    .recipe-tab-active {
+        background: #183e2e !important;
+        border: solid #00ff9d !important;
+        color: #00ff9d !important;
+        text-style: bold;
+    }
+    #recipe-area {
+        height: 1fr;
+        background: #06120d;
+        border: solid #183e2e;
+        color: #ecfdf5;
+        margin-bottom: 1;
+    }
+    #recipe-btn-bar {
+        align: right middle;
+        height: 3;
+    }
+    #btn-apply-flatten-modal {
+        background: #00ff9d !important;
+        color: #06120d !important;
+        text-style: bold;
+        margin-right: 1;
+    }
+    """
+
+    def __init__(self, raw_df: pl.DataFrame, dataset_name: str = "dataset"):
+        super().__init__()
+        self.raw_df = raw_df
+        self.dataset_name = dataset_name
+        self.pq_recipe = generate_powerquery_recipe(raw_df, dataset_name=dataset_name)
+        self.py_recipe = generate_python_recipe(raw_df, dataset_name=dataset_name)
+        self.active_tab = "pq"
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="recipe-dialog"):
+            yield Label("[GUIDED CLEANING RECIPES: POWER QUERY • PYTHON STATE MACHINE • RAM FLATTENER]", id="recipe-title")
+            with Horizontal(id="recipe-tab-bar"):
+                yield Button("[1] POWER QUERY (EXCEL/M)", id="btn-tab-pq", classes="recipe-tab-btn recipe-tab-active")
+                yield Button("[2] PYTHON STATE MACHINE", id="btn-tab-py", classes="recipe-tab-btn")
+            yield TextArea(self.pq_recipe, read_only=True, id="recipe-area")
+            with Horizontal(id="recipe-btn-bar"):
+                yield Button("CLOSE", id="btn-close-recipe-modal")
+                yield Button("COPY RECIPE", id="btn-copy-recipe-modal")
+                yield Button("APPLY IN-MEMORY FLATTEN TO RAM", id="btn-apply-flatten-modal", variant="primary")
+
+    @on(Button.Pressed, "#btn-tab-pq")
+    def on_tab_pq(self) -> None:
+        self.active_tab = "pq"
+        self.query_one("#btn-tab-pq", Button).add_class("recipe-tab-active")
+        self.query_one("#btn-tab-py", Button).remove_class("recipe-tab-active")
+        self.query_one("#recipe-area", TextArea).load_text(self.pq_recipe)
+
+    @on(Button.Pressed, "#btn-tab-py")
+    def on_tab_py(self) -> None:
+        self.active_tab = "py"
+        self.query_one("#btn-tab-py", Button).add_class("recipe-tab-active")
+        self.query_one("#btn-tab-pq", Button).remove_class("recipe-tab-active")
+        self.query_one("#recipe-area", TextArea).load_text(self.py_recipe)
+
+    @on(Button.Pressed, "#btn-close-recipe-modal")
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    @on(Button.Pressed, "#btn-copy-recipe-modal")
+    def action_copy(self) -> None:
+        text_to_copy = self.pq_recipe if self.active_tab == "pq" else self.py_recipe
+        copy_to_clipboard(text_to_copy)
+        self.app.notify(f"{'Power Query' if self.active_tab == 'pq' else 'Python'} cleaning recipe copied to clipboard!", title="Copied", severity="information")
+
+    @on(Button.Pressed, "#btn-apply-flatten-modal")
+    def action_apply_flatten(self) -> None:
+        try:
+            flattened = flatten_hierarchical_erp(self.raw_df)
+            app = self.app
+            if hasattr(app, "reload_dataset"):
+                app.reload_dataset(flattened)
+            app.notify(f"Dataset flattened into {flattened.height:,} rows x {flattened.width} canonical columns in RAM!", title="Flatten Complete", severity="information")
+            self.dismiss(True)
+        except Exception as e:
+            self.notify(f"Flattening failed: {e}", title="Error", severity="error")
+
+
 class DeepAnalyzeCockpitApp(App):
     """The DeepAnalyze Interactive Cockpit full-screen TUI.
     
@@ -228,6 +347,7 @@ class DeepAnalyzeCockpitApp(App):
         Binding("f3", "action_f3_xlsx", "[F3] Export XLSX", show=True),
         Binding("f4", "action_f4_cert", "[F4] Export Cert", show=True),
         Binding("f5", "action_f5_refresh", "[F5] Refresh", show=True),
+        Binding("f6", "action_f6_recipes", "[F6] Recipes", show=True),
         Binding("q", "quit", "[Q] Exit", show=True),
     ]
 
@@ -903,6 +1023,7 @@ class DeepAnalyzeCockpitApp(App):
                 yield Button("[F3: EXPORT XLSX]", id="btn-f3-xlsx")
                 yield Button("[F4: EXPORT AUDIT CERT]", id="btn-f4-cert")
                 yield Button("[F5: REFRESH]", id="btn-f5-refresh")
+                yield Button("[F6: RECIPES]", id="btn-f6-recipes")
                 yield Button("[Q: EXIT]", id="btn-exit")
                 yield Label("[AIR-GAP: VOLATILE RAM | ZERO DISK LEAK]", id="session-info")
             yield Footer()
@@ -1782,6 +1903,37 @@ class DeepAnalyzeCockpitApp(App):
     @on(Button.Pressed, "#btn-f5-refresh")
     async def on_f5_refresh_pressed(self) -> None:
         await self.action_f5_refresh()
+
+    def reload_dataset(self, new_df: pl.DataFrame) -> None:
+        """Dynamically reloads, deconstructs, and re-profiles the dataset in RAM."""
+        self.raw_df = new_df
+        self.clean_df = new_df.clone()
+        is_ragged, _ = detect_ragged_erp(new_df)
+        if is_ragged:
+            self.encrypted_df = mask_structural_erp(new_df)
+        else:
+            self.encrypted_df = tokenize_dataframe(new_df, self.policy)
+
+        # Recalculate dimensions & measures
+        self.dimensions, self.measures = detect_dimensions_and_measures(self.clean_df)
+        if not self.dimensions:
+            self.dimensions = list(self.clean_df.columns)
+        if not self.measures:
+            self.measures = list(self.clean_df.columns)
+
+        # Refresh Air-gap tables
+        self._populate_airlock_tables()
+        self._populate_benchmarks_table()
+        self._populate_cartography_table()
+        self._populate_topology()
+
+    def action_f6_recipes(self) -> None:
+        """[F6] Opens the Guided Cleaning Recipes modal with Power Query, Python State Machine & In-Memory Flattening."""
+        self.push_screen(CleaningRecipeModal(self.raw_df, dataset_name=self.dataset_name))
+
+    @on(Button.Pressed, "#btn-f6-recipes")
+    def on_f6_recipes_pressed(self) -> None:
+        self.action_f6_recipes()
 
     @on(Button.Pressed, "#btn-exit")
     def on_exit_pressed(self) -> None:

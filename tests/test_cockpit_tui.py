@@ -3,7 +3,7 @@
 import asyncio
 import unittest
 import polars as pl
-from deepanalyze.cockpit_tui import DeepAnalyzeCockpitApp, CloudPromptModal
+from deepanalyze.cockpit_tui import DeepAnalyzeCockpitApp, CloudPromptModal, CleaningRecipeModal
 
 
 class TestCockpitTUI(unittest.TestCase):
@@ -135,6 +135,30 @@ class TestCockpitTUI(unittest.TestCase):
                 self.assertNotIn("Products_Ref", row_names)
 
         asyncio.run(run_hierarchical())
+
+    def test_cleaning_recipe_modal_standalone(self):
+        modal = CleaningRecipeModal(raw_df=self.raw_df, dataset_name="TestDataset")
+        self.assertIn("Power Query", modal.pq_recipe)
+        self.assertIn("Python", modal.py_recipe)
+
+    def test_app_pilot_recipes_modal(self):
+        async def run_recipes_pilot():
+            app = DeepAnalyzeCockpitApp(raw_df=self.raw_df, dataset_name="TestDataset")
+            async with app.run_test(size=(160, 50)) as pilot:
+                # Click F6 recipes button
+                await pilot.click("#btn-f6-recipes")
+                # Modal should be open
+                self.assertIsInstance(app.screen, CleaningRecipeModal)
+                # Toggle tabs
+                await pilot.click("#btn-tab-py")
+                self.assertEqual(app.screen.active_tab, "py")
+                await pilot.click("#btn-tab-pq")
+                self.assertEqual(app.screen.active_tab, "pq")
+                # Close modal
+                await pilot.click("#btn-close-recipe-modal")
+                self.assertNotIsInstance(app.screen, CleaningRecipeModal)
+
+        asyncio.run(run_recipes_pilot())
 
 
 if __name__ == "__main__":
