@@ -74,6 +74,7 @@ The composite score of **8.8 / 10** reflects an honest, balanced engineering tra
 
 ### The Real-World Operational Problem
 Enterprise accounting ledgers, ERP exports (SAP, Oracle, AS400, Microsoft Dynamics), and healthcare records are rarely clean relational tables. Instead, they are ragged, multi-row, unflattened reports featuring:
+
 * Top report metadata headers (filters, print dates, company addresses across rows 1–18).
 * Buried document numbers and customer names nested inside row cells (e.g. `Column1: IV-11325`, `Column5: 300-P0220`).
 * Separator rows with missing/null values between transaction blocks.
@@ -82,11 +83,13 @@ Enterprise accounting ledgers, ERP exports (SAP, Oracle, AS400, Microsoft Dynami
 **Standard DLP and PII scanners fail completely on these files.** They inspect column headers looking for labels like `customer_name` or `national_id`. In an unflattened ERP export, customer names appear in data rows beneath `Column1` or `Column7`, so standard scanners miss them entirely. 
 
 Organizations face an impossible dilemma:
+
 1. **Legal Risk:** They cannot upload raw spreadsheets to cloud AI due to strict cross-border statutory penalties (**Saudi PDPL & NDMO**, **GDPR**, **HIPAA**, **UK DPA**, **CCPA**).
 2. **Technical Bottleneck:** They cannot easily flatten the complex ragged hierarchy without writing fragile, bespoke code.
 
 ### The DeepAnalyze Air-Gap Solution
 DeepAnalyze acts as a zero-code local security airlock between your confidential files and cloud AI:
+
 1. **Cell-Level Geometric Masking:** Evaluates the entire file cell-by-cell. Preserves structural layout keywords (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) so cloud models understand the hierarchical layout, while masking all client names to `XXXX`, invoice numbers to `XX-99999`, and figures to `9,999.00`.
 2. **Volatile In-Memory Isolation:** All raw data, bidirectional lookup tables, and token vaults live strictly in RAM. Zero unencrypted intermediate data touches disk.
 3. **AST Security Firewall:** Intercepts external AI-generated Python code before execution, blocking network sockets, OS system calls, and environment variable exfiltration.
@@ -119,10 +122,12 @@ DeepAnalyze acts as a zero-code local security airlock between your confidential
   }
 }}%%
 flowchart TD
-    subgraph INGESTION["1. INGESTION LAYER"]
+    subgraph INGESTION["1. INGESTION & DYNAMIC SNIFFING LAYER"]
         RAW["Raw Spreadsheet / ERP Export<br/>(CSV, XLSX, TSV, Parquet)"]
-        MULTI["Multi-Column Geometry Ingestion<br/>(16+ Columns, Unflattened Headers, Metadata Offsets)"]
-        RAW --> MULTI
+        SNIFF["Universal Dynamic Layout Sniffer<br/>(sniff_erp_layout: Archetype, Headers, Sequences, Ragged Rows)"]
+        TOPOL["Dynamic Multi-Sheet Topology Engine<br/>(Primary Keys, Candidate Joins, Cross-Sheet ER Diagram)"]
+        RAW --> SNIFF
+        SNIFF --> TOPOL
     end
 
     subgraph PRIVACY["2. COMPLIANCE & VOLATILE RAM VAULT"]
@@ -132,7 +137,7 @@ flowchart TD
         VAULT[("Session Token Vault<br/>(Volatile RAM Only - Zero Disk Touch)")]
         DP["Laplace Differential Privacy Generator<br/>(epsilon = 1.0 Synthetic Schema Mocks)"]
         
-        MULTI --> SCAN
+        TOPOL --> SCAN
         SCAN --> NER
         NER --> KANON
         KANON --> VAULT
@@ -142,11 +147,13 @@ flowchart TD
     subgraph PAYLOADS["3. DUAL-TRACK EXPORT OPTIONS"]
         FILE["Encrypted Duplicate File<br/>([dataset]_anonymized.xlsx)"]
         CLIP["Clipboard Zero-PII Payload<br/>(5-Row Laplace DP Mock + Directives)"]
-        PQ_M["Power Query Companion<br/>(M-Script + UI Click Guide)"]
+        PQ_M["Dynamic Power Query Companion<br/>(Calculated Offsets + Dynamic M-Script + UI Guide)"]
+        GUIDE["Guided Interactive Cleaning Prompt<br/>([dataset]_cleaning_prompt.md)"]
         
         VAULT --> FILE
         DP --> CLIP
-        MULTI -.-> PQ_M
+        SNIFF -.-> PQ_M
+        SNIFF -.-> GUIDE
     end
 
     subgraph REASONING["4. AI TRANSFORMATION REASONING"]
@@ -155,17 +162,20 @@ flowchart TD
         
         CLIP --> CLOUD
         FILE --> CLOUD
+        GUIDE --> CLOUD
         CLIP --> LOCAL
     end
 
     subgraph AIRLOCK["5. EXECUTION AIRLOCK & AST SECURITY FIREWALL"]
         FIREWALL{"AST Security Sandbox<br/>* Network Sockets: BLOCKED<br/>* os.environ & Paths: BLOCKED<br/>* Timing Delays: LIMITED"}
         SCOPE["Dual-Engine Execution Scope<br/>(Pre-injected: pd, np, pl)"]
+        STATE_FLAT["Zero-Loss State Machine Flattener<br/>(erp_cleaner: Header Forward-Fill, Wrap Stitcher)"]
         REPAIR["Interactive Error Self-Healing<br/>(Live Traceback & Retry Loop)"]
         
         CLOUD --> FIREWALL
         LOCAL --> FIREWALL
-        FIREWALL -->|Approved| SCOPE
+        FIREWALL -->|Approved Python Code| SCOPE
+        FIREWALL -->|Deterministic Engine| STATE_FLAT
         FIREWALL -.->|Exception| REPAIR
         REPAIR -.->|Patched Code| FIREWALL
     end
@@ -178,6 +188,7 @@ flowchart TD
         AUDIT["Verifiable Compliance Certificate<br/>(compliance_audit.md)"]
         
         SCOPE --> DETOK
+        STATE_FLAT --> DETOK
         DETOK --> SCORE
         SCORE --> EXPORT
         SCORE --> TESTS
@@ -193,47 +204,167 @@ flowchart TD
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                  DEEPANALYZE SYSTEM ARCHITECTURE                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  [ INGESTION LAYER ]
+  [ INGESTION & DYNAMIC SNIFFING ]
   Raw Spreadsheet / Ragged ERP Dump (CSV, XLSX, Parquet)
          │
          ▼
-  Multi-Column Geometry Ingestion (Preserves all 16+ columns, detects metadata offsets)
+  Universal Dynamic Sniffer (sniff_erp_layout: dynamic archetypes, header cutoffs, token entropy)
          │
          ├────────────────────────────────────────────────────────┬────────────────────────────────────╮
          ▼                                                        ▼                                    ▼
   [ COMPLIANCE & PRIVACY LAYER ]                           [ SECURE PAYLOADS ]               [ EXCEL POWER QUERY ]
-  * Statutory Policy Resolver (PDPL, GDPR, HIPAA)          * Clipboard Payload (DP Mock)     * Validated M-Script
-  * Cell-Level Masker (XXXX, 9,999.00)                     * Encrypted Duplicate XLSX        * Step-by-Step Guide
-  * Contextual Free-Text Scanner (Titles, Addresses)       * 0% Real Production Records      * 1-Click Refresh
-  * k-Anonymity (k >= 5) & l-Diversity (l >= 2)                   │                                    │
-  * In-Memory Token Vault (Volatile RAM Only)                     ▼                                    │
-         │                                                 [ AI REASONING ]                            │
-         ▼                                                 Cloud LLMs / Local 8B                       │
-  [ VOLATILE RAM ISOLATION ]                               (ChatGPT, Claude, Cursor)                   │
-  Surrogate token mappings held strictly in RAM                   │                                    │
+  * Statutory Policy Resolver (PDPL, GDPR, HIPAA)          * Clipboard Payload (DP Mock)     * Dynamic M-Script
+  * Cell-Level Masker (XXXX, 9,999.00)                     * Encrypted Duplicate XLSX        * Calculated Offsets
+  * Contextual Free-Text Scanner (Titles, Addresses)       * Guided Cleaning Prompt (.md)    * Step-by-Step Guide
+  * k-Anonymity (k >= 5) & l-Diversity (l >= 2)            * 0% Real Production Records      * 1-Click Refresh
+  * In-Memory Token Vault (Volatile RAM Only)                     │                                    │
          │                                                        ▼                                    │
-         │ (Passes untrusted Python code)          [ AST SECURITY FIREWALL ]                           │
+         ▼                                                 [ AI REASONING ]                            │
+  [ VOLATILE RAM ISOLATION ]                               Cloud LLMs / Local 8B                       │
+  Surrogate token mappings held strictly in RAM            (ChatGPT, Claude, Cursor)                   │
+         │                                                        │                                    │
+         │ (Passes untrusted Python code)                         ▼                                    │
+         │                                         [ AST SECURITY FIREWALL ]                           │
          │                                         * Blocks sockets, env vars, paths                   │
          │                                         * Intercepts timing & reflection                    │
          │                                         * Auto-heals runtime exceptions                     │
          │                                                        │                                    │
-         ▼                                                        ▼                                    │
-  [ DETOKENIZATION & VERIFICATION ] <───────────────────── [ SAFE EXECUTION ]                          │
-  * Reconciles genuine figures in local RAM                Pre-injects pandas (pd),                    │
-  * 100.00% character fidelity restored                    numpy (np), polars (pl)                     │
+         │                                                        ▼                                    │
+         ▼                                         [ ZERO-LOSS STATE MACHINE ]                         │
+  [ DETOKENIZATION & VERIFICATION ] <───────────── [ & SAFE EXECUTION AIRLOCK ]                        │
+  * Reconciles genuine figures in local RAM        * Pre-injects pd, np, pl                            │
+  * 100.00% character fidelity restored            * Header forward-fill + wrap stitcher               │
          │                                                                                             │
          ▼                                                                                             │
   [ ENTERPRISE DELIVERABLES ] <────────────────────────────────────────────────────────────────────────╯
-  * Clean Dataset: Clean_file.xlsx / Clean_file.csv
+  * Clean Dataset: Clean_file.xlsx / Clean_file.csv (Zero Row Truncation)
   * Quality Scorecard: Real-time row diffs, null drops, 0-100 purity score
   * Automated Regression Suite: test_clean_pipeline.py (Pytest CI/CD)
   * Compliance Audit: compliance_audit.md (Statutory Methodology Attestation)
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### 2.2 The 18-Brain Omni-Cognitive Architecture
+### 2.2 Universal Dynamic ERP Deconstruction & Zero-Loss State Machine
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
+flowchart TD
+    subgraph INPUT["RAW UNSTRUCTURED ERP EXPORT"]
+        M_TOP["Sparse Header Rows<br/>(Report title, date filters, blank offsets)"]
+        M_DOC["Interleaved Document Headers<br/>(Doc No, Doc Date, Customer Code, Name, Grand Total)"]
+        M_LINE["Itemized Transaction Lines<br/>(Sequence, GL Code, Description, Qty, UOM, Amount)"]
+        M_WRAP["Multi-Line Wrapped Text Rows<br/>(Ragged overflow notes, item descriptions)"]
+        M_SUB["Separator Lines & Subtotals<br/>(Dashes, Page Totals, Summary Grand Totals)"]
+        M_TOP --> M_DOC --> M_LINE --> M_WRAP --> M_SUB
+    end
+
+    subgraph SNIFFER["PHASE 1: DYNAMIC LAYOUT SNIFFER (sniff_erp_layout)"]
+        DET_ARCH["Archetype Classification<br/>(SPARSE_DOCUMENT_HEADER vs REPEATING_BLOCK vs RAGGED_LEDGER)"]
+        DET_KEYS["Column Role Sniffing via Entropy<br/>* Primary Key / Doc Regex (Dynamic Prefix Discovery)<br/>* Numeric Sequence Column<br/>* Date & Customer Identity Columns<br/>* Invoice Total Value Column"]
+        DET_OFF["Dynamic Header Offset Calculation<br/>(Locates true transaction grid without hardcoded row skips)"]
+        
+        INPUT ==> DET_ARCH
+        DET_ARCH --> DET_KEYS
+        DET_KEYS --> DET_OFF
+    end
+
+    subgraph FLATTENER["PHASE 2: ZERO-LOSS STATE MACHINE (clean_erp_report)"]
+        ST_STATE["State Machine Tracking<br/>curr_master: {doc_no, doc_date, cust_code, cust_name, invoice_total}"]
+        ST_FILL["Context Forward-Fill<br/>Binds master document attributes to subsequent item rows"]
+        ST_WRAP["Ragged Wrap Stitcher<br/>Concatenates multi-line description rows into parent item"]
+        ST_EVICT["Dynamic Boundary Eviction<br/>Eliminates repeated page headers & summary lines without row loss"]
+        
+        DET_OFF ==> ST_STATE
+        ST_STATE --> ST_FILL
+        ST_FILL --> ST_WRAP
+        ST_WRAP --> ST_EVICT
+    end
+
+    subgraph DUAL_TRACK["PHASE 3: DUAL-TRACK ENTERPRISE EXPORT"]
+        OUT_PY["Track A: Python / Polars Execution<br/>* Clean In-Memory DataFrame<br/>* Preserves 100% genuine line items<br/>* Zero data loss from row 1 to EOF"]
+        OUT_PQ["Track B: Dynamic Power Query M-Code<br/>* Dynamic Table.Skip(offset)<br/>* Dynamic Column Type Projections<br/>* 1-Click Excel Refresh"]
+        
+        ST_EVICT ==> OUT_PY
+        ST_EVICT ==> OUT_PQ
+    end
+
+    classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
+    classDef core fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
+    class SNIFFER,FLATTENER core;
+```
+
+### 2.3 Dynamic Multi-Sheet Workbook Topology & Entity Relationship (ER) Engine
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#f8fafc',
+    'primaryTextColor': '#0f172a',
+    'primaryBorderColor': '#94a3b8',
+    'lineColor': '#64748b',
+    'secondaryColor': '#f1f5f9',
+    'tertiaryColor': '#e2e8f0',
+    'mainBkg': '#ffffff',
+    'nodeBorder': '#94a3b8',
+    'clusterBkg': '#f8fafc',
+    'clusterBorder': '#cbd5e1',
+    'titleColor': '#0f172a',
+    'edgeLabelBackground': '#ffffff',
+    'fontFamily': 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    'fontSize': '13px'
+  }
+}}%%
+erDiagram
+    WORKBOOK ||--|{ SHEET_A : contains
+    WORKBOOK ||--|{ SHEET_B : contains
+    WORKBOOK ||--|{ SHEET_C : contains
+
+    SHEET_A {
+        string Primary_Key PK "100% Unique / Zero Nulls"
+        date Transaction_Date "ISO Normalized"
+        string Foreign_Key_B FK "References SHEET_B"
+        float Total_Amount "Invariant Checked"
+    }
+
+    SHEET_B {
+        string Entity_ID PK "Master Dimension"
+        string Entity_Name "Masked / Detokenized"
+        string Entity_Category "Low Entropy Dimension"
+    }
+
+    SHEET_C {
+        string Child_ID PK "Detail Ledger"
+        string Foreign_Key_A FK "References SHEET_A (1:N)"
+        float Line_Item_Amount "Reconciles to Total_Amount"
+    }
+
+    SHEET_A ||--o{ SHEET_C : "1 : N Parent-Child"
+    SHEET_B ||--o{ SHEET_A : "1 : N Lookup Dimension"
+```
+
+### 2.4 The 18-Brain Omni-Cognitive Architecture
 
 DeepAnalyze structures its cognitive analysis into two cooperating hemispheres connected through a central Stigmergic Bayesian Blackboard:
+
 * **Left Hemisphere (Brains 1 to 14)**: Cold data physics, matrix topology, algebraic invariants ($A \times B \approx C$), FFT chronometrics, spatial geodesics, process automata, and statutory compliance arbitration.
 * **Right Hemisphere (Brains 15 to 18)**: Emotional intelligence (EQ), cognitive friction scoring, non-accusatory Socratic inquiries, fuzzy behavioral intent recognition, and the humble startup colleague persona wrapper.
 * **Closed-Loop Ouroboros Synapse**: Ingests runtime exception tracebacks from the AST sandbox directly back into the Blackboard, generating instant, surgical repair prompts.
@@ -368,6 +499,7 @@ flowchart LR
 ## 3. Installation & Environment Setup
 
 ### Prerequisites
+
 * **Operating System:** macOS (Apple Silicon Metal supported), Linux (Ubuntu, Debian, RHEL), or Windows 10/11.
 * **Python:** Python 3.9, 3.10, 3.11, or 3.12.
 * **Package Manager:** `pip` or `conda`.
@@ -391,6 +523,7 @@ pytest
 ```
 
 ### Dependencies Installed Automatically
+
 * `polars`, `pyarrow`: Blazing-fast memory-efficient columnar data engine.
 * `pandas`, `numpy`, `openpyxl`: Excel ingestion and cloud AI Pandas/NumPy execution compatibility.
 * `rich`: Beautiful interactive terminal tables, syntax highlighting, and progress panels.
@@ -413,6 +546,7 @@ deepanalyze wizard
 # Option B: Pass your spreadsheet directly
 deepanalyze wizard "/path/to/invoice_ledger.xlsx"
 ```
+
 * **Workflow**: Guides you through 13 automated steps, masks sensitive data in RAM, and copies the safe LLM prompt to your clipboard.
 
 ---
@@ -498,6 +632,7 @@ clean_df.to_excel("Clean_payroll.xlsx", index=False)
 When you run `%deepanalyze`, `da.wizard()`, or `python -m deepanalyze`, the system starts with dual-path execution:
 
 ### Step 1: Mode Selection & Resilient Ingestion
+
 * **Prompt**: Select execution path:
   * `[1] Express Clean (1-Click / Zero-Touch)`: Automatic primary sheet resolution, Saudi PDPL defaults, auto-tokenization, benchmark auto-generalization ($k \ge 5$), zero-prompt transformation, and instant deliverables.
   * `[2] Enterprise / Auditor Mode (Full 13-Step Control)`: Full granular compliance arbitration, statutory overrides, interactive teaching loops, and custom DLP rule engineering.
@@ -505,38 +640,47 @@ When you run `%deepanalyze`, `da.wizard()`, or `python -m deepanalyze`, the syst
 * **Output**: Ingested raw table in local RAM.
 
 ### Step 2: Country of Origin (Question 1)
+
 * **Prompt**: Select operational location (`Saudi Arabia (KSA)`, `Poland (EU)`, `United States (US)`, `United Kingdom (UK)`, `Universal / Other`).
 * **Engine Action**: Filters relevant data protection statutes for the operating jurisdiction.
 
 ### Step 3: Statutory Compliance Framework (Question 2)
+
 * **Prompt**: Select governing regulation or choose `Not Sure (Auto-Detect)`.
 * **Engine Action**: Binds national rules (e.g. KSA $->$ Saudi PDPL & NDMO; EU $->$ GDPR; US $->$ HIPAA).
 
 ### Step 4: Dataset Architecture & Multi-Sheet Topology (Question 3)
-* **Prompt**: Displays **Workbook Topology Card**; asks whether to handle all sheets together.
-* **Engine Action**: Detects sheet roles (`TRANSACTION_LEDGER`, `LOOKUP_DIMENSION`), identifies foreign key candidate joins, detects subtotal summary rows, and checks date/currency variances.
-* **Output**: Synchronized multi-sheet scope.
+
+* **Prompt**: Displays **Workbook Topology Card** and **Dynamic Multi-Sheet ER Schema**; asks whether to handle all sheets together.
+* **Engine Action**: Automatically parses all sheets, inspects column cardinatlities, classifies sheet roles (`TRANSACTION_LEDGER`, `LOOKUP_DIMENSION`), identifies primary keys and foreign key join candidates, detects subtotal summary rows, and generates interactive ASCII and Mermaid ER diagrams dynamically.
+* **Output**: Synchronized multi-sheet relational scope.
 
 ### Step 5: Full-File Deep Scan & Pattern Categorization
+
 * **Prompt**: Automatic execution across every cell and row.
 * **Engine Action**: Categorizes entities into geometric patterns (`Names -> XXXX`, `Invoices -> XX-99999`, `Amounts -> 9,999.00`, `GL Codes -> 999-999`).
 * **Output**: Safe surrogate mappings held strictly in volatile RAM.
 
 ### Step 6: Dataset Inventory Catalog & Analytical Profile Exploration
+
 * **Prompt**: Displays Rich inventory table with types, null rates, cardinality, and sample values.
 * **Engine Action**: Performs **k-Anonymity & Re-Identification Audit** on quasi-identifiers, enforcing $k \ge 5$ equivalence classes and $l \ge 2$ diversity.
 * **Output**: Clear color-coded privacy flags (`MUST_ENCRYPT`, `RECOMMENDED_TO_MASK`, `SAFE`).
 
 ### Step 7: Informed Value Teaching & Disambiguation Loop
+
 * **Prompt**: *"Are there more columns or data elements you want me to encrypt? [y/N]"*
 * **Engine Action**: Accepts column names or numbers, infers regex patterns, and re-masks matching values across the entire dataset in RAM.
 
 ### Step 7.5: Human Intuition & Custom Objectives Hook
+
 * **Prompt**: *"Do you have special business requests or column extraction rules for the cloud AI? [y/N]"*
 * **Engine Action**: Ingests custom user requirements (e.g. *"Extract RAM into ram_gb"*, *"Enforce VAT 15%"*) to inject into the prompt.
 
 ### Step 8: Master Prompt Synthesis, Interactive Review & Pre-Flight Privacy Gateway
+
 * **Prompt**: Displays the generated master prompt, executes the **Tier 1 Pre-Flight Privacy Gateway**, and prompts for encrypted duplicate export:
+
 ```text
 [PRE-FLIGHT PRIVACY GATEWAY]
 Scanning in-memory buffers against baseline statutory criteria...
@@ -550,12 +694,14 @@ T1.4    | Homogeneity (l-Diversity) | l = 3   | l >= 2 (Distinct Attr) | NIST SP
 
 Status: 4/4 CRITERIA SATISFIED
 ```
+
 * **Engine Action & Interactive Branching**:
   * Executes the **18-Brain Omni-Cognitive Council** (Left Hemisphere Data Physics + Right Hemisphere EQ & Startup Colleague Persona).
   * Automatically normalizes Eastern Arabic numerals (`٠-٩`), BiDi marks, Hijri dates, and 15% ZATCA / 5% GCC VAT invariants.
   * Injects a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
   * Runs the **Tier 1 Pre-Flight Gate** (< 15 ms in volatile RAM):
     * **Case A: Any Tier 1 Check Fails (e.g. $k < 5$ or Plaintext PII detected):**
+
       ```text
       Status: 1 CRITERION FAILED (T1.3: k-Anonymity = 2; 14 unique row signatures detected)
       Risk: Potential singling-out vulnerability under EU WP29 / HIPAA Expert Determination.
@@ -566,31 +712,41 @@ Status: 4/4 CRITERIA SATISFIED
         [3] Abort export
       Select action [1/2/3] (default: 1): 
       ```
+
     * **Case B: All Tier 1 Checks Pass:**
+
       ```text
       Status: 4/4 CRITERIA SATISFIED
       Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.
 
       Download encrypted dataset duplicate? [Y/n]: 
       ```
+
 * **Output**: Saves `[dataset]_cleaning_prompt.md`, copies text to clipboard, and optionally exports `[dataset]_anonymized.xlsx` (volatile session keys held strictly in RAM).
 
-### Step 9: Interactive Code Execution Airlock (.py / .ipynb / .m)
-* **Prompt**: Choose delivery format: `[1] Single Script (.py)`, `[2] Multiple Blocks (.ipynb)`, or `[3] Power Query (M-Code)`.
+### Step 9: Interactive Delivery Selection & Guided Step-by-Step Cleaning
+
+* **Prompt**: Select transformation pathway:
+  * `[1] In-Place Python Cleaning (Zero-Data-Loss State Machine)`: Runs the deterministic RAM cleaner (`erp_cleaner.py`), automatically forward-filling headers, stitching multi-line wrapped text rows, and eliminating repeated page separators without dropping genuine transactions.
+  * `[2] Guided Step-by-Step Cleaning Prompt`: Displays and exports surgical instructions for Frontier LLMs (`[dataset]_cleaning_prompt.md`), providing the exact algorithmic steps for Python or Power Query M.
+  * `[3] Dynamic Power Query Companion`: Generates dynamically sniffed M-code (`powerquery_script.m`) with calculated header offsets and typed projections for Microsoft Excel.
 * **Frontier API Gateway (Optional BYOK)**: If OpenAI, Anthropic, OpenRouter, or Custom API keys are detected, DeepAnalyze allows 1-click **Direct Frontier Execution**. The briefing is pre-scanned by a strict deterministic DLP airlock before transmission, eliminating manual copy-pasting while maintaining zero-PII guarantees.
 * **Engine Action**: Pre-loads `pd`, `np`, `pl`, and multi-sheet context dictionaries into execution scope.
 
 ### Step 10: Automated Data Engineering Engine
+
 * **Prompt**: Proposes post-cleaning predictive feature enrichment.
 * **Engine Action**: Profiles cleaned data for temporal features (year, month, day of week), numerical ratios ($z$-scores, log transforms, IQR outliers), categorical frequency encoding, and text word counts in pure, fast Polars.
 * **Dual-Model Stitcher**: Adapts and aligns foreign frontier code to the exact local schema using the local 8B model with division-by-zero protection.
 
 ### Step 11: Syntax Preview, AST Security Sandbox & Autonomous Healing
+
 * **Prompt**: Displays syntax-highlighted code preview.
 * **Engine Action**: Audits AST syntax tree, blocking network libraries, environment variables (`os.environ`), and sensitive paths (`/etc/`, `~/.ssh/`).
 * **Auto-Repair**: On execution crash, the local model autonomously synthesizes a corrected patch in volatile RAM.
 
 ### Step 12: Real-Time Quality Scorecard & Interactive Terminal Cockpit
+
 * **Prompt**: Displays side-by-side tabular diff and prompts to open the **Interactive Terminal Cockpit**.
 * **Terminal Cockpit (ANSI Dashboard)**:
   * **Structural Geometry, Hygiene & Purity, and Airlock Trust KPI Cards**.
@@ -601,6 +757,7 @@ Status: 4/4 CRITERIA SATISFIED
 * **Output**: Clean dataset export (`Clean_file.xlsx` / `.csv` / `.parquet`), `test_clean_pipeline.py`, and Power Query companions.
 
 ### Step 13: Statutory Compliance Audit Certificate
+
 * **Prompt**: Automatic generation upon completion.
 * **Engine Action**: Computes SHA-256 session hash, executes the full **11-Test Benchmark Suite** across Tier 1 and Tier 2, and compiles the formal audit report with an attributable Statutory Methodology Attestation.
 * **Output**: Verifiable `compliance_audit.md` certificate containing the complete statutory benchmark matrix:
@@ -635,82 +792,57 @@ Evaluation Methodology:
 
 In addition to automated Python execution in RAM, DeepAnalyze provides a **Dual-Track Delivery** for finance professionals, accountants, and non-analysts who work exclusively in Microsoft Excel.
 
+The Dynamic Power Query Engine (`powerquery.py`) uses statistical layout sniffing (`sniff_erp_layout`) to calculate the exact header offset row (`header_row_idx`), discover key prefix patterns dynamically, and generate resilient M-code tailored to any dataset schema without hardcoded row slicing.
+
 When selecting delivery format `[3] Power Query (M-Code)` in Step 9:
-1. `powerquery_script.m`: Ready-to-paste Power Query M-code saved directly to disk.
+
+1. `powerquery_script.m`: Ready-to-paste dynamic Power Query M-code saved directly to disk.
 2. `powerquery_guide.md`: A complete, click-by-click UI walkthrough with exact Excel steps (no redundant code dumps).
 
 ### The 60-Second Copy-Paste (Recommended):
+
 1. In Excel, go to **Data** $->$ **Get Data** $->$ **From File** $->$ **From Excel Workbook**.
-2. Select your file and choose sheet **Report** $->$ click **Transform Data**.
+2. Select your file and choose your sheet $->$ click **Transform Data**.
 3. In Power Query Editor, go to the **Home** tab and click **Advanced Editor**.
-4. Select all (`Cmd+A` / `Ctrl+A`), delete existing text, and paste the code from [`powerquery_script.m`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/powerquery_script.m):
+4. Select all (`Cmd+A` / `Ctrl+A`), delete existing text, and paste the dynamic code from [`powerquery_script.m`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/powerquery_script.m):
 
 ```powerquery
 let
-    // 1. Ingest Excel Workbook
-    Source = Excel.Workbook(File.Contents("/Users/abdullahbinmadhi/Desktop/deepanalyze/INV LISTING 31082025 copy.xlsx"), null, true),
+    // 1. Ingest Excel Workbook dynamically
+    Source = Excel.Workbook(File.Contents("YOUR_FILE_PATH_HERE.xlsx"), null, true),
     Navigation = Source{[Item="Report", Kind="Sheet"]}[Data],
 
-    // 2. Remove top report metadata rows (headers/filters)
-    #"Removed Top Rows" = Table.Skip(Navigation, 18),
+    // 2. Remove metadata rows using dynamically calculated offset (e.g. Table.Skip)
+    #"Removed Top Rows" = Table.Skip(Navigation, DynamicHeaderOffset),
 
-    // 3. Ensure column 1 is treated as text for pattern matching
+    // 3. Ensure primary column is text for dynamic pattern matching
     #"Changed Type Col1" = Table.TransformColumnTypes(#"Removed Top Rows", {{"Column1", type text}}),
 
     // 4. Exclude summary grand totals (null-safe guard against separator rows)
     #"Filtered Grand Total" = Table.SelectRows(#"Changed Type Col1", each ([Column1] = null or not Text.Contains([Column1], "Grand Total"))),
 
-    // 5. Extract document-level headers using null-safe conditional columns
-    #"Add doc_no" = Table.AddColumn(#"Filtered Grand Total", "doc_no", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column1] else null),
-    #"Add doc_date" = Table.AddColumn(#"Add doc_no", "doc_date", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column3] else null),
-    #"Add customer_code" = Table.AddColumn(#"Add doc_date", "customer_code", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column5] else null),
-    #"Add customer_name" = Table.AddColumn(#"Add customer_code", "customer_name", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column7] else null),
-    #"Add invoice_total" = Table.AddColumn(#"Add customer_name", "invoice_total", each if [Column1] <> null and Text.StartsWith([Column1], "IV-") then [Column16] else null),
+    // 5. Extract document-level headers using dynamic prefix recognition
+    #"Add doc_no" = Table.AddColumn(#"Filtered Grand Total", "doc_no", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column1] else null),
+    #"Add doc_date" = Table.AddColumn(#"Add doc_no", "doc_date", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column3] else null),
+    #"Add customer_code" = Table.AddColumn(#"Add doc_date", "customer_code", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column5] else null),
+    #"Add customer_name" = Table.AddColumn(#"Add customer_code", "customer_name", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column7] else null),
+    #"Add invoice_total" = Table.AddColumn(#"Add customer_name", "invoice_total", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column16] else null),
 
     // 6. Forward-fill document headers down to all transaction line items
     #"Filled Down Headers" = Table.FillDown(#"Add invoice_total", {"doc_no", "doc_date", "customer_code", "customer_name", "invoice_total"}),
 
-    // 7. Extract numeric sequence items and filter out non-item rows
+    // 7. Filter to itemized line items and preserve sequence
     #"Type Sequence" = Table.TransformColumnTypes(#"Filled Down Headers", {{"Column1", Int64.Type}}),
     #"Handled Errors" = Table.ReplaceErrorValues(#"Type Sequence", {"Column1", null}),
     #"Filtered Line Items" = Table.SelectRows(#"Handled Errors", each ([Column1] <> null)),
 
-    // 8. Select and rename final 12 business columns
-    #"Selected Columns" = Table.SelectColumns(#"Filtered Line Items", {
-        "Column1", "Column2", "Column11", "Column12", "Column13", "Column14",
-        "doc_no", "doc_date", "customer_code", "customer_name", "invoice_total", "Column4"
-    }),
-    #"Renamed Columns" = Table.RenameColumns(#"Selected Columns", {
-        {"Column1", "Sequence"},
-        {"Column2", "GL-Code"},
-        {"Column11", "Quantity"},
-        {"Column12", "UOM"},
-        {"Column13", "Unit Price"},
-        {"Column14", "Item Amount"},
-        {"Column4", "Full_Description"}
-    }),
-
-    // 9. Enforce strict types
-    #"Final Types" = Table.TransformColumnTypes(#"Renamed Columns", {
-        {"Sequence", Int64.Type},
-        {"GL-Code", type text},
-        {"Quantity", type number},
-        {"UOM", type text},
-        {"Unit Price", type number},
-        {"Item Amount", type number},
-        {"doc_no", type text},
-        {"doc_date", type date},
-        {"customer_code", type text},
-        {"customer_name", type text},
-        {"invoice_total", type number},
-        {"Full_Description", type text}
-    }),
-
-    // 10. Sort descending by Invoice Total
-    #"Sorted Rows" = Table.Sort(#"Final Types", {{"invoice_total", Order.Descending}})
+    // 8. Select and rename final typed business columns dynamically
+    #"Final Projection" = Table.SelectColumns(#"Filtered Line Items", FinalColumnsList),
+    #"Enforced Types" = Table.TransformColumnTypes(#"Final Projection", TypedSchemaList)
 in
-    #"Sorted Rows"
+    #"Enforced Types"
 ```
+
 5. Click **Done** $->$ **Close & Load**.
 6. **Monthly Refresh:** Every month you receive a new ERP export, simply click **Data $->$ Refresh All**!
 
@@ -736,6 +868,7 @@ in
 DeepAnalyze includes an integrated, high-throughput local inference manager (`server.py` and `start_server.sh`) powered by `llama-server`.
 
 ### Hardware Acceleration Auto-Detection
+
 * **macOS (Apple Silicon M1/M2/M3/M4):** Automatically activates **Apple Metal** unified memory acceleration (`-ngl 99`, `-fa on`, Flash Attention, 16K context).
 * **Linux (NVIDIA / AMD):** Automatically binds CUDA or ROCm GPU acceleration (`-ngl 99`).
 * **Transport:** Binds to Unix Domain Sockets (`/tmp/llama.sock`) for ultra-low latency local IPC with zero TCP overhead.
@@ -770,6 +903,7 @@ deepanalyze server start \
 
 ### Q4: What is the difference between an encrypted duplicate file and a clipboard payload?
 **Answer:**
+
 * **Encrypted Duplicate File (`[name]_anonymized.xlsx`):** A complete duplicate spreadsheet saved to disk where 100% of the row/column structure is retained, but every sensitive entity and dollar amount is replaced with safe surrogate values. You can upload this entire file to cloud AI models.
 * **Clipboard Payload:** A lightweight 5-row differential synthetic mock and prompt instructions copied directly to your clipboard for quick paste into chat interfaces.
 
@@ -787,6 +921,7 @@ deepanalyze server start \
 
 ### Q9: Why did Power Query previously give an error about keyword `<'section'>`?
 **Answer:** In the Power Query M language, `section` is a reserved keyword. This error occurs if:
+
 1. The word `section` is typed or pasted without double quotes (`"section"`).
 2. Code starting with `section Section1; shared ...` is pasted into Excel's Advanced Editor (which only accepts expression documents `let ... in ...`).
 3. Code is pasted into the single-line Formula Bar (`fx`) or Step Script box instead of opening the **Advanced Editor** (Home $->$ Advanced Editor).
@@ -813,6 +948,7 @@ deepanalyze/
 ├── scorecard.py     # Real-Time Data Diff & Quality Scorecard Engine
 ├── testgen.py       # Automated Pytest Pipeline Generator (Schema/Domain/Nulls)
 ├── powerquery.py    # Excel Power Query M-Code & Step-by-Step UI Guide Generator
+├── erp_cleaner.py   # Universal Dynamic Layout Sniffer & Zero-Data-Loss State Machine
 ├── cockpit_tui.py   # Full-Screen Textual Interactive Cockpit TUI (TCSS Grid & Widgets)
 ├── cockpit.py       # Terminal ANSI KPI Scorecard & Column Shift Inspector
 ├── frontier.py      # Frontier Model API Airlock Gateway (BYOK Direct Execution with Zero-PII Guarantee)
@@ -824,11 +960,13 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 118 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 167 rigorous security, performance, and bilingual cognitive tests:
 ```bash
 pytest
 ```
+
 * `tests/test_benchmarks.py`: Validates all 11 Air-Gap Privacy & Security Benchmarks across Tier 1 (canary injection, regex PII scanning, k-anonymity, l-diversity, NNDR memorization, NMI proxy leakage) and Tier 2 (t-closeness EMD distribution skewness, empirical anonymeter linkability, MIA shadow inference, AST firewall policy, and 100.00% deterministic reconciliation fidelity) alongside automatic inclusion in `compliance_audit.md`.
+* `tests/test_erp_cleaner.py`: Validates the Universal Dynamic Layout Sniffer (`sniff_erp_layout`), dynamic prefix discovery, zero data loss state-machine flattener, and multi-line ragged wrap stitching across diverse ERP formats.
 * `tests/test_brain.py`: Validates the complete 18-Brain Omni-Cognitive Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, multi-modal spatial cartography (bounding box & GPS coordinates), chronometrics (periodicity & FFT), process state modeling, tensor semantic manifold preservation, graph network topology, statutory privacy arbitration (ZATCA, NDMO, GDPR overrides), cryptographic surrogate decoding, Stigmergic Bayesian belief consensus updates, Ouroboros crash autopsies with surgical micro-repair prompts, Socratic inquiry questions, Empathetic cognitive friction translation, Intuitive human behavioral intent detection, and Narrative Weaver Startup Colleague persona synthesis.
 * `tests/test_fix.py`: Validates the closed-loop Ouroboros `--fix` directive, local model health probing, autonomous forensic diagnosis and surgical repair with local 8B GGUF model, custom steering prompts, AST security firewall validation on model-synthesized code, LIFO rollback integration, and graceful clipboard autopsy fallback when offline.
 * `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
@@ -848,3 +986,4 @@ pytest
 * `tests/test_pandas_numpy_airlock.py`: Validates native execution of Pandas and NumPy data wrangling code without Polars conversion errors.
 * `tests/test_erp_airlock.py`: Validates multi-column ERP flattening, header promotion, and automated sanitization.
 * `tests/test_powerquery_and_ingest.py`: Validates full 16-column Excel preservation, Power Query M-code parsing, and 100% ERP transformation fidelity.
+

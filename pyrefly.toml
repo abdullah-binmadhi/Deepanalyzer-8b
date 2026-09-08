@@ -1,0 +1,9 @@
+project-includes = [
+    "deepanalyze/**/*.py",
+    "tests/**/*.py",
+]
+project-excludes = [
+    "**/__pyrefly_virtual__/**",
+    "**/inmemory/**",
+    "Testing files/**",
+]

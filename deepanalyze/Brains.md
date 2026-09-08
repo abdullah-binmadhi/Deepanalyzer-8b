@@ -530,6 +530,7 @@ Expand the layout boundaries dictionary to detect common Arabic accounting keywo
 
 * **Unicode-Compliant Regex:** Replace `[A-Za-z0-9]` with `[\w]` combined with `re.UNICODE` or explicit Arabic character ranges (`[\u0600-\u06FF\u0750-\u077F]`).
 * **Arabic Word Numbers:** Add Arabic written number words to the text-to-digit dictionary:
+
 ```python
 ARABIC_WORD_NUMBERS = {
     "واحد": 1,
@@ -565,6 +566,7 @@ If Brain 5 identifies that $\text{Col}_C \approx \text{Col}_A \times 1.15$, it l
 You do **not** need a separate Arabic version of the engine. Doing so would duplicate the entropy calculations, density scans, and graph algorithms. 
 
 Instead, equip the shared **Cognitive Blackboard** and the ingestion layer with:
+
 * Universal numeral translation (`٠-٩` $\rightarrow$ `0-9`).
 * Invisible BiDi Unicode stripping.
 * Bilingual structural lexicons (English + Arabic).
@@ -1009,12 +1011,14 @@ Instead of calculating matrix density or Shannon entropy, the Right Brains calcu
 To see how this works, imagine you upload a deeply corrupted Saudi hospital billing spreadsheet.
 
 1. **The Left Brains (Math & Physics):**
+
 * *Brain 1* detects the header is buried on Row 12.
 * *Brain 3* detects that 5% of the "Patient Phone" column contains email addresses.
 * *Brain 5* detects that `Billed Amount - Insurance = Patient Responsibility`.
 
 
 2. **The Right Brains (EQ & Persona):**
+
 * *Brain 16 (Pedagogy)* sees the buried header and flags it as a "High-Friction Annoyance" to sympathize with.
 * *Brain 15 (Socratic)* sees the 5% email contamination and decides to ask about it rather than just deleting it.
 

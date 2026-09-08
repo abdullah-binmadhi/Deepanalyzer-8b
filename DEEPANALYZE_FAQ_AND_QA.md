@@ -15,6 +15,7 @@ Comprehensive answers regarding unflattened ERP masking, data privacy, and execu
 
 ### Q4: What is the difference between an encrypted duplicate file and a clipboard payload?
 **Answer:** 
+
 * **Encrypted Duplicate File (`[name]_anonymized.xlsx`):** A complete duplicate of the original spreadsheet saved to disk where 100% of the row/column structure is retained, but every sensitive entity and dollar amount is replaced with safe surrogate values. You can upload this entire file to cloud models or external partners.
 * **Clipboard Payload:** A lightweight 5-row differential synthetic mock and prompt instructions copied directly to your clipboard for quick paste into ChatGPT/Claude.
 
@@ -29,6 +30,7 @@ Comprehensive answers regarding unflattened ERP masking, data privacy, and execu
 
 ### Q8: What if I am not a programmer and want to clean the spreadsheet in Microsoft Excel using Power Query instead of Python?
 **Answer:** DeepAnalyze incorporates a **Dual-Track Delivery**:
+
 * **Track A (Automated Python/Pandas in RAM):** 1-click execution in memory that immediately produces `Clean_file.xlsx`.
 * **Track B (Power Query M-Code & Step-by-Step UI Guide):** Generates ready-to-paste Power Query M-code for Excel's Advanced Editor, accompanied by a comprehensive click-by-click UI walkthrough with exact formulas. This empowers accountants, financial controllers, and non-analysts to execute or modify the data transformation directly in Excel without ever having to touch a terminal or write Python. Moreover, once saved in Excel, the query can be refreshed on future monthly ERP exports with a single click.
 
