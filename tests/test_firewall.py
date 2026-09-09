@@ -14,6 +14,9 @@ def test_firewall_blocks_forbidden_imports():
         "from os import environ\nk = environ['SECRET']",
         "import os\nx = os.environ.get('AWS_KEY')",
         "import os\nos.remove('/etc/hosts')",
+        "import os as my_os\nmy_os.system('whoami')",
+        "import os as my_os\nk = my_os.environ",
+        "import importlib\nm = importlib.import_module('os')",
         "eval('__import__(\"os\").system(\"ls\")')",
         "exec('import socket')",
         "x = ().__class__.__base__.__subclasses__()"
