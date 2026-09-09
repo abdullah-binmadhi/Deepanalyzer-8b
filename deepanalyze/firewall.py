@@ -33,7 +33,7 @@ class ASTFirewallVisitor(ast.NodeVisitor):
     FORBIDDEN_MODULES: Set[str] = {
         "socket", "requests", "urllib", "httpx", "aiohttp", "paramiko",
         "ftplib", "telnetlib", "smtplib", "poplib", "imaplib", "http",
-        "subprocess", "shutil", "posix", "pty", "commands"
+        "subprocess", "shutil", "posix", "pty", "commands", "importlib"
     }
 
     FORBIDDEN_CALLS: Set[str] = {
@@ -61,6 +61,7 @@ class ASTFirewallVisitor(ast.NodeVisitor):
     def __init__(self):
         super().__init__()
         self.violations: List[str] = []
+        self.os_aliases: Set[str] = {"os"}
 
     def visit_Constant(self, node: ast.Constant) -> None:
         if isinstance(node.value, str):
@@ -75,6 +76,8 @@ class ASTFirewallVisitor(ast.NodeVisitor):
             root_module = alias.name.split(".")[0]
             if root_module in self.FORBIDDEN_MODULES:
                 self.violations.append(f"Forbidden module import: `{alias.name}`")
+            if root_module == "os":
+                self.os_aliases.add(alias.asname or alias.name)
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
@@ -103,18 +106,18 @@ class ASTFirewallVisitor(ast.NodeVisitor):
                 if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, (int, float)):
                     if node.args[0].value > 1.0:
                         self.violations.append(f"Forbidden side-channel timing delay: `time.sleep({node.args[0].value})` exceeds 1.0s limit")
-            if isinstance(node.func.value, ast.Name) and node.func.value.id == "os":
+            if isinstance(node.func.value, ast.Name) and node.func.value.id in self.os_aliases:
                 if attr_name in self.FORBIDDEN_OS_ATTRS:
-                    self.violations.append(f"Forbidden OS call: `os.{attr_name}()`")
+                    self.violations.append(f"Forbidden OS call: `{node.func.value.id}.{attr_name}()`")
 
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if node.attr in self.FORBIDDEN_DUNDERS:
             self.violations.append(f"Forbidden dunder reflection: `.{node.attr}`")
-        if isinstance(node.value, ast.Name) and node.value.id == "os":
+        if isinstance(node.value, ast.Name) and node.value.id in self.os_aliases:
             if node.attr in self.FORBIDDEN_OS_ATTRS:
-                self.violations.append(f"Forbidden OS attribute access: `os.{node.attr}`")
+                self.violations.append(f"Forbidden OS attribute access: `{node.value.id}.{node.attr}`")
         self.generic_visit(node)
 
 
