@@ -12,6 +12,13 @@ import urllib.request
 from typing import Dict, List, Optional, Tuple
 
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
 def detect_available_providers() -> Dict[str, Dict[str, str]]:
     """Detects configured Frontier LLM providers based on environment variables."""
     providers = {}
