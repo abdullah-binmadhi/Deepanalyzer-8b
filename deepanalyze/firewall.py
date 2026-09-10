@@ -33,11 +33,12 @@ class ASTFirewallVisitor(ast.NodeVisitor):
     FORBIDDEN_MODULES: Set[str] = {
         "socket", "requests", "urllib", "httpx", "aiohttp", "paramiko",
         "ftplib", "telnetlib", "smtplib", "poplib", "imaplib", "http",
-        "subprocess", "shutil", "posix", "pty", "commands"
+        "subprocess", "shutil", "posix", "pty", "commands", "builtins"
     }
 
     FORBIDDEN_CALLS: Set[str] = {
-        "eval", "exec", "compile", "__import__", "open", "getattr", "setattr", "delattr"
+        "eval", "exec", "compile", "__import__", "open", "getattr", "setattr", "delattr",
+        "globals", "locals"
     }
 
     FORBIDDEN_OS_ATTRS: Set[str] = {

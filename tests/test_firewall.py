@@ -16,7 +16,11 @@ def test_firewall_blocks_forbidden_imports():
         "import os\nos.remove('/etc/hosts')",
         "eval('__import__(\"os\").system(\"ls\")')",
         "exec('import socket')",
-        "x = ().__class__.__base__.__subclasses__()"
+        "x = ().__class__.__base__.__subclasses__()",
+        "import builtins\nx = builtins.eval('1+1')",
+        "from builtins import getattr\nx = getattr(os, 'system')",
+        "g = globals()",
+        "l = locals()"
     ]
 
     for snippet in forbidden_snippets:
