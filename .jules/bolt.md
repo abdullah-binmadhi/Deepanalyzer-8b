@@ -1,0 +1,3 @@
+## 2026-03-30 - Polars Column Unique Materialization & Regex Scan Optimization
+**Learning:** In Polars-backed tokenization pipelines (`vault.py`), calling `.unique()` on non-string Series forces element-by-element Python object conversions if string operations are done afterward. Pre-casting to `pl.String` upfront allows Polars SIMD/Rust to execute `.unique()` natively, reducing Python list allocations from O(N_rows) to O(N_unique). Additionally, caching `.unique().to_list()` per column across multi-pattern regex scans prevents re-scanning column data for every active compliance regex.
+**Action:** When working with Polars string transformations, always cast to `pl.String` before unique materialization and cache column unique lists across regex loops.

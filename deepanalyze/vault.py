@@ -89,11 +89,12 @@ class TokenVault:
 
     def _get_or_create_token(self, raw_value: str, tag: str = "ID") -> str:
         """Retrieves existing surrogate token or registers a new sequential token."""
-        val_str = str(raw_value).strip()
+        val_str = raw_value.strip() if isinstance(raw_value, str) else str(raw_value).strip()
         if not val_str:
             return ""
-        if val_str in self._raw_to_token:
-            return self._raw_to_token[val_str]
+        existing = self._raw_to_token.get(val_str)
+        if existing is not None:
+            return existing
 
         self._counters[tag] += 1
         token = f"<{tag}_{self._counters[tag]}>"
@@ -185,19 +186,19 @@ class TokenVault:
             if tier == "MUST_ENCRYPT" and col in result_df.columns:
                 tag = self._determine_tag_for_column(col)
                 series = result_df[col]
+                str_col = series.cast(pl.String)
 
+                # Pre-cast to string in Polars SIMD/Rust layer before extracting unique non-null values
                 unique_vals = [
-                    v for v in series.drop_nulls().unique(maintain_order=True).to_list()
-                    if v is not None and str(v).strip()
+                    u for u in str_col.drop_nulls().unique(maintain_order=True).to_list()
+                    if u and u.strip()
                 ]
                 if unique_vals:
                     val_to_tok = {}
-                    for u in unique_vals:
-                        u_str = str(u)
+                    for u_str in unique_vals:
                         tok = self._get_or_create_token(u_str, tag)
                         val_to_tok[u_str] = tok
 
-                    str_col = series.cast(pl.String)
                     patterns = list(val_to_tok.keys())
                     replacements = list(val_to_tok.values())
 
@@ -226,14 +227,19 @@ class TokenVault:
             }
 
             for col in string_cols:
-                sample_text = " ".join(result_df[col].drop_nulls().head(100).to_list())
+                col_series = result_df[col].drop_nulls()
+                sample_text = " ".join(col_series.head(100).to_list())
                 matches_found: Dict[str, str] = {}
+                distinct_vals: Optional[List[str]] = None
 
                 for pat_name, regex in compiled_regexes.items():
                     if regex.search(sample_text):
-                        distinct_vals = result_df[col].drop_nulls().unique(maintain_order=True).to_list()
+                        # Lazily extract distinct values once per column across all matching regexes
+                        if distinct_vals is None:
+                            distinct_vals = col_series.unique(maintain_order=True).to_list()
                         for val in distinct_vals:
-                            for match in regex.finditer(str(val)):
+                            val_str = val if isinstance(val, str) else str(val)
+                            for match in regex.finditer(val_str):
                                 matched_str = match.group(0)
                                 if pat_name == "CREDIT_CARD" and not luhn_checksum_valid(matched_str):
                                     continue
@@ -275,8 +281,8 @@ class TokenVault:
 
         if string_cols and tokens:
             for col in string_cols:
-                col_sample = " ".join(result_df[col].drop_nulls().head(20).to_list())
-                if "<" in col_sample:
+                col_sample = result_df[col].drop_nulls().head(20).to_list()
+                if any("<" in str(v) for v in col_sample):
                     try:
                         result_df = result_df.with_columns(
                             pl.col(col).str.replace_many(tokens, raw_values).alias(col)

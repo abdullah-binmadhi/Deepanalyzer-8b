@@ -39,12 +39,12 @@ UNIVERSAL_PATTERNS: Dict[str, str] = {
 
 def luhn_checksum_valid(number_str: str) -> bool:
     """Validates primary account numbers (PAN) via the Luhn algorithm."""
-    digits = [int(c) for c in re.sub(r"\D", "", number_str)]
-    if len(digits) < 13 or len(digits) > 19:
+    digits = [ord(c) - 48 for c in number_str if "0" <= c <= "9"]
+    n = len(digits)
+    if n < 13 or n > 19:
         return False
     checksum = 0
-    reverse_digits = digits[::-1]
-    for idx, d in enumerate(reverse_digits):
+    for idx, d in enumerate(reversed(digits)):
         if idx % 2 == 1:
             doubled = d * 2
             checksum += doubled - 9 if doubled > 9 else doubled
@@ -276,6 +276,19 @@ def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
 # COLUMN RISK CLASSIFICATION
 # =============================================================================
 
+PII_EXACT_TOKENS: Set[str] = {
+    "name", "customer", "patient", "client", "employee", "vendor", "user",
+    "ssn", "pesel", "iqama", "nino", "iban", "email", "phone", "mobile", "cell",
+    "card", "pan", "passport", "license", "licence", "taxid"
+}
+
+QUASI_TOKENS: Set[str] = {
+    "date", "dob", "birth", "age", "gender", "sex", "zip", "postal",
+    "city", "address", "street", "state", "country", "lat", "lon", "location",
+    "note", "notes", "comment", "comments", "desc", "description", "memo"
+}
+
+
 def classify_column(col_name: str, policy: CompliancePolicy) -> str:
     """Classifies a column into MUST_ENCRYPT, RECOMMENDED_TO_MASK, or SAFE."""
     clean = re.sub(r"[^a-zA-Z0-9]", "_", col_name.strip().lower())
@@ -286,12 +299,7 @@ def classify_column(col_name: str, policy: CompliancePolicy) -> str:
         if d_clean == clean or d_clean in tokens or any(d_clean in t for t in tokens):
             return "MUST_ENCRYPT"
 
-    pii_exact_tokens = {
-        "name", "customer", "patient", "client", "employee", "vendor", "user",
-        "ssn", "pesel", "iqama", "nino", "iban", "email", "phone", "mobile", "cell",
-        "card", "pan", "passport", "license", "licence", "taxid"
-    }
-    if any(t in pii_exact_tokens for t in tokens):
+    if any(t in PII_EXACT_TOKENS for t in tokens):
         return "MUST_ENCRYPT"
 
     for q in policy.quasi_identifiers:
@@ -299,12 +307,7 @@ def classify_column(col_name: str, policy: CompliancePolicy) -> str:
         if q_clean == clean or q_clean in tokens:
             return "RECOMMENDED_TO_MASK"
 
-    quasi_tokens = {
-        "date", "dob", "birth", "age", "gender", "sex", "zip", "postal",
-        "city", "address", "street", "state", "country", "lat", "lon", "location",
-        "note", "notes", "comment", "comments", "desc", "description", "memo"
-    }
-    if any(t in quasi_tokens for t in tokens):
+    if any(t in QUASI_TOKENS for t in tokens):
         return "RECOMMENDED_TO_MASK"
 
     return "SAFE"
