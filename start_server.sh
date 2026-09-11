@@ -44,7 +44,7 @@ done
 SPECULATIVE_FLAGS=()
 if [ -n "$DRAFT_PATH" ]; then
   echo "[INFO] Speculative Draft Model (2.5x Speedup): $DRAFT_PATH"
-  SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --spec-draft-n-max 8)
+  SPECULATIVE_FLAGS=(-md "$DRAFT_PATH" --spec-draft-n-max 12 --spec-draft-n-min 4)
 fi
 
 SOCKET_PATH="${DEEPANALYZE_SOCKET:-/tmp/llama.sock}"
@@ -65,11 +65,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   echo "[INFO] Hardware Detected: Apple Silicon (Metal Acceleration)"
   EXTRA_FLAGS=(
     -ngl 99
-    -c 16384
+    -c "${DEEPANALYZE_CTX_SIZE:-8192}"
     -fa on
     -t 4
     --cache-type-k q8_0
     --cache-type-v q8_0
+    --mlock
     -a deepanalyze-8b
     --min-p 0.05
   )
@@ -78,9 +79,10 @@ else
   echo "[INFO] Hardware Detected: Linux/Generic (CUDA/Vulkan/CPU)"
   EXTRA_FLAGS=(
     -ngl 99
-    -c 16384
+    -c "${DEEPANALYZE_CTX_SIZE:-8192}"
     --cache-type-k q8_0
     --cache-type-v q8_0
+    --mlock
     -a deepanalyze-8b
     --min-p 0.05
   )

@@ -106,7 +106,7 @@ class CognitiveBlackboard:
         beliefs = self.column_beliefs.get(col_key, {})
         if not beliefs:
             return self.column_profiles.get(col_key, {}).get("role", "UNKNOWN")
-        return max(beliefs, key=beliefs.get)
+        return max(beliefs, key=lambda k: beliefs[k])
 
 
 # Alias StigmergicBlackboard to CognitiveBlackboard for unified architecture
@@ -143,8 +143,10 @@ def calculate_entropy(series: pd.Series) -> float:
     counts = clean_series.value_counts(normalize=True)
     if len(counts) <= 1:
         return 0.0
-    entropy = -float(np.sum(counts * np.log2(counts)))
-    max_entropy = math.log2(len(clean_series)) if len(clean_series) > 1 else 1.0
+    counts_arr = counts.to_numpy(dtype=np.float64)
+    entropy = -float(np.sum(counts_arr * np.log2(counts_arr)))
+    n_clean = len(clean_series)
+    max_entropy = math.log2(n_clean) if n_clean > 1 else 1.0
     if max_entropy <= 0.0:
         return 0.0
     return float(np.clip(entropy / max_entropy, 0.0, 1.0))
@@ -152,7 +154,7 @@ def calculate_entropy(series: pd.Series) -> float:
 
 def _get_data_start_row(df: pd.DataFrame, bb: CognitiveBlackboard) -> int:
     """Returns the zero-based index of the first real data row."""
-    has_named_cols = any(not str(c).isdigit() for c in df.columns)
+    has_named_cols = any(not c.isdigit() if isinstance(c, str) else False for c in df.columns)
     if has_named_cols and bb.header_row_index == 0:
         return 0
     return bb.header_row_index + 1 if bb.header_row_index < df.shape[0] - 1 else bb.header_row_index
@@ -185,8 +187,8 @@ class Brain1TopologicalCartographer(BaseCognitiveBrain):
         if n_rows == 0 or n_cols == 0:
             return
 
-        row_densities = df.notna().sum(axis=1).values
-        max_density = float(row_densities.max()) if len(row_densities) > 0 else 0.0
+        row_densities = df.notna().sum(axis=1).to_numpy()
+        max_density = float(np.max(row_densities)) if len(row_densities) > 0 else 0.0
 
         # 1. Header Boundary Detection
         meta_rows: List[int] = []
@@ -526,69 +528,86 @@ class Brain5MathematicalPhysicist(BaseCognitiveBrain):
             num_matrix[k] = pd.to_numeric(clean_s, errors="coerce")
 
         min_records = min(10, max(3, int(sample_df.shape[0] * 0.4)))
+        active_keys = list(num_matrix.keys())
+        n_cols = len(active_keys)
+        if n_cols < 2:
+            return
+
+        # Vectorized 2D NumPy array extraction: shape (N, n_cols)
+        X = np.column_stack([num_matrix[k].to_numpy(dtype=np.float64) for k in active_keys])
+        pos_mask = ~np.isnan(X) & (X > 0)
 
         # 1. Statutory Tax / VAT Invariants (Pairwise Check: ZATCA 15% and GCC 5%)
-        for a, b in itertools.permutations(list(num_matrix.keys()), 2):
-            s_a, s_b = num_matrix[a], num_matrix[b]
-            mask_pair = s_a.notna() & s_b.notna() & (s_a > 0) & (s_b > 0)
-            if int(mask_pair.sum()) < min_records:
+        for i, j in itertools.permutations(range(n_cols), 2):
+            mask_pair = pos_mask[:, i] & pos_mask[:, j]
+            cnt = np.count_nonzero(mask_pair)
+            if cnt < min_records:
                 continue
 
-            vals_a = s_a[mask_pair].values
-            vals_b = s_b[mask_pair].values
+            vals_a = X[mask_pair, i]
+            vals_b = X[mask_pair, j]
+            a = active_keys[i]
+            b = active_keys[j]
 
             # 15% ZATCA VAT Gross Total: B ≈ A * 1.15
             rel_diff_vat15_gross = np.abs((vals_a * 1.15) - vals_b) / (np.abs(vals_b) + 1e-9)
-            if float((rel_diff_vat15_gross < 0.02).mean()) > 0.85:
-                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 1.15 (15% ZATCA VAT Gross Compliance - Validated across {int(mask_pair.sum())} records)"
+            if float(np.count_nonzero(rel_diff_vat15_gross < 0.02)) / cnt > 0.85:
+                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 1.15 (15% ZATCA VAT Gross Compliance - Validated across {cnt} records)"
                 if law_str not in bb.algebraic_laws:
                     bb.algebraic_laws.append(law_str)
 
             # 15% ZATCA VAT Tax Amount: B ≈ A * 0.15
             rel_diff_vat15_tax = np.abs((vals_a * 0.15) - vals_b) / (np.abs(vals_b) + 1e-9)
-            if float((rel_diff_vat15_tax < 0.02).mean()) > 0.85:
-                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 0.15 (15% ZATCA Tax Amount - Validated across {int(mask_pair.sum())} records)"
+            if float(np.count_nonzero(rel_diff_vat15_tax < 0.02)) / cnt > 0.85:
+                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 0.15 (15% ZATCA Tax Amount - Validated across {cnt} records)"
                 if law_str not in bb.algebraic_laws:
                     bb.algebraic_laws.append(law_str)
 
             # 5% GCC VAT Gross Total: B ≈ A * 1.05
             rel_diff_vat5_gross = np.abs((vals_a * 1.05) - vals_b) / (np.abs(vals_b) + 1e-9)
-            if float((rel_diff_vat5_gross < 0.02).mean()) > 0.85:
-                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 1.05 (5% GCC VAT Gross Compliance - Validated across {int(mask_pair.sum())} records)"
+            if float(np.count_nonzero(rel_diff_vat5_gross < 0.02)) / cnt > 0.85:
+                law_str = f"Statutory Tax Invariant: `{b}` ≈ `{a}` * 1.05 (5% GCC VAT Gross Compliance - Validated across {cnt} records)"
                 if law_str not in bb.algebraic_laws:
                     bb.algebraic_laws.append(law_str)
 
         # 2. Permutation Invariants: A * B ≈ C and A + B ≈ C
-        if len(num_keys) >= 3:
-            for a, b, c in itertools.permutations(list(num_matrix.keys()), 3):
-                s_a, s_b, s_c = num_matrix[a], num_matrix[b], num_matrix[c]
-                mask = s_a.notna() & s_b.notna() & s_c.notna() & (s_a > 0) & (s_b > 0)
-                if int(mask.sum()) < min_records:
-                    continue
+        if n_cols >= 3:
+            for i, j in itertools.combinations(range(n_cols), 2):
+                mask_pair = pos_mask[:, i] & pos_mask[:, j]
+                for k in range(n_cols):
+                    if k == i or k == j:
+                        continue
+                    mask = mask_pair & ~np.isnan(X[:, k])
+                    cnt = np.count_nonzero(mask)
+                    if cnt < min_records:
+                        continue
 
-                vals_a = s_a[mask].values
-                vals_b = s_b[mask].values
-                vals_c = s_c[mask].values
+                    vals_a = X[mask, i]
+                    vals_b = X[mask, j]
+                    vals_c = X[mask, k]
+                    a = active_keys[i]
+                    b = active_keys[j]
+                    c = active_keys[k]
 
-                # Multiplicative Invariant: A * B ≈ C
-                product = vals_a * vals_b
-                rel_diff_mult = np.abs(product - vals_c) / (np.abs(vals_c) + 1e-9)
-                if float((rel_diff_mult < 0.02).mean()) > 0.85:
-                    law_str = f"Multiplicative Law: `{a}` * `{b}` ≈ `{c}` (Validated across {int(mask.sum())} records)"
-                    if law_str not in bb.algebraic_laws:
-                        bb.algebraic_laws.append(law_str)
-                    if len(bb.algebraic_laws) >= 4:
-                        return
+                    # Multiplicative Invariant: A * B ≈ C
+                    product = vals_a * vals_b
+                    rel_diff_mult = np.abs(product - vals_c) / (np.abs(vals_c) + 1e-9)
+                    if float(np.count_nonzero(rel_diff_mult < 0.02)) / cnt > 0.85:
+                        law_str = f"Multiplicative Law: `{a}` * `{b}` ≈ `{c}` (Validated across {cnt} records)"
+                        if law_str not in bb.algebraic_laws:
+                            bb.algebraic_laws.append(law_str)
+                        if len(bb.algebraic_laws) >= 4:
+                            return
 
-                # Additive Invariant: A + B ≈ C
-                sum_ab = vals_a + vals_b
-                rel_diff_add = np.abs(sum_ab - vals_c) / (np.abs(vals_c) + 1e-9)
-                if float((rel_diff_add < 0.02).mean()) > 0.85:
-                    law_str = f"Additive Law: `{a}` + `{b}` ≈ `{c}` (Validated across {int(mask.sum())} records)"
-                    if law_str not in bb.algebraic_laws:
-                        bb.algebraic_laws.append(law_str)
-                    if len(bb.algebraic_laws) >= 4:
-                        return
+                    # Additive Invariant: A + B ≈ C
+                    sum_ab = vals_a + vals_b
+                    rel_diff_add = np.abs(sum_ab - vals_c) / (np.abs(vals_c) + 1e-9)
+                    if float(np.count_nonzero(rel_diff_add < 0.02)) / cnt > 0.85:
+                        law_str = f"Additive Law: `{a}` + `{b}` ≈ `{c}` (Validated across {cnt} records)"
+                        if law_str not in bb.algebraic_laws:
+                            bb.algebraic_laws.append(law_str)
+                        if len(bb.algebraic_laws) >= 4:
+                            return
 
 
 # ==============================================================================
@@ -597,8 +616,8 @@ class Brain5MathematicalPhysicist(BaseCognitiveBrain):
 class Brain6AutonomousFeatureAlchemist(BaseCognitiveBrain):
     """Prescribes universal ML feature engineering based on statistical morphology."""
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return
 
@@ -750,7 +769,7 @@ class Brain9ChronometricSignalProcessor(BaseCognitiveBrain):
             "median_delta": str(median_delta),
             "is_uniform": is_uniform,
             "dominant_period": dominant_period,
-            date_col: {"cadence": str(median_delta), "is_uniform": is_uniform}
+            str(date_col): {"cadence": str(median_delta), "is_uniform": is_uniform}
         }
         bb.add_belief(date_col, "TEMPORAL_CHRONOMETRIC", 0.95, f"Temporal delta {median_delta}")
         bb.add_belief(date_col, "CHRONOMETRIC_TIME_SERIES", 0.90, f"Temporal delta {median_delta}")
@@ -801,7 +820,7 @@ class Brain10ProcessStateModeler(BaseCognitiveBrain):
             c_act_idx = bb.column_profiles[activity_col].get("col_index", 0) if activity_col in bb.column_profiles else (bb.columns.index(activity_col) if activity_col in bb.columns else 0)
             states = list(sample.iloc[:, c_act_idx].dropna().unique())
             bb.add_belief(activity_col, "PROCESS_STATE", 0.95, "Discrete lifecycle workflow states.")
-            bb.process_models[activity_col] = {
+            bb.process_models[str(activity_col)] = {
                 "states": states,
                 "case_col": case_col,
                 "timestamp_col": timestamp_col,
@@ -1017,8 +1036,8 @@ class Brain14CryptographicSentinel(BaseCognitiveBrain):
 class Brain7ExecutiveOrchestrator(BaseCognitiveBrain):
     """Translates the Cognitive Blackboard into an authoritative prompt."""
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 0) -> str:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 0) -> str:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return ""
 
@@ -1161,8 +1180,8 @@ class Brain7ExecutiveOrchestrator(BaseCognitiveBrain):
 class Brain15SocraticInquirer(BaseCognitiveBrain):
     """The 'What If?' Engine: Formulates curious questions for statistical outliers and ambiguities."""
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return
 
@@ -1204,8 +1223,8 @@ class Brain15SocraticInquirer(BaseCognitiveBrain):
 class Brain16EmpatheticTranslator(BaseCognitiveBrain):
     """The Pedagogy Engine: Calculates cognitive load, scores export friction, and enforces anti-jargon rules."""
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return
 
@@ -1242,12 +1261,12 @@ class Brain17IntuitiveDetective(BaseCognitiveBrain):
         r"(?i)\b(asap|urgent|error|test|check|review|vip|priority|critical|pending|hold|fix|عاجل|مهم|فحص|مراجعة|خطأ|تنبيه)\b"
     )
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 1500) -> None:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return
 
-        df_inst = df_or_bb if isinstance(df_or_bb, pd.DataFrame) else None
+        df_inst = df if isinstance(df, pd.DataFrame) else None
         if df_inst is None:
             return
 
@@ -1288,14 +1307,14 @@ class Brain17IntuitiveDetective(BaseCognitiveBrain):
 class Brain18NarrativeWeaver(BaseCognitiveBrain):
     """The Master Orchestrator: Wraps data physics in the 'Humble Startup Colleague' persona."""
 
-    def execute(self, df_or_bb: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 0) -> str:
-        target_bb = bb if bb is not None else (df_or_bb if isinstance(df_or_bb, CognitiveBlackboard) else None)
+    def execute(self, df: Any, bb: Optional[CognitiveBlackboard] = None, sample_size: int = 0) -> str:
+        target_bb = bb if bb is not None else (df if isinstance(df, CognitiveBlackboard) else None)
         if target_bb is None:
             return ""
 
         # Populate internal monologue if not already done
         if not target_bb.internal_monologue:
-            Brain7ExecutiveOrchestrator().execute(df_or_bb, target_bb)
+            Brain7ExecutiveOrchestrator().execute(df, target_bb)
 
         prompt_lines = [
             "### SYSTEM ROLE & OBJECTIVE",
@@ -1416,7 +1435,7 @@ def autopsy_traceback(
     df: Optional[pd.DataFrame] = None
 ) -> str:
     """Ouroboros Self-Healing Autopsy: Analyzes pipeline traceback and generates a surgical repair prompt."""
-    tb_str = str(error_traceback).strip()
+    tb_str = error_traceback.strip()
     bb.ouroboros_traceback = tb_str
 
     err_lines = [line.strip() for line in tb_str.split("\n") if line.strip()]
@@ -1494,7 +1513,7 @@ class OmniModalResonanceEngine:
                 self.df_raw[col] = self.df_raw[col].map(normalize_bilingual_cell)
 
         # Track existing column headers if not numeric range
-        cols = [normalize_bilingual_cell(str(c)) for c in self.df_raw.columns]
+        cols = [normalize_bilingual_cell(c) for c in self.df_raw.columns]
         self.bb = CognitiveBlackboard(
             filepath=self.filepath,
             filename=self.filename,
