@@ -76,8 +76,10 @@ class TestCockpitTUI(unittest.TestCase):
 
                 # 7. Layout mode toggle
                 await pilot.click("#btn-layout-1")
+                await pilot.pause()
                 self.assertTrue("grid-layout-1" in grid.classes)
                 await pilot.click("#btn-layout-2")
+                await pilot.pause()
                 self.assertTrue("grid-layout-4" in grid.classes)
 
                 # 8. Test F1 Auto-Remedy All

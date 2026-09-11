@@ -279,6 +279,25 @@ def detect_dataset_architecture(df: Any) -> Tuple[str, str, str]:
     if any(any(hk in c for hk in health_keywords) for c in cols):
         return ("HEALTHCARE_EHR", "Healthcare EHR / Clinical Record", "Detected clinical patient identifiers and medical attributes.")
 
+    # 4. Multi-Industry Sub-Architecture Awareness for Tabular Schemas
+    def has_kw(kws):
+        return any(any(k == c or f"_{k}" in c or f"{k}_" in c or (len(k) >= 4 and k in c) for k in kws) for c in cols)
+
+    if has_kw(["loan", "debt", "interest", "credit_score", "mortgage", "collateral", "borrower"]):
+        return ("CLEAN_TABULAR", "Financial & Lending Ledger", "Detected credit, lending, or banking ledger schema.")
+    if has_kw(["sku", "cart", "discount", "cogs", "inventory", "shipping_fee", "return_reason"]):
+        return ("CLEAN_TABULAR", "E-Commerce & Retail Catalog/Orders", "Detected retail product, order, or merchandising schema.")
+    if has_kw(["mrr", "arr", "subscription", "churn", "session_id", "dau", "mau"]):
+        return ("CLEAN_TABULAR", "SaaS & Product Telemetry", "Detected subscription analytics or user telemetry schema.")
+    if has_kw(["vin", "waybill", "fleet", "carrier", "transit_time", "dispatch_date"]):
+        return ("CLEAN_TABULAR", "Logistics & Supply Chain Fleet", "Detected freight, shipping, or fleet management schema.")
+    if has_kw(["employee_id", "hire_date", "tenure", "salary", "bonus", "department", "attrition"]):
+        return ("CLEAN_TABULAR", "Workforce & HR Analytics", "Detected employee, compensation, or talent management schema.")
+    if has_kw(["sensor_id", "vibration", "voltage", "temperature", "rpm", "device_id"]):
+        return ("CLEAN_TABULAR", "IoT & Sensor Telemetry", "Detected industrial sensor, IoT, or machine telemetry schema.")
+    if has_kw(["campaign", "impression", "click", "ctr", "cpc", "roas", "ad_spend"]):
+        return ("CLEAN_TABULAR", "Marketing & CRM Pipeline", "Detected digital marketing campaign or sales funnel schema.")
+
     return ("CLEAN_TABULAR", "Clean Relational / Tabular", "Standard relational schema with clean column headers.")
 
 

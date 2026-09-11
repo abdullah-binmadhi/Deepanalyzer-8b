@@ -445,21 +445,113 @@ class SemanticSentinel:
 
             if is_numeric:
                 try:
-                    non_nulls = series.drop_nulls()
-                    if len(non_nulls) > 0:
-                        med = float(non_nulls.median())
-                        q25 = float(non_nulls.quantile(0.25))
-                        q75 = float(non_nulls.quantile(0.75))
-                        raw_iqr = max(1.0, q75 - q25)
-                        all_non_negative = bool((non_nulls >= 0).all())
+                    cleaned_num = series.drop_nulls()
+                    if hasattr(cleaned_num, "drop_nans"):
+                        try:
+                            cleaned_num = cleaned_num.drop_nans()
+                        except Exception:
+                            pass
 
-                        # Laplace perturbation on scale with epsilon = 1.0
+                    if dtype == pl.Decimal:
+                        cleaned_num = cleaned_num.cast(pl.Float64)
+
+                    if len(cleaned_num) > 0:
+                        raw_med = cleaned_num.median()
+                        raw_q25 = cleaned_num.quantile(0.25)
+                        raw_q75 = cleaned_num.quantile(0.75)
+
+                        med_val = float(raw_med) if raw_med is not None and not (isinstance(raw_med, float) and (raw_med != raw_med or abs(raw_med) == float("inf"))) else 50.0
+                        q25_val = float(raw_q25) if raw_q25 is not None and not (isinstance(raw_q25, float) and (raw_q25 != raw_q25 or abs(raw_q25) == float("inf"))) else (med_val * 0.8)
+                        q75_val = float(raw_q75) if raw_q75 is not None and not (isinstance(raw_q75, float) and (raw_q75 != raw_q75 or abs(raw_q75) == float("inf"))) else (med_val * 1.2)
+
+                        iqr = abs(q75_val - q25_val)
+                        raw_iqr = iqr if (iqr == iqr and iqr > 0 and abs(iqr) != float("inf")) else max(1.0, abs(med_val) * 0.25)
+
+                        try:
+                            non_neg = bool((cleaned_num >= 0).all())
+                        except Exception:
+                            non_neg = med_val >= 0
+
                         epsilon = 1.0
                         b = max(0.5, raw_iqr / epsilon)
-                        dp_median = med
+                        dp_median = med_val
                         dp_scale = b
+                        all_non_negative = non_neg
                 except Exception:
-                    pass
+                    dp_median = 50.0
+                    dp_scale = 10.0
+                    all_non_negative = True
+
+            # Detect formatted numeric patterns in string columns (currencies, percentages, unit metrics)
+            formatted_num_info = None
+            is_boolean_str = False
+
+            if not is_numeric and dtype not in (pl.Boolean, pl.Date, pl.Datetime):
+                try:
+                    non_null_samples = [str(v).strip() for v in series.drop_nulls().head(40).to_list() if str(v).strip()]
+                    if len(non_null_samples) >= 2:
+                        curr_pref_re = re.compile(r"^([\$€£₹¥]|SAR|AED|PLN|USD|EUR|GBP)\s*", re.I)
+                        curr_suff_re = re.compile(r"\s*([\$€£₹¥]|SAR|AED|PLN|USD|EUR|GBP)$", re.I)
+                        pct_re = re.compile(r"%\s*$")
+                        unit_re = re.compile(r"\s*(mAh|GB|MB|TB|kg|lbs|g|km/h|mph|V|W|kW|kWh|PSI|bar|°C|°F|Hz|RPM|ms|sec|min|hrs)\s*$", re.I)
+
+                        pref_m = [curr_pref_re.search(v) for v in non_null_samples if curr_pref_re.search(v)]
+                        suff_m = [curr_suff_re.search(v) for v in non_null_samples if curr_suff_re.search(v)]
+                        pct_m = [pct_re.search(v) for v in non_null_samples if pct_re.search(v)]
+                        unit_m = [unit_re.search(v) for v in non_null_samples if unit_re.search(v)]
+
+                        has_p = len(pref_m) >= len(non_null_samples) * 0.4
+                        has_s = len(suff_m) >= len(non_null_samples) * 0.4
+                        has_pct = len(pct_m) >= len(non_null_samples) * 0.4
+                        has_u = len(unit_m) >= len(non_null_samples) * 0.4
+
+                        f_prefix = pref_m[0].group(0) if has_p else ""
+                        f_suffix = suff_m[0].group(0) if has_s else ("%" if has_pct else (unit_m[0].group(0) if has_u else ""))
+
+                        parsed_nums = []
+                        f_commas = False
+                        f_decimals = False
+                        for s_val in non_null_samples:
+                            c_s = s_val
+                            if f_prefix:
+                                c_s = c_s.replace(f_prefix.strip(), "").strip()
+                            if f_suffix:
+                                c_s = c_s.replace(f_suffix.strip(), "").strip()
+                            if "," in c_s:
+                                f_commas = True
+                                c_s = c_s.replace(",", "")
+                            if "." in c_s:
+                                f_decimals = True
+                            try:
+                                nv = float(c_s)
+                                if nv == nv and abs(nv) != float("inf"):
+                                    parsed_nums.append(nv)
+                            except ValueError:
+                                pass
+
+                        if len(parsed_nums) >= len(non_null_samples) * 0.5:
+                            s_sorted = sorted(parsed_nums)
+                            nv_len = len(s_sorted)
+                            p_med = s_sorted[nv_len // 2]
+                            p_q25 = s_sorted[int(nv_len * 0.25)]
+                            p_q75 = s_sorted[int(nv_len * 0.75)]
+                            p_iqr = max(1.0, abs(p_q75 - p_q25))
+                            formatted_num_info = {
+                                "prefix": f_prefix,
+                                "suffix": f_suffix,
+                                "has_commas": f_commas,
+                                "has_decimals": f_decimals,
+                                "median": p_med,
+                                "scale": max(0.5, p_iqr),
+                                "all_non_negative": all(x >= 0 for x in parsed_nums)
+                            }
+
+                        # Check if column is a boolean-like text flag
+                        if formatted_num_info is None and set(s.lower() for s in non_null_samples).issubset({"y", "n", "yes", "no", "true", "false", "0", "1"}):
+                            is_boolean_str = True
+                except Exception:
+                    formatted_num_info = None
+                    is_boolean_str = False
 
             for i in range(n_rows):
                 if random.random() < null_ratio and null_ratio > 0.05:
@@ -467,23 +559,22 @@ class SemanticSentinel:
                     continue
 
                 if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.Int64, pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64):
-                    if "id" in col_lower:
+                    if "id" in col_lower or col_lower.endswith("_id") or col_lower.startswith("id_"):
                         mock_data[col].append(1000 + i + 1)
                     elif "age" in col_lower:
-                        # DP perturbed age
                         laplace_noise = (random.expovariate(1.0 / 5.0) if random.random() < 0.5 else -random.expovariate(1.0 / 5.0))
                         dp_age = int(round(dp_median + laplace_noise + (i * 2)))
                         mock_data[col].append(max(18, min(95, dp_age)))
+                    elif "year" in col_lower:
+                        mock_data[col].append(2024 + (i % 3))
                     else:
-                        # DP Laplace perturbed integer
                         laplace_noise = (random.expovariate(1.0 / max(1.0, dp_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(1.0, dp_scale)))
                         dp_val = int(round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 2.0))))
                         if all_non_negative:
                             dp_val = max(0, dp_val)
                         mock_data[col].append(dp_val)
 
-                elif dtype in (pl.Float32, pl.Float64):
-                    # Differential privacy Laplace noise on continuous values
+                elif dtype in (pl.Float32, pl.Float64, pl.Decimal):
                     laplace_noise = (random.expovariate(1.0 / max(0.5, dp_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(0.5, dp_scale)))
                     dp_val = round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 3.0)), 2)
                     if all_non_negative:
@@ -496,19 +587,184 @@ class SemanticSentinel:
                 elif dtype in (pl.Date, pl.Datetime):
                     mock_data[col].append(f"2026-0{(i % 9) + 1}-15")
 
+                elif dtype == pl.Time:
+                    mock_data[col].append(f"14:{10 + i * 5:02d}:00")
+
+                elif dtype == pl.Duration:
+                    mock_data[col].append(f"{i + 1}h {i * 10}m")
+
+                # Formatted numeric string values (e.g. $1,250.00 or 15.5%)
+                elif formatted_num_info is not None:
+                    f_info = formatted_num_info
+                    f_scale = f_info["scale"]
+                    f_med = f_info["median"]
+                    laplace_noise = (random.expovariate(1.0 / max(0.5, f_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(0.5, f_scale)))
+                    f_val = f_med + laplace_noise + ((i - 2) * (f_scale / 3.0))
+                    if f_info["all_non_negative"]:
+                        f_val = max(0.01, f_val)
+
+                    if f_info["has_decimals"]:
+                        val_str = f"{f_val:,.2f}" if f_info["has_commas"] else f"{f_val:.2f}"
+                    else:
+                        int_val = int(round(f_val))
+                        val_str = f"{int_val:,}" if f_info["has_commas"] else f"{int_val}"
+
+                    formatted_mock = f"{f_info['prefix']}{val_str}{f_info['suffix']}"
+                    mock_data[col].append(formatted_mock)
+
+                elif is_boolean_str:
+                    mock_data[col].append(["Y", "N"][i % 2])
+
+                # Semantic Cross-Industry Entity Synthesizer (100% Differential / Zero Raw Production Data)
                 else:
-                    if "email" in col_lower:
+                    # 1. Financial, Banking & Payments
+                    if any(k in col_lower for k in ["account_number", "acc_no", "account_id"]):
+                        mock_data[col].append(f"ACCT-88{i:04d}")
+                    elif any(k in col_lower for k in ["card_type", "card_brand"]):
+                        mock_data[col].append(["Visa", "Mastercard", "Amex", "Discover"][i % 4])
+                    elif any(k in col_lower for k in ["credit_card", "card_num", "card_no", "pan"]):
+                        mock_data[col].append(f"4111-0000-0000-{1000 + i:04d}")
+                    elif any(k in col_lower for k in ["tx_type", "transaction_type"]):
+                        mock_data[col].append(["DEBIT", "CREDIT", "TRANSFER", "REFUND"][i % 4])
+                    elif any(k in col_lower for k in ["currency", "curr"]):
+                        mock_data[col].append(["USD", "EUR", "GBP", "SAR", "AED"][i % 5])
+                    elif "iban" in col_lower:
+                        mock_data[col].append(f"SA03800000006080101{i:04d}")
+                    elif any(k in col_lower for k in ["credit_rating", "rating_grade"]):
+                        mock_data[col].append(["AAA", "AA", "A", "BBB", "BB"][i % 5])
+                    elif any(k in col_lower for k in ["pesel", "saudi_id", "iqama", "ssn", "national_id", "tax_id"]):
+                        mock_data[col].append(f"MOCK-ID-{1000000000 + i}")
+
+                    # 2. Healthcare, Clinical Trials & Pharma
+                    elif any(k in col_lower for k in ["mrn", "patient_id", "subject_id"]):
+                        mock_data[col].append(f"MRN-00{1000 + i}")
+                    elif any(k in col_lower for k in ["diagnosis", "icd", "condition"]):
+                        mock_data[col].append(["E11.9 (Type 2 diabetes)", "I10 (Essential hypertension)", "J45.9 (Asthma)", "K21.9 (GERD)"][i % 4])
+                    elif any(k in col_lower for k in ["cpt", "procedure"]):
+                        mock_data[col].append(["99213 (Office visit)", "99214 (Comprehensive visit)", "80053 (Comprehensive metabolic)"][i % 3])
+                    elif any(k in col_lower for k in ["medication", "drug", "prescription", "rx"]):
+                        mock_data[col].append(["Metformin 500mg", "Lisinopril 10mg", "Atorvastatin 20mg", "Amoxicillin 500mg"][i % 4])
+                    elif any(k in col_lower for k in ["blood_pressure", "bp"]):
+                        mock_data[col].append(f"{115 + (i*5)}/{75 + (i*3)}")
+                    elif "blood_type" in col_lower:
+                        mock_data[col].append(["O+", "A+", "B+", "AB-"][i % 4])
+                    elif "admission_type" in col_lower:
+                        mock_data[col].append(["EMERGENCY", "ELECTIVE", "URGENT"][i % 3])
+                    elif any(k in col_lower for k in ["ward", "specialty", "clinic"]):
+                        mock_data[col].append(["Cardiology", "Oncology", "Pediatrics", "ICU", "Neurology"][i % 5])
+
+                    # 3. E-Commerce & Retail
+                    elif "sku" in col_lower:
+                        mock_data[col].append(f"SKU-{2000 + i}-BLK")
+                    elif any(k in col_lower for k in ["product_name", "item_name"]):
+                        mock_data[col].append(["Wireless Noise-Cancelling Headphones", "Ergonomic Office Chair", "Stainless Steel Bottle", "USB-C Fast Hub"][i % 4])
+                    elif any(k in col_lower for k in ["category", "department"]):
+                        mock_data[col].append(["Electronics", "Office Supplies", "Home & Kitchen", "Accessories"][i % 4])
+                    elif any(k in col_lower for k in ["carrier", "shipping_method"]):
+                        mock_data[col].append(["FedEx", "DHL Express", "UPS", "Aramex"][i % 4])
+                    elif any(k in col_lower for k in ["tracking", "waybill"]):
+                        mock_data[col].append(f"TRK-984{i:05d}")
+                    elif any(k in col_lower for k in ["order_id", "order_no"]):
+                        mock_data[col].append(f"ORD-554{i:03d}")
+
+                    # 4. SaaS, Web Analytics & Technology
+                    elif any(k in col_lower for k in ["user_id", "customer_id"]):
+                        mock_data[col].append(f"usr_{10000 + i}")
+                    elif any(k in col_lower for k in ["plan", "tier", "subscription"]):
+                        mock_data[col].append(["Free Tier", "Professional", "Enterprise Scale"][i % 3])
+                    elif "ip" in col_lower or "ip_address" in col_lower:
+                        mock_data[col].append(f"192.168.1.{10 + i}")
+                    elif "mac" in col_lower:
+                        mock_data[col].append(f"00:1A:2B:3C:4D:{i:02X}")
+                    elif "http_method" in col_lower:
+                        mock_data[col].append(["GET", "POST", "PUT", "DELETE"][i % 4])
+                    elif "browser" in col_lower:
+                        mock_data[col].append(["Chrome", "Safari", "Firefox", "Edge"][i % 4])
+                    elif any(k in col_lower for k in ["platform", "os"]):
+                        mock_data[col].append(["macOS", "Windows 11", "Ubuntu Linux", "iOS", "Android"][i % 5])
+                    elif any(k in col_lower for k in ["event", "action"]):
+                        mock_data[col].append(["page_view", "button_click", "add_to_cart", "checkout_completed"][i % 4])
+
+                    # 5. Logistics, Transportation & Fleet
+                    elif "vin" in col_lower:
+                        mock_data[col].append(f"1HGCR2F83HA00{i:04d}")
+                    elif any(k in col_lower for k in ["plate", "license_plate"]):
+                        mock_data[col].append(f"ABC-{1000 + i}")
+                    elif any(k in col_lower for k in ["container", "container_id"]):
+                        mock_data[col].append(f"MSKU-{70000 + i}")
+                    elif any(k in col_lower for k in ["origin", "departure_port"]):
+                        mock_data[col].append(["JFK", "LHR", "DXB", "HND", "RUH"][i % 5])
+                    elif any(k in col_lower for k in ["destination", "arrival_port"]):
+                        mock_data[col].append(["LAX", "CDG", "SIN", "FRA", "JED"][i % 5])
+
+                    # 6. HR, People Analytics & Workforce
+                    elif any(k in col_lower for k in ["employee_id", "staff_id"]):
+                        mock_data[col].append(f"EMP-{5000 + i}")
+                    elif any(k in col_lower for k in ["job_title", "role", "position", "occupation"]):
+                        mock_data[col].append(["Senior Software Engineer", "Product Marketing Lead", "Financial Analyst", "Operations Manager"][i % 4])
+                    elif any(k in col_lower for k in ["employment_type", "contract_type"]):
+                        mock_data[col].append(["Full-Time", "Part-Time", "Contractor", "Intern"][i % 4])
+                    elif any(k in col_lower for k in ["education", "degree"]):
+                        mock_data[col].append(["Bachelor of Science", "Master of Business Administration", "Ph.D."][i % 3])
+
+                    # 7. Manufacturing, IoT & Energy
+                    elif any(k in col_lower for k in ["device_id", "sensor_id", "sensor"]):
+                        mock_data[col].append(f"SENSOR-{i+1:03d}")
+                    elif any(k in col_lower for k in ["machine_model", "equipment_id"]):
+                        mock_data[col].append(f"Model-X{i+1}")
+                    elif any(k in col_lower for k in ["error_code", "fault_code"]):
+                        mock_data[col].append(f"ERR_E{i+1:02d}")
+
+                    # 8. Real Estate & Hospitality
+                    elif any(k in col_lower for k in ["property_type", "property"]):
+                        mock_data[col].append(["Apartment", "Condominium", "Single Family Home", "Commercial Suite"][i % 4])
+                    elif any(k in col_lower for k in ["room_type", "room"]):
+                        mock_data[col].append(["Deluxe King Suite", "Standard Double Queen", "Executive Studio"][i % 3])
+                    elif any(k in col_lower for k in ["booking_channel", "source"]):
+                        mock_data[col].append(["Direct Website", "Airbnb", "Booking.com", "Expedia"][i % 4])
+
+                    # 9. Education & Academia
+                    elif any(k in col_lower for k in ["student_id", "student"]):
+                        mock_data[col].append(f"STU-{9000 + i}")
+                    elif any(k in col_lower for k in ["course_code", "course"]):
+                        mock_data[col].append(["CS-101", "DATA-204", "MATH-301", "STAT-200"][i % 4])
+                    elif "grade" in col_lower:
+                        mock_data[col].append(["A", "A-", "B+", "B", "B-"][i % 5])
+                    elif any(k in col_lower for k in ["term", "semester"]):
+                        mock_data[col].append(["Fall 2025", "Spring 2026", "Summer 2026"][i % 3])
+
+                    # 10. Marketing, Advertising & CRM
+                    elif "campaign" in col_lower:
+                        mock_data[col].append(f"Q{((i%4)+1)}_Global_Growth_Promo")
+                    elif any(k in col_lower for k in ["channel", "ad_network"]):
+                        mock_data[col].append(["Google Search Ads", "Meta Instagram Ads", "LinkedIn Sponsored", "YouTube Video"][i % 4])
+                    elif any(k in col_lower for k in ["lead_status", "stage"]):
+                        mock_data[col].append(["NEW_INQUIRY", "MQL_QUALIFIED", "SQL_OPPORTUNITY", "CLOSED_WON"][i % 4])
+
+                    # Universal PII / Identity & Location Patterns
+                    elif "email" in col_lower:
                         mock_data[col].append(f"mock.user{i+1}@{domains[i % len(domains)]}")
-                    elif any(k in col_lower for k in ["name", "customer", "patient", "client"]):
+                    elif any(k in col_lower for k in ["name", "customer", "patient", "client", "person", "contact"]):
                         mock_data[col].append(f"{first_names[i % len(first_names)]} {last_names[i % len(last_names)]}")
-                    elif "phone" in col_lower:
+                    elif any(k in col_lower for k in ["phone", "mobile", "cell"]):
                         mock_data[col].append(f"+1-555-01{i:02d}")
-                    elif any(k in col_lower for k in ["city", "location"]):
+                    elif any(k in col_lower for k in ["city", "town"]):
                         mock_data[col].append(cities[i % len(cities)])
+                    elif any(k in col_lower for k in ["country", "nation"]):
+                        mock_data[col].append(["United States", "Saudi Arabia", "United Kingdom", "Germany", "Japan"][i % 5])
+                    elif any(k in col_lower for k in ["zip", "postal", "zipcode"]):
+                        mock_data[col].append(f"{10000 + (i*111)}")
+                    elif any(k in col_lower for k in ["url", "website", "link"]):
+                        mock_data[col].append(f"https://www.{domains[i % len(domains)]}/resource/{i+1}")
+                    elif any(k in col_lower for k in ["uuid", "guid"]):
+                        mock_data[col].append(f"00000000-0000-4000-8000-{i+1:012d}")
                     elif any(k in col_lower for k in ["status", "state"]):
                         mock_data[col].append(["ACTIVE", "PENDING", "COMPLETED"][i % 3])
+                    elif any(k in col_lower for k in ["date", "time", "created", "updated"]):
+                        mock_data[col].append(f"2026-0{(i % 9) + 1}-15")
                     else:
-                        mock_data[col].append(f"SAMPLE_{col.upper()}_{i+1}")
+                        clean_c = re.sub(r"[^a-zA-Z0-9_]", "", col).upper()
+                        mock_data[col].append(f"SAMPLE_{clean_c}_{i+1}")
 
         records = []
         for idx in range(n_rows):

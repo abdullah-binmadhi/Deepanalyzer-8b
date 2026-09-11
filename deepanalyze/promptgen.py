@@ -28,36 +28,40 @@ def infer_domain_feature_engineering(
     features: List[str] = []
     col_names_lower = {c: c.lower() for c in df.columns}
 
-    # 1. Tech / Smartphone / E-Commerce Specs
-    if any(k in col_names_lower for k in ["ram", "storage", "rom", "battery", "camera", "processor", "display", "price"]):
-        if "ram" in col_names_lower:
+    def has_token(*tokens: str) -> bool:
+        return any(any(t == l or t in l for t in tokens) for l in col_names_lower.values())
+
+    # 1. Tech / Smartphone / Hardware Specs
+    if (has_token("ram", "storage", "rom", "battery", "camera", "processor", "display") or 
+        ("price" in col_names_lower and has_token("ram", "battery", "camera", "storage"))):
+        if any("ram" in l for l in col_names_lower.values()):
             features.append(
                 "Memory & Storage Parsing: Use regex on `ram` to extract integer RAM capacity into `ram_gb` "
                 "(e.g. r'(\\d+)\\s*GB RAM') and internal storage into `storage_gb` (e.g. r'(\\d+)\\s*GB inbuilt')."
             )
-        if "battery" in col_names_lower:
+        if any("battery" in l for l in col_names_lower.values()):
             features.append(
                 "Power Architecture: Use regex on `battery` to extract battery capacity into `battery_mah` "
                 "(e.g. r'(\\d+)\\s*mAh') and fast charging power into `fast_charging_w` (e.g. r'(\\d+)\\s*W')."
             )
-        if "camera" in col_names_lower:
+        if any("camera" in l for l in col_names_lower.values()):
             features.append(
                 "Optics Specification: Parse primary rear camera megapixel into `primary_rear_camera_mp` "
                 "and front selfie camera into `front_camera_mp`."
             )
-        if "display" in col_names_lower:
+        if any("display" in l for l in col_names_lower.values()):
             features.append(
                 "Display Geometry: Extract screen size in inches into `screen_size_inches` "
                 "and refresh rate into `refresh_rate_hz` (e.g. r'(\\d+)\\s*Hz')."
             )
-        if "price" in col_names_lower:
+        if any("price" in l for l in col_names_lower.values()):
             features.append(
                 "Value Ratios: Strip currency symbols (`₹`, `$`, commas) from `price` and compute "
                 "`price_per_gb_ram = price / ram_gb` and `price_per_mah = price / battery_mah`."
             )
 
     # 2. Healthcare & Clinical EHR
-    if any(k in col_names_lower for k in ["blood_pressure", "bp", "cholesterol", "condition", "medication", "patient", "visit_date"]):
+    if has_token("blood_pressure", "bp", "cholesterol", "condition", "medication", "patient", "visit_date"):
         bp_col = next((c for c, l in col_names_lower.items() if "blood" in l or l == "bp"), None)
         if bp_col:
             features.append(
@@ -75,7 +79,7 @@ def infer_domain_feature_engineering(
             )
 
     # 3. ERP & Invoicing & Accounting
-    if arch_key == "ERP_RAGGED" or any(k in col_names_lower for k in ["qty", "quantity", "unit_price", "amount", "total", "doc_no", "invoice"]):
+    if arch_key == "ERP_RAGGED" or has_token("qty", "quantity", "unit_price", "doc_no", "invoice"):
         features.append(
             "Financial Integrity Reconciliations: Verify `Calculated_Line_Gross = Quantity * Unit_Price` and "
             "compute `Line_Discount = Calculated_Line_Gross - Amount`. Add boolean flag `Reconciliation_Discrepancy_Flag`."
@@ -83,6 +87,153 @@ def infer_domain_feature_engineering(
         features.append(
             "Sequential Position: Add integer rank `Line_Item_Index` denoting item position within parent transaction."
         )
+
+    # 4. Banking, Personal Finance & Lending / Credit Risk
+    if has_token("loan", "debt", "income", "credit_score", "balance", "interest_rate", "collateral", "borrower"):
+        debt_col = next((c for c, l in col_names_lower.items() if "debt" in l or "liability" in l), None)
+        inc_col = next((c for c, l in col_names_lower.items() if "income" in l or "salary" in l or "revenue" in l), None)
+        if debt_col and inc_col:
+            features.append(
+                f"Debt-to-Income Ratio (DTI): Compute `debt_to_income_ratio = {debt_col} / np.where({inc_col} > 0, {inc_col}, np.nan)`."
+            )
+        loan_col = next((c for c, l in col_names_lower.items() if "loan" in l or "principal" in l), None)
+        val_col = next((c for c, l in col_names_lower.items() if "value" in l or "appraisal" in l or "collateral" in l), None)
+        if loan_col and val_col:
+            features.append(
+                f"Loan-to-Value Ratio (LTV): Compute `loan_to_value_ratio = {loan_col} / np.where({val_col} > 0, {val_col}, np.nan)`."
+            )
+        score_col = next((c for c, l in col_names_lower.items() if "score" in l or "fico" in l or "credit_score" in l), None)
+        if score_col:
+            features.append(
+                f"Credit Risk Grading: Discretize `{score_col}` into `credit_risk_tier` "
+                f"(<580: 'Poor', 580-669: 'Fair', 670-739: 'Good', 740-799: 'Very Good', 800+: 'Exceptional')."
+            )
+
+    # 5. E-Commerce, Retail & Pricing Intelligence
+    if has_token("sku", "product", "discount", "margin", "cart", "return", "sales", "rating", "cogs"):
+        price_col = next((c for c, l in col_names_lower.items() if "price" in l or "sales" in l or "revenue" in l), None)
+        cost_col = next((c for c, l in col_names_lower.items() if "cost" in l or "cogs" in l), None)
+        if price_col and cost_col:
+            features.append(
+                f"Profit Margin Analysis: Compute `gross_margin = {price_col} - {cost_col}` and "
+                f"`gross_margin_pct = ({price_col} - {cost_col}) / np.where({price_col} > 0, {price_col}, np.nan)`."
+            )
+        disc_col = next((c for c, l in col_names_lower.items() if "discount" in l), None)
+        if disc_col and price_col:
+            features.append(
+                f"Discount Sensitivity: Compute `effective_discount_pct = {disc_col} / np.where({price_col} > 0, {price_col}, np.nan)`."
+            )
+        order_col = next((c for c, l in col_names_lower.items() if "order" in l and ("date" in l or "time" in l)), None)
+        ship_col = next((c for c, l in col_names_lower.items() if ("ship" in l or "delivery" in l) and ("date" in l or "time" in l)), None)
+        if order_col and ship_col:
+            features.append(
+                f"Fulfillment Latency: Compute `fulfillment_days = (pd.to_datetime({ship_col}) - pd.to_datetime({order_col})).dt.total_seconds() / 86400.0`."
+            )
+
+    # 6. SaaS, Digital Products & Web Analytics
+    if has_token("mrr", "arr", "subscription", "churn", "session", "page_view", "bounce", "dau", "mau"):
+        mrr_col = next((c for c, l in col_names_lower.items() if "mrr" in l), None)
+        if mrr_col:
+            features.append(
+                f"ARR Metric Derivation: Compute `arr = {mrr_col} * 12` to annualize recurring revenue."
+            )
+        session_col = next((c for c, l in col_names_lower.items() if "session" in l and ("duration" in l or "sec" in l or "time" in l)), None)
+        if session_col:
+            features.append(
+                f"Session Engagement: Convert `{session_col}` to `session_duration_minutes = {session_col} / 60.0`."
+            )
+        event_col = next((c for c, l in col_names_lower.items() if "event" in l or "action" in l or "click" in l), None)
+        user_col = next((c for c, l in col_names_lower.items() if "user" in l or "customer" in l), None)
+        if event_col and user_col:
+            features.append(
+                f"User Activity Frequency: Calculate aggregate `user_event_count = df.groupby('{user_col}')['{event_col}'].transform('count')`."
+            )
+
+    # 7. Logistics, Supply Chain, Fleet & Freight
+    if has_token("vin", "fleet", "carrier", "tracking", "container", "transit", "freight", "origin", "destination", "dispatch", "delivery", "cargo", "shipment"):
+        dispatch_col = next((c for c, l in col_names_lower.items() if "dispatch" in l or "departure" in l or "pickup" in l), None)
+        delivery_col = next((c for c, l in col_names_lower.items() if "delivery" in l or "arrival" in l), None)
+        if dispatch_col and delivery_col:
+            features.append(
+                f"Transit Lead Time: Compute `transit_duration_days = (pd.to_datetime({delivery_col}) - pd.to_datetime({dispatch_col})).dt.total_seconds() / 86400.0`."
+            )
+        weight_col = next((c for c, l in col_names_lower.items() if "weight" in l or "kg" in l or "lbs" in l), None)
+        vol_col = next((c for c, l in col_names_lower.items() if "volume" in l or "cbm" in l or "cbf" in l), None)
+        if weight_col and vol_col:
+            features.append(
+                f"Freight Density: Compute `cargo_density = {weight_col} / np.where({vol_col} > 0, {vol_col}, np.nan)`."
+            )
+
+    # 8. HR, Workforce & People Analytics
+    if has_token("employee", "staff", "salary", "wage", "hire_date", "tenure", "attrition", "department"):
+        hire_col = next((c for c, l in col_names_lower.items() if "hire" in l or "start_date" in l or "joined" in l), None)
+        if hire_col:
+            features.append(
+                f"Workforce Tenure: Compute `tenure_years = (pd.Timestamp.now() - pd.to_datetime({hire_col})).dt.total_seconds() / (86400.0 * 365.25)`."
+            )
+        base_col = next((c for c, l in col_names_lower.items() if "salary" in l or "base" in l or "wage" in l), None)
+        bonus_col = next((c for c, l in col_names_lower.items() if "bonus" in l or "commission" in l), None)
+        if base_col and bonus_col:
+            features.append(
+                f"Total Compensation: Compute `total_compensation = {base_col}.fillna(0) + {bonus_col}.fillna(0)`."
+            )
+
+    # 9. Manufacturing, Energy & IoT / Sensor Telemetry
+    if has_token("sensor", "device", "temperature", "temp", "pressure", "voltage", "rpm", "vibration", "kwh"):
+        temp_col = next((c for c, l in col_names_lower.items() if "temp" in l or "temperature" in l), None)
+        if temp_col:
+            features.append(
+                f"Thermal Anomaly Z-Score: Compute `temp_zscore = ({temp_col} - {temp_col}.mean()) / {temp_col}.std()` and flag `temp_outlier_flag = temp_zscore.abs() > 3`."
+            )
+        power_col = next((c for c, l in col_names_lower.items() if "kwh" in l or "power" in l or "energy" in l), None)
+        hours_col = next((c for c, l in col_names_lower.items() if "hours" in l or "uptime" in l or "runtime" in l), None)
+        if power_col and hours_col:
+            features.append(
+                f"Specific Energy Consumption: Compute `energy_intensity = {power_col} / np.where({hours_col} > 0, {hours_col}, np.nan)`."
+            )
+
+    # 10. Marketing, Advertising, CRM & Sales Pipeline
+    if has_token("campaign", "lead", "impression", "click", "ctr", "cpc", "roas", "conversion", "spend"):
+        click_col = next((c for c, l in col_names_lower.items() if "click" in l), None)
+        imp_col = next((c for c, l in col_names_lower.items() if "impression" in l), None)
+        if click_col and imp_col:
+            features.append(
+                f"Click-Through Rate (CTR): Compute `ctr = {click_col} / np.where({imp_col} > 0, {imp_col}, np.nan)`."
+            )
+        spend_col = next((c for c, l in col_names_lower.items() if "spend" in l or "cost" in l or "ad_spend" in l), None)
+        rev_col = next((c for c, l in col_names_lower.items() if "revenue" in l or "sales" in l or "conv_value" in l), None)
+        if spend_col and rev_col:
+            features.append(
+                f"Return on Ad Spend (ROAS): Compute `roas = {rev_col} / np.where({spend_col} > 0, {spend_col}, np.nan)`."
+            )
+        conv_col = next((c for c, l in col_names_lower.items() if "conversion" in l or "leads" in l), None)
+        if spend_col and conv_col:
+            features.append(
+                f"Cost Per Acquisition (CPA): Compute `cpa = {spend_col} / np.where({conv_col} > 0, {conv_col}, np.nan)`."
+            )
+
+    # 11. Real Estate & Hospitality
+    if has_token("property", "sqft", "sqm", "bedroom", "adr", "revpar", "occupancy"):
+        price_col = next((c for c, l in col_names_lower.items() if "price" in l or "rent" in l), None)
+        area_col = next((c for c, l in col_names_lower.items() if "sqft" in l or "sqm" in l or "area" in l), None)
+        if price_col and area_col:
+            features.append(
+                f"Unit Area Valuation: Compute `price_per_unit_area = {price_col} / np.where({area_col} > 0, {area_col}, np.nan)`."
+            )
+        adr_col = next((c for c, l in col_names_lower.items() if "adr" in l or "room_rate" in l), None)
+        occ_col = next((c for c, l in col_names_lower.items() if "occupancy" in l or "occ_rate" in l), None)
+        if adr_col and occ_col:
+            features.append(
+                f"RevPAR Derivation: Compute `revpar = {adr_col} * ({occ_col} / 100.0 if ({occ_col} > 1).any() else {occ_col})`."
+            )
+
+    # 12. Education & Academia
+    if has_token("gpa", "grade", "student", "credit", "course", "semester", "exam"):
+        grade_col = next((c for c, l in col_names_lower.items() if "grade" in l or "score" in l), None)
+        if grade_col and "gpa" not in col_names_lower:
+            features.append(
+                f"Academic Standing: Derive standard `academic_standing` flag based on `{grade_col}`."
+            )
 
     # 4. Multi-Sheet Relational Topologies
     if topology and len(topology.sheets) > 1:
