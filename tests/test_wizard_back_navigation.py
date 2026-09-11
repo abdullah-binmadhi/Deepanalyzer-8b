@@ -289,6 +289,21 @@ class TestWizardEnhancements(unittest.TestCase):
         self.assertEqual(mock_render_three_way.call_count, 2)
 
 
+    @patch("platform.system", return_value="Windows")
+    @patch("subprocess.Popen")
+    def test_copy_to_clipboard_windows_secure_subprocess(self, mock_popen, mock_platform):
+        from deepanalyze.wizard import copy_to_clipboard
+        mock_proc = unittest.mock.MagicMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+
+        with patch.dict("sys.modules", {"pyperclip": None}):
+            res = copy_to_clipboard("test text")
+            self.assertTrue(res)
+            mock_popen.assert_called_once_with(["clip"], stdin=-1)
+
+
 if __name__ == "__main__":
     unittest.main()
 
