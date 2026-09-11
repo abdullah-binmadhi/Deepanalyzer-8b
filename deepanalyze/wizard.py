@@ -112,7 +112,7 @@ def copy_to_clipboard(text: str) -> bool:
             p.communicate(text.encode("utf-8"))
             return p.returncode == 0
         elif sys_name == "Windows":
-            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE, shell=True)
+            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
             p.communicate(text.encode("utf-16"))
             return p.returncode == 0
         elif sys_name == "Linux":
