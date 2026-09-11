@@ -124,7 +124,13 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
                         multi_sheets[s] = pl.read_excel(target_name, sheet_name=s, engine="openpyxl")
                     target_df = next(iter(multi_sheets.values())) if multi_sheets else None
                 elif target_name.endswith(".csv"):
-                    target_df = pl.read_csv(target_name)
+                    try:
+                        target_df = pl.read_csv(target_name)
+                    except Exception:
+                        try:
+                            target_df = pl.read_csv(target_name, encoding="utf8-lossy")
+                        except Exception:
+                            target_df = pl.read_csv(target_name, encoding="latin1")
             except Exception:
                 pass
 

@@ -460,15 +460,24 @@ class SemanticSentinel:
                         raw_q25 = cleaned_num.quantile(0.25)
                         raw_q75 = cleaned_num.quantile(0.75)
 
-                        med_val = float(raw_med) if raw_med is not None and not (isinstance(raw_med, float) and (raw_med != raw_med or abs(raw_med) == float("inf"))) else 50.0
-                        q25_val = float(raw_q25) if raw_q25 is not None and not (isinstance(raw_q25, float) and (raw_q25 != raw_q25 or abs(raw_q25) == float("inf"))) else (med_val * 0.8)
-                        q75_val = float(raw_q75) if raw_q75 is not None and not (isinstance(raw_q75, float) and (raw_q75 != raw_q75 or abs(raw_q75) == float("inf"))) else (med_val * 1.2)
+                        def _to_float(v: Any, d: float) -> float:
+                            if v is None:
+                                return d
+                            try:
+                                f = float(str(v))
+                                return d if (f != f or abs(f) == float("inf")) else f
+                            except (ValueError, TypeError):
+                                return d
+
+                        med_val = _to_float(raw_med, 50.0)
+                        q25_val = _to_float(raw_q25, med_val * 0.8)
+                        q75_val = _to_float(raw_q75, med_val * 1.2)
 
                         iqr = abs(q75_val - q25_val)
                         raw_iqr = iqr if (iqr == iqr and iqr > 0 and abs(iqr) != float("inf")) else max(1.0, abs(med_val) * 0.25)
 
                         try:
-                            non_neg = bool((cleaned_num >= 0).all())
+                            non_neg = (cleaned_num >= 0).all()
                         except Exception:
                             non_neg = med_val >= 0
 
@@ -495,18 +504,18 @@ class SemanticSentinel:
                         pct_re = re.compile(r"%\s*$")
                         unit_re = re.compile(r"\s*(mAh|GB|MB|TB|kg|lbs|g|km/h|mph|V|W|kW|kWh|PSI|bar|°C|°F|Hz|RPM|ms|sec|min|hrs)\s*$", re.I)
 
-                        pref_m = [curr_pref_re.search(v) for v in non_null_samples if curr_pref_re.search(v)]
-                        suff_m = [curr_suff_re.search(v) for v in non_null_samples if curr_suff_re.search(v)]
-                        pct_m = [pct_re.search(v) for v in non_null_samples if pct_re.search(v)]
-                        unit_m = [unit_re.search(v) for v in non_null_samples if unit_re.search(v)]
+                        pref_m = [m.group(0) for v in non_null_samples if (m := curr_pref_re.search(v)) is not None]
+                        suff_m = [m.group(0) for v in non_null_samples if (m := curr_suff_re.search(v)) is not None]
+                        pct_m = [m.group(0) for v in non_null_samples if (m := pct_re.search(v)) is not None]
+                        unit_m = [m.group(0) for v in non_null_samples if (m := unit_re.search(v)) is not None]
 
                         has_p = len(pref_m) >= len(non_null_samples) * 0.4
                         has_s = len(suff_m) >= len(non_null_samples) * 0.4
                         has_pct = len(pct_m) >= len(non_null_samples) * 0.4
                         has_u = len(unit_m) >= len(non_null_samples) * 0.4
 
-                        f_prefix = pref_m[0].group(0) if has_p else ""
-                        f_suffix = suff_m[0].group(0) if has_s else ("%" if has_pct else (unit_m[0].group(0) if has_u else ""))
+                        f_prefix = pref_m[0] if (has_p and pref_m) else ""
+                        f_suffix = suff_m[0] if (has_s and suff_m) else ("%" if has_pct else (unit_m[0] if (has_u and unit_m) else ""))
 
                         parsed_nums = []
                         f_commas = False
@@ -541,8 +550,8 @@ class SemanticSentinel:
                                 "suffix": f_suffix,
                                 "has_commas": f_commas,
                                 "has_decimals": f_decimals,
-                                "median": p_med,
-                                "scale": max(0.5, p_iqr),
+                                "median": float(p_med),
+                                "scale": float(max(0.5, p_iqr)),
                                 "all_non_negative": all(x >= 0 for x in parsed_nums)
                             }
 
@@ -563,13 +572,13 @@ class SemanticSentinel:
                         mock_data[col].append(1000 + i + 1)
                     elif "age" in col_lower:
                         laplace_noise = (random.expovariate(1.0 / 5.0) if random.random() < 0.5 else -random.expovariate(1.0 / 5.0))
-                        dp_age = int(round(dp_median + laplace_noise + (i * 2)))
+                        dp_age = round(dp_median + laplace_noise + (i * 2))
                         mock_data[col].append(max(18, min(95, dp_age)))
                     elif "year" in col_lower:
                         mock_data[col].append(2024 + (i % 3))
                     else:
                         laplace_noise = (random.expovariate(1.0 / max(1.0, dp_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(1.0, dp_scale)))
-                        dp_val = int(round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 2.0))))
+                        dp_val = round(dp_median + laplace_noise + ((i - 2) * (dp_scale / 2.0)))
                         if all_non_negative:
                             dp_val = max(0, dp_val)
                         mock_data[col].append(dp_val)
@@ -596,20 +605,21 @@ class SemanticSentinel:
                 # Formatted numeric string values (e.g. $1,250.00 or 15.5%)
                 elif formatted_num_info is not None:
                     f_info = formatted_num_info
-                    f_scale = f_info["scale"]
-                    f_med = f_info["median"]
+                    f_scale = float(f_info["scale"])
+                    f_med = float(f_info["median"])
                     laplace_noise = (random.expovariate(1.0 / max(0.5, f_scale)) if random.random() < 0.5 else -random.expovariate(1.0 / max(0.5, f_scale)))
                     f_val = f_med + laplace_noise + ((i - 2) * (f_scale / 3.0))
-                    if f_info["all_non_negative"]:
+                    if bool(f_info["all_non_negative"]):
                         f_val = max(0.01, f_val)
 
-                    if f_info["has_decimals"]:
+                    if bool(f_info["has_decimals"]):
                         val_str = f"{f_val:,.2f}" if f_info["has_commas"] else f"{f_val:.2f}"
                     else:
-                        int_val = int(round(f_val))
+                        int_val = round(f_val)
                         val_str = f"{int_val:,}" if f_info["has_commas"] else f"{int_val}"
 
                     formatted_mock = f"{f_info['prefix']}{val_str}{f_info['suffix']}"
+                    mock_data[col].append(formatted_mock)
                     mock_data[col].append(formatted_mock)
 
                 elif is_boolean_str:

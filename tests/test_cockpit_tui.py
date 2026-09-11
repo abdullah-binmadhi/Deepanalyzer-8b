@@ -3,6 +3,7 @@
 import asyncio
 import unittest
 import polars as pl
+from textual.widgets import DataTable
 from deepanalyze.cockpit_tui import DeepAnalyzeCockpitApp, CloudPromptModal, CleaningRecipeModal
 
 
@@ -108,7 +109,7 @@ class TestCockpitTUI(unittest.TestCase):
             )
             async with app.run_test(size=(160, 50)) as pilot:
                 await pilot.click("#tab-topology")
-                table = pilot.app.query_one("#dt-topology-audit")
+                table = pilot.app.query_one("#dt-topology-audit", DataTable)
                 # Table rows should reflect actual sheets
                 row_names = [table.get_row_at(r)[0] for r in range(table.row_count)]
                 self.assertIn("INVOICES", row_names)
@@ -129,7 +130,7 @@ class TestCockpitTUI(unittest.TestCase):
             app = DeepAnalyzeCockpitApp(raw_df=erp_df, dataset_name="ERP_Test")
             async with app.run_test(size=(160, 50)) as pilot:
                 await pilot.click("#tab-topology")
-                table = pilot.app.query_one("#dt-topology-audit")
+                table = pilot.app.query_one("#dt-topology-audit", DataTable)
                 row_names = [table.get_row_at(r)[0] for r in range(table.row_count)]
                 self.assertTrue(any("DOCUMENT_MASTER" in r for r in row_names))
                 self.assertTrue(any("LINE_ITEMS" in r for r in row_names))
