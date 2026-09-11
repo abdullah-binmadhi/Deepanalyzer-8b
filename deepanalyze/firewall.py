@@ -267,7 +267,7 @@ def resolve_transformed_dataframe(
     # 1. Check if output file was written to disk
     for key in ["OUTPUT_FILE", "output_path", "output_file", "clean_out_path", "OUTPUT_PATH"]:
         out_path = global_scope.get(key)
-        if out_path and isinstance(out_path, str) and os.path.isfile(out_path):
+        if out_path and isinstance(out_path, str) and os.path.isfile(out_path) and pd is not None:
             try:
                 if out_path.endswith(".csv"):
                     return pd.read_csv(out_path), f"output file `{os.path.basename(out_path)}`"
