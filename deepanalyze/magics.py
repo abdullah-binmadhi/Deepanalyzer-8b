@@ -235,6 +235,10 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
                 # 3. Resolve transformed DataFrame
                 resolved_df, _ = resolve_transformed_dataframe(user_ns, target_df, primary_var=target_name)
 
+                # Airbag Safety Audit: Verify volumetric and financial retention
+                from .firewall import audit_transformation_safety
+                audit_transformation_safety(target_df, resolved_df)
+
                 # 4. Token reconciliation
                 if hasattr(resolved_df, "shape"):
                     user_ns[target_name] = detokenize_dataframe(resolved_df)

@@ -103,3 +103,36 @@ def test_enrich_prompt_with_local_model_offline_graceful():
     # Using an unreachable port to simulate offline server
     enriched = enrich_prompt_with_local_model(prompt, server_url="http://127.0.0.1:59999")
     assert enriched == prompt
+
+
+def test_anti_overcleaning_prompt_mandate():
+    """Validates that build_master_prompt injects row conservation and anti-overcleaning contracts."""
+    df = pl.DataFrame({
+        "order_id": ["O-100", "O-101", "O-102"],
+        "price": [10.5, 20.0, 30.0],
+    })
+    prompt = build_master_prompt(df=df, dataset_name="orders")
+
+    # Anti-overcleaning mandate present in Section 3
+    assert "ANTI-OVERCLEANING & ROW CONSERVATION MANDATE" in prompt
+    assert "PROHIBITION OF BLIND DROPS" in prompt
+    assert "PROHIBITION OF BLIND DEDUPLICATION" in prompt
+    assert "CONSERVATION OF LINE ITEMS" in prompt
+
+    # Anti-overcleaning mandate present in Section 7
+    assert "Anti-Overcleaning Airbag Mandate" in prompt
+
+
+def test_erp_ragged_structural_mock_prompt():
+    """Validates that ERP_RAGGED architecture outputs structural mock with wrapped line items."""
+    erp_df = pl.DataFrame({
+        "Date": ["Doc. No", "IV-11319", "Seq", "1000", "Wrap text line 2"],
+        " : ": [None, None, "GL Code", "500-000", None],
+        "Value": ["Doc. Date", "2025-08-01", None, "14,520.00", None]
+    })
+    prompt = build_master_prompt(df=erp_df, dataset_name="erp_invoice")
+
+    # Structural mock should contain structural line items
+    assert "Feature Engineering Scope" in prompt
+    assert "Primary Line Item Description" in prompt
+    assert "Additional wrapped specification details" in prompt

@@ -33,7 +33,9 @@ from .brain import (
 )
 from .firewall import (
     ASTSecurityViolation,
+    OverCleaningViolation,
     audit_code,
+    audit_transformation_safety,
     execute_code_safely,
     pop_snapshot,
     push_snapshot,
@@ -65,6 +67,7 @@ from .promptgen import (
 from .scorecard import QualityScorecard, generate_quality_scorecard
 from .sentinel import (
     extract_contextual_entities,
+    generate_structural_erp_mock,
     generate_synthetic_mock,
     mask_structural_erp,
     scan_and_mask_free_text,
@@ -117,10 +120,13 @@ __all__ = [
     "flush",
     "audit_code",
     "execute_code_safely",
+    "audit_transformation_safety",
     "ASTSecurityViolation",
+    "OverCleaningViolation",
     "push_snapshot",
     "pop_snapshot",
     "generate_synthetic_mock",
+    "generate_structural_erp_mock",
     "mask_structural_erp",
     "extract_contextual_entities",
     "scan_and_mask_free_text",

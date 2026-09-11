@@ -16,7 +16,7 @@ from rich.syntax import Syntax
 from .brain import CognitiveBlackboard, DynamicResonanceEngine, autopsy_traceback
 from .policies import CompliancePolicy, classify_dataframe_columns, resolve_policy
 from .profiler import SheetProfile, SheetRole, WorkbookTopology, profile_dataframe
-from .sentinel import generate_synthetic_mock
+from .sentinel import generate_structural_erp_mock, generate_synthetic_mock
 
 
 def infer_domain_feature_engineering(
@@ -98,14 +98,20 @@ def infer_domain_feature_engineering(
             )
 
     # 5. Temporal Features for Date Columns
-    for col in df.columns:
-        c_lower = col.lower()
-        if "date" in c_lower or "time" in c_lower or "created" in c_lower or "visit" in c_lower:
-            features.append(
-                f"Temporal Intelligence: Parse `{col}` to datetime64[ns] and derive `{col}_day_name`, "
-                f"`{col}_is_weekend`, and `{col}_quarter`."
-            )
-            break
+    if arch_key == "ERP_RAGGED":
+        features.append(
+            "Canonical Date Decomposition: On the final flattened dataset, parse the canonical transaction date into datetime64[ns] "
+            "and derive `year`, `month`, and `quarter`. (Do NOT execute datetime conversion on raw unflattened grid cells)."
+        )
+    else:
+        for col in df.columns:
+            c_lower = col.lower()
+            if "date" in c_lower or "time" in c_lower or "created" in c_lower or "visit" in c_lower:
+                features.append(
+                    f"Temporal Intelligence: Parse `{col}` to datetime64[ns] and derive `{col}_day_name`, "
+                    f"`{col}_is_weekend`, and `{col}_quarter`."
+                )
+                break
 
     if not features:
         features.append("Standard Hygiene: Normalize all string columns, trim whitespace, and compute summary descriptive metrics.")
@@ -302,7 +308,13 @@ def build_master_prompt(
         sections.append(f"{step_num}. Enforce mathematical invariant: {bb.algebraic_laws[0]}. Add boolean flag `reconciliation_anomaly_flag` for any non-conforming records.")
         step_num += 1
 
-    sections.append(f"{step_num}. Remove duplicate records, filter out subtotal/grand total summary rows, and return the cleaned DataFrame.")
+    sections.append(
+        f"{step_num}. **ANTI-OVERCLEANING & ROW CONSERVATION MANDATE:**\n"
+        f"   - **PROHIBITION OF BLIND DROPS:** Never execute `df.dropna()`, `df.dropna(how='any')`, or `df.dropna(subset=...)` across unflattened or multi-attribute DataFrames. In sparse, accounting, or hierarchical tables, null cells are structural parent-child attributes, not corrupt data.\n"
+        f"   - **PROHIBITION OF BLIND DEDUPLICATION:** Never call `df.drop_duplicates()` blindly across all columns. Genuine line items and transactions naturally share identical dates, customer names, or price points.\n"
+        f"   - **CONSERVATION OF LINE ITEMS:** Every valid line item, transaction, and data record MUST be preserved. Filtering must strictly and selectively target genuine report noise (e.g. repeated page headers, separator dashes, or summary rows like 'Grand Total').\n"
+        f"   - **WRAPPED LINE CONCATENATION:** Continuation rows (where descriptions wrap over 2-3 lines without new sequence numbers or quantities) MUST be concatenated into the active line item's description, NEVER discarded."
+    )
     sections.append("\n---")
 
     # Section 4: Domain Feature Engineering Specification
@@ -315,6 +327,11 @@ def build_master_prompt(
                 eng_features.append(feat_text)
 
     sections.append("\n### 4. DOMAIN FEATURE ENGINEERING (AUTOMATIC SPEC EXTRACTIONS)")
+    if arch_key == "ERP_RAGGED":
+        sections.append(
+            "> [!IMPORTANT]\n"
+            "> **Feature Engineering Scope:** All column-level mathematical and temporal feature engineering (e.g. `pd.to_datetime`, date part extraction, price calculations) MUST be applied to the **final flattened canonical fields** (e.g. `doc_date`, `amount`, `quantity`), NEVER directly executed on raw unflattened grid coordinates where header text and numbers are interleaved.\n"
+        )
     for idx, feat in enumerate(eng_features, 1):
         sections.append(f"{idx}. **{feat.split(':')[0]}:**{feat.split(':', 1)[1] if ':' in feat else feat}")
     sections.append("\n---")
@@ -337,10 +354,18 @@ def build_master_prompt(
     sections.append("\n### 6. SYNTHETIC SCHEMA MOCK (Laplace DP, 0% Real Production Records)")
     sections.append("The following synthetic mock illustrates column structures and realistic numeric variance:")
     if multi_sheets and len(multi_sheets) > 1:
-        mock_dict = {s: generate_synthetic_mock(sdf, n_rows=5) for s, sdf in multi_sheets.items()}
+        mock_dict = {}
+        for s, sdf in multi_sheets.items():
+            if arch_key == "ERP_RAGGED":
+                mock_dict[s] = generate_structural_erp_mock(sdf)
+            else:
+                mock_dict[s] = generate_synthetic_mock(sdf, n_rows=5)
         mock_json = json.dumps(mock_dict, indent=2, default=str)
     else:
-        mock_rows = generate_synthetic_mock(df, n_rows=5)
+        if arch_key == "ERP_RAGGED":
+            mock_rows = generate_structural_erp_mock(df)
+        else:
+            mock_rows = generate_synthetic_mock(df, n_rows=5)
         mock_json = json.dumps(mock_rows, indent=2, default=str)
     sections.append(f"```json\n{mock_json}\n```")
     sections.append("\n---")
@@ -469,7 +494,8 @@ def build_master_prompt(
         "3. **Regex & String Safety:** When stripping whitespaces or non-standard characters, ALWAYS use raw string regex (e.g. `r'[\\s\\u2009\\u00a0]+'` or `r'[^0-9.]'`). Avoid invalid escape sequences.\n"
         "4. **Pandas 2.x/3.x Safe Types:** When selecting string columns, use `df.select_dtypes(include=['object', 'string'])` (avoid specifying only `'object'` which triggers deprecation warnings).\n"
         "5. **AST Firewall Sandbox Restrictions:** Do NOT perform disk reads, network calls (`requests`, `urllib`), environment queries (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), or timing sleep loops (`time.sleep`). The code runs inside an AST security sandbox.\n"
-        f"6. **Formatting:** Wrap your complete executable script inside a single ```python ... ``` fence.{erp_blueprint}"
+        "6. **Anti-Overcleaning Airbag Mandate:** DeepAnalyze monitors volumetric retention and financial sum conservation in volatile RAM. Never execute blind `df.dropna()`, uncalibrated `df.drop_duplicates()`, or arbitrary row slicing. Empty outputs or excessive row-loss trigger an immediate execution block and rollback.\n"
+        f"7. **Formatting:** Wrap your complete executable script inside a single ```python ... ``` fence.{erp_blueprint}"
     )
 
     return "\n".join(sections)

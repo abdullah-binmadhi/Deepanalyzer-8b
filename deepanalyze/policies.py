@@ -209,7 +209,7 @@ def resolve_policy(origin_country: str = "Universal", target_jurisdiction: str =
 # DATASET ARCHITECTURE AUTO-DETECTION (QUESTION 3)
 # =============================================================================
 
-def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
+def detect_dataset_architecture(df: Any) -> Tuple[str, str, str]:
     """Inspects dataset layout and automatically detects architecture:
 
     Returns: (type_key, human_name, explanation)
@@ -217,17 +217,29 @@ def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
     - 'HEALTHCARE_EHR': Medical / clinical EHR notes
     - 'CLEAN_TABULAR': Standard relational / tabular data
     """
-    if df.is_empty():
+    if df is None:
+        return ("CLEAN_TABULAR", "Clean Relational / Tabular", "Null DataFrame.")
+
+    # Check empty condition agnostically
+    if hasattr(df, "is_empty") and df.is_empty():
+        return ("CLEAN_TABULAR", "Clean Relational / Tabular", "Standard empty table structure.")
+    if hasattr(df, "empty") and df.empty:
         return ("CLEAN_TABULAR", "Clean Relational / Tabular", "Standard empty table structure.")
 
-    cols = [str(c).lower() for c in df.columns]
+    # 1. Primary Check: Dynamic Ragged ERP Detector
+    try:
+        from .erp_cleaner import detect_ragged_erp
+        is_ragged, erp_reason = detect_ragged_erp(df)
+        if is_ragged:
+            return ("ERP_RAGGED", "Hierarchical / Ragged ERP Report", erp_reason)
+    except Exception:
+        pass
 
-    # 1. Check for ragged ERP markers
+    # 2. Secondary Heuristic & Keyword Inspection (safe against mixed Arrow/Polars types)
+    cols = [str(c).lower() for c in (df.columns if hasattr(df, "columns") else [])]
     unnamed_count = sum(1 for c in cols if "unnamed" in c or c.isdigit() or c in (":", " : ", "date"))
-    has_colon_col = any(":" in c for c in cols)
 
-    # Inspect first 20 rows of text
-    peek_df = df.head(20).cast(pl.String)
+    # Extract first 20 rows of text safely
     erp_keywords = {
         "doc. no", "doc no", "doc. date", "doc date", "company", "seq", "gl code",
         "item code", "uom", "subtotal", "grand total", "sort by", "location"
@@ -236,35 +248,33 @@ def detect_dataset_architecture(df: pl.DataFrame) -> Tuple[str, str, str]:
     colon_cell_count = 0
     keyword_hits = 0
 
-    for col in df.columns:
-        vals = [str(v).strip().lower() for v in peek_df[col].drop_nulls().to_list()]
-        for val in vals:
-            if val in (":", " : ") or val.startswith(":") or " : " in val:
-                colon_cell_count += 1
-            if any(k in val for k in erp_keywords):
-                keyword_hits += 1
+    try:
+        if hasattr(df, "to_pandas"):
+            peek_pdf = df.head(20).to_pandas().astype(str)
+        elif hasattr(df, "iloc"):
+            peek_pdf = df.head(20).astype(str)
+        else:
+            peek_pdf = None
 
-    if (unnamed_count >= 1 and (colon_cell_count >= 2 or keyword_hits >= 2)) or colon_cell_count >= 5 or keyword_hits >= 4:
-        # Check for two-tier hierarchical master-detail ERP report
-        sample_text = " ".join([" ".join(peek_df[c].drop_nulls().to_list()) for c in peek_df.columns]).lower()
-        has_master_marker = any(k in sample_text for k in ["doc. no", "doc no", "invoice no", "voucher no", "po no", "document no"])
-        has_detail_marker = any(k in sample_text for k in ["gl code", "seq", "uom", "unit price", "item code"])
-        has_doc_ids = any(re.search(r"\b[A-Za-z]{1,6}[-_/\s]?\d{3,12}\b", " ".join(peek_df[c].drop_nulls().to_list())) for c in peek_df.columns)
+        if peek_pdf is not None:
+            for c in peek_pdf.columns:
+                vals = [v.strip().lower() for v in peek_pdf[c].dropna().tolist() if v and v != "none" and v != "nan"]
+                for val in vals:
+                    if val in (":", " : ") or val.startswith(":") or " : " in val:
+                        colon_cell_count += 1
+                    if any(k in val for k in erp_keywords):
+                        keyword_hits += 1
 
-        if (has_master_marker and (has_detail_marker or has_doc_ids)) or (keyword_hits >= 4 and has_master_marker):
-            explanation = (
-                "Detected two-tier hierarchical ERP document structure with interleaved master headers "
-                "(Doc. No, Date, Customer) and detail line items (Seq, GL Code, UOM, Quantity, Price)."
-            )
-            return ("ERP_RAGGED", "Hierarchical / Ragged ERP Report", explanation)
+            if (unnamed_count >= 1 and (colon_cell_count >= 2 or keyword_hits >= 2)) or colon_cell_count >= 5 or keyword_hits >= 4:
+                explanation = (
+                    f"Detected ragged layout with {unnamed_count} unnamed/ragged headers, "
+                    f"{colon_cell_count} metadata colon markers, and {keyword_hits} structural ERP anchors."
+                )
+                return ("ERP_RAGGED", "Hierarchical / Ragged ERP Report", explanation)
+    except Exception:
+        pass
 
-        explanation = (
-            f"Detected ragged layout with {unnamed_count} unnamed/ragged headers, "
-            f"{colon_cell_count} metadata colon markers, and {keyword_hits} structural ERP anchors."
-        )
-        return ("ERP_RAGGED", "Hierarchical / Ragged ERP Report", explanation)
-
-    # 2. Check for Healthcare EHR
+    # 3. Check for Healthcare EHR
     health_keywords = {"patient", "mrn", "diagnosis", "admission", "discharge", "physician", "clinical", "rx", "dose"}
     if any(any(hk in c for hk in health_keywords) for c in cols):
         return ("HEALTHCARE_EHR", "Healthcare EHR / Clinical Record", "Detected clinical patient identifiers and medical attributes.")

@@ -1239,6 +1239,11 @@ class AirGapWizard:
                                         resolved_df, resolution_source = resolve_transformed_dataframe(
                                             exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
                                         )
+
+                                        # Airbag Safety Audit: Verify volumetric and financial retention
+                                        from .firewall import audit_transformation_safety
+                                        audit_transformation_safety(target_df, resolved_df, arch_key=arch_key)
+
                                         exec_scope[df_name] = resolved_df
                                         exec_scope["df"] = resolved_df
                                         if hasattr(resolved_df, "shape"):
@@ -1345,6 +1350,13 @@ class AirGapWizard:
                                         code_executed_successfully = True
                                         break
                                     except Exception as err:
+                                        # Immediately restore pre-execution snapshot in RAM
+                                        restored_target = pop_snapshot(df_name)
+                                        if restored_target is not None:
+                                            exec_scope[df_name] = restored_target
+                                            exec_scope["df"] = restored_target
+                                            exec_scope["data"] = restored_target
+
                                         full_tb = traceback.format_exc()
                                         from .brain import CognitiveBlackboard, autopsy_traceback
                                         current_df = exec_scope.get(df_name, df)
@@ -1450,6 +1462,11 @@ class AirGapWizard:
                                         resolved_df, resolution_source = resolve_transformed_dataframe(
                                             exec_scope, df_prepared, primary_var=df_name, input_path=cleaned_input
                                         )
+
+                                        # Airbag Safety Audit: Verify volumetric and financial retention
+                                        from .firewall import audit_transformation_safety
+                                        audit_transformation_safety(target_df, resolved_df, arch_key=arch_key)
+
                                         exec_scope[df_name] = resolved_df
                                         exec_scope["df"] = resolved_df
                                         self.console.print(f"[bold green][Block {block_num} executed successfully![/bold green]")
@@ -1457,6 +1474,13 @@ class AirGapWizard:
                                         code_executed_successfully = True
                                         break
                                     except Exception as err:
+                                        # Immediately restore pre-execution snapshot in RAM
+                                        restored_target = pop_snapshot(df_name)
+                                        if restored_target is not None:
+                                            exec_scope[df_name] = restored_target
+                                            exec_scope["df"] = restored_target
+                                            exec_scope["data"] = restored_target
+
                                         full_tb = traceback.format_exc()
                                         from .brain import CognitiveBlackboard, autopsy_traceback
                                         current_df = exec_scope.get(df_name, df)

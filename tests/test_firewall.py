@@ -117,10 +117,92 @@ cloned = copy.deepcopy([1, 2, 3])
     assert scope["cloned"] == [1, 2, 3]
 
 
+def test_audit_transformation_safety_blocks_empty_dataframe():
+    """Validates that audit_transformation_safety fatal-blocks empty DataFrames."""
+    import pandas as pd
+    import pytest
+    from deepanalyze.firewall import audit_transformation_safety, OverCleaningViolation
+
+    raw_df = pd.DataFrame({"id": [1, 2, 3, 4, 5, 6], "val": [10, 20, 30, 40, 50, 60]})
+    empty_df = pd.DataFrame(columns=["id", "val"])
+
+    with pytest.raises(OverCleaningViolation, match="completely empty"):
+        audit_transformation_safety(raw_df, empty_df)
+
+
+def test_audit_transformation_safety_clean_tabular_retention():
+    """Validates that audit_transformation_safety blocks excessive row drop in clean tabular data."""
+    import pandas as pd
+    import pytest
+    from deepanalyze.firewall import audit_transformation_safety, OverCleaningViolation
+
+    raw_df = pd.DataFrame({"id": list(range(100)), "amount": [10.0] * 100})
+
+    # 1. Normal mild cleaning (dropping 5% of rows) -> Passes
+    cleaned_normal = raw_df.iloc[:95]
+    ok, msg = audit_transformation_safety(raw_df, cleaned_normal)
+    assert ok is True
+
+    # 2. Destructive drop (dropping 50% of rows via blind dropna) -> Blocks
+    cleaned_destructive = raw_df.iloc[:50]
+    with pytest.raises(OverCleaningViolation, match="lost 50.0% of records"):
+        audit_transformation_safety(raw_df, cleaned_destructive)
+
+
+def test_audit_transformation_safety_financial_conservation():
+    """Validates that audit_transformation_safety flags zeroed out financial sums."""
+    import pandas as pd
+    import pytest
+    from deepanalyze.firewall import audit_transformation_safety, OverCleaningViolation
+
+    raw_df = pd.DataFrame({"item": ["A", "B", "C", "D", "E", "F"], "amount": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0]})
+    corrupted_df = pd.DataFrame({"item": ["A", "B", "C", "D", "E", "F"], "amount": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]})
+
+    with pytest.raises(OverCleaningViolation, match="Financial Conservation Violation"):
+        audit_transformation_safety(raw_df, corrupted_df)
+
+
+def test_audit_transformation_safety_ragged_erp_line_retention():
+    """Validates that audit_transformation_safety checks expected line item retention on ERP data."""
+    import pandas as pd
+    import pytest
+    from deepanalyze.firewall import audit_transformation_safety, OverCleaningViolation
+
+    # ERP with 10 line items
+    rows = [
+        {"Date": "Doc. No", "Value": "IV-101"},
+        {"Date": "1000", "Value": "Item 1"},
+        {"Date": "1001", "Value": "Item 2"},
+        {"Date": "1002", "Value": "Item 3"},
+        {"Date": "1003", "Value": "Item 4"},
+        {"Date": "1004", "Value": "Item 5"},
+        {"Date": "1005", "Value": "Item 6"},
+        {"Date": "1006", "Value": "Item 7"},
+        {"Date": "1007", "Value": "Item 8"},
+        {"Date": "1008", "Value": "Item 9"},
+        {"Date": "1009", "Value": "Item 10"},
+    ]
+    raw_erp = pd.DataFrame(rows)
+
+    # 1. Properly flattened 10 line items -> Passes
+    flattened_good = pd.DataFrame({"doc_no": ["IV-101"] * 10, "seq": list(range(1000, 1010)), "amount": [100.0] * 10})
+    ok, _ = audit_transformation_safety(raw_erp, flattened_good, arch_key="ERP_RAGGED")
+    assert ok is True
+
+    # 2. Overcleaned: only 2 line items retained (< 40%) -> Blocks
+    flattened_bad = pd.DataFrame({"doc_no": ["IV-101"] * 2, "seq": [1000, 1001], "amount": [100.0] * 2})
+    with pytest.raises(OverCleaningViolation, match="Over-Cleaning Violation"):
+        audit_transformation_safety(raw_erp, flattened_bad, arch_key="ERP_RAGGED")
+
+
 if __name__ == "__main__":
     test_firewall_blocks_forbidden_imports()
     test_firewall_allows_safe_polars_code()
     test_execute_code_safely_main_block()
     test_push_snapshot_resilience()
     test_execute_code_safely_preinjected_copy_and_re()
+    test_audit_transformation_safety_blocks_empty_dataframe()
+    test_audit_transformation_safety_clean_tabular_retention()
+    test_audit_transformation_safety_financial_conservation()
+    test_audit_transformation_safety_ragged_erp_line_retention()
     print("test_firewall.py passed!")

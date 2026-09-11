@@ -540,3 +540,82 @@ def extract_contextual_entities(text_samples: List[str]) -> List[str]:
 
 def scan_and_mask_free_text(text: str) -> Tuple[str, List[Dict[str, str]]]:
     return _GLOBAL_SENTINEL.scan_and_mask_free_text(text)
+
+
+def generate_structural_erp_mock(df: pl.DataFrame) -> List[Dict[str, Any]]:
+    """Generates a dynamic 4-row structural synthetic mock (Header -> Line Item -> Wrap -> Line Item 2)
+    reflecting genuine parent-child hierarchy with 0% real production records.
+    """
+    from .erp_cleaner import sniff_erp_layout
+    schema = sniff_erp_layout(df)
+    cols = list(df.columns)
+
+    row0: Dict[str, Any] = {c: None for c in cols}
+    row1: Dict[str, Any] = {c: None for c in cols}
+    row2: Dict[str, Any] = {c: None for c in cols}
+    row3: Dict[str, Any] = {c: None for c in cols}
+
+    # Prioritize prefix found in raw dataset column data
+    found_prefix = None
+    if 0 <= schema.doc_col < len(cols):
+        raw_vals = [str(x) for x in df[cols[schema.doc_col]].drop_nulls()]
+        for p in schema.doc_prefixes:
+            clean_p = p.rstrip("-").rstrip("/").rstrip("_")
+            if any(clean_p.lower() in v.lower() for v in raw_vals):
+                found_prefix = p
+                break
+    prefix = found_prefix or (schema.doc_prefixes[0] if schema.doc_prefixes else "DOC")
+    if prefix.endswith("-") or prefix.endswith("/"):
+        doc_id = f"{prefix}10001"
+    else:
+        doc_id = f"{prefix}-10001"
+
+    # Row 0: Master Document Header
+    if 0 <= schema.doc_col < len(cols):
+        row0[cols[schema.doc_col]] = doc_id
+    if schema.date_col is not None and 0 <= schema.date_col < len(cols):
+        row0[cols[schema.date_col]] = "2026-01-15"
+    if schema.entity_code_col is not None and 0 <= schema.entity_code_col < len(cols):
+        row0[cols[schema.entity_code_col]] = "CUST-001"
+    if schema.entity_name_col is not None and 0 <= schema.entity_name_col < len(cols):
+        row0[cols[schema.entity_name_col]] = "<ANONYMIZED_ENTITY_NAME>"
+    if schema.total_col is not None and 0 <= schema.total_col < len(cols):
+        row0[cols[schema.total_col]] = "1,500.00"
+
+    # Row 1: First Line Item
+    if 0 <= schema.doc_col < len(cols):
+        row1[cols[schema.doc_col]] = "1000"
+    if schema.item_code_col is not None and 0 <= schema.item_code_col < len(cols):
+        row1[cols[schema.item_code_col]] = "ITEM-001"
+    if 0 <= schema.desc_col < len(cols):
+        row1[cols[schema.desc_col]] = "Primary Line Item Description"
+    if schema.qty_col is not None and 0 <= schema.qty_col < len(cols):
+        row1[cols[schema.qty_col]] = "2.00"
+    if schema.uom_col is not None and 0 <= schema.uom_col < len(cols):
+        row1[cols[schema.uom_col]] = "UNIT"
+    if schema.price_col is not None and 0 <= schema.price_col < len(cols):
+        row1[cols[schema.price_col]] = "500.00"
+    if schema.amount_col is not None and 0 <= schema.amount_col < len(cols):
+        row1[cols[schema.amount_col]] = "1,000.00"
+
+    # Row 2: Wrapped Continuation (description wrap with no seq/metrics)
+    if 0 <= schema.desc_col < len(cols):
+        row2[cols[schema.desc_col]] = "Additional wrapped specification details"
+
+    # Row 3: Second Line Item
+    if 0 <= schema.doc_col < len(cols):
+        row3[cols[schema.doc_col]] = "2000"
+    if schema.item_code_col is not None and 0 <= schema.item_code_col < len(cols):
+        row3[cols[schema.item_code_col]] = "ITEM-002"
+    if 0 <= schema.desc_col < len(cols):
+        row3[cols[schema.desc_col]] = "Secondary Line Item Description"
+    if schema.qty_col is not None and 0 <= schema.qty_col < len(cols):
+        row3[cols[schema.qty_col]] = "1.00"
+    if schema.uom_col is not None and 0 <= schema.uom_col < len(cols):
+        row3[cols[schema.uom_col]] = "UNIT"
+    if schema.price_col is not None and 0 <= schema.price_col < len(cols):
+        row3[cols[schema.price_col]] = "500.00"
+    if schema.amount_col is not None and 0 <= schema.amount_col < len(cols):
+        row3[cols[schema.amount_col]] = "500.00"
+
+    return [row0, row1, row2, row3]

@@ -27,6 +27,11 @@ class ASTSecurityViolation(PermissionError):
     pass
 
 
+class OverCleaningViolation(ValueError):
+    """Raised when an incoming transformation script causes catastrophic data loss or over-cleans records."""
+    pass
+
+
 class ASTFirewallVisitor(ast.NodeVisitor):
     """AST visitor that detects forbidden module imports, function calls, and attribute access."""
 
@@ -320,6 +325,133 @@ def resolve_transformed_dataframe(
                     pass
 
     return original_df, "unmodified original"
+
+
+def audit_transformation_safety(
+    raw_df: Any,
+    transformed_df: Any,
+    arch_key: str = "CLEAN_TABULAR",
+    strict: bool = True
+) -> Tuple[bool, str]:
+    """Audits transformation results against the raw dataset for catastrophic data loss,
+
+    destructive over-filtering, and financial/volumetric conservation breaches.
+    Works dynamically and agnostically across all dataset architectures.
+    """
+    if raw_df is None or transformed_df is None:
+        return True, "Null dataset bypassed safety audit."
+
+    try:
+        import pandas as pd
+    except ImportError:
+        pd = None
+
+    # 1. Zero-Row / Empty DataFrame Fatal Check
+    transformed_rows = transformed_df.height if hasattr(transformed_df, "height") else (
+        transformed_df.shape[0] if hasattr(transformed_df, "shape") else len(transformed_df)
+    )
+    raw_rows = raw_df.height if hasattr(raw_df, "height") else (
+        raw_df.shape[0] if hasattr(raw_df, "shape") else len(raw_df)
+    )
+
+    if raw_rows > 0 and transformed_rows == 0:
+        raise OverCleaningViolation(
+            "Over-Cleaning Fatal Error: Transformed DataFrame is completely empty (0 rows)! "
+            "The transformation script discarded 100% of records."
+        )
+
+    # If raw dataset is small (<= 5 rows), bypass retention ratio check
+    if raw_rows <= 5:
+        return True, "Small dataset passed safety audit."
+
+    # 2. Volumetric Retention & Over-Filtering Analysis
+    retention_ratio = transformed_rows / raw_rows
+
+    if arch_key == "ERP_RAGGED":
+        expected_line_items = None
+        try:
+            from .erp_cleaner import sniff_erp_layout
+            schema = sniff_erp_layout(raw_df)
+            pdf = raw_df.to_pandas() if hasattr(raw_df, "to_pandas") else raw_df
+            seq_count = 0
+            if 0 <= schema.doc_col < pdf.shape[1]:
+                series = pdf.iloc[:, schema.doc_col].dropna().astype(str).str.strip()
+                for v in series:
+                    try:
+                        val_num = float(v)
+                        if val_num >= 1000 or (val_num.is_integer() and 1 <= val_num <= 5000):
+                            seq_count += 1
+                    except ValueError:
+                        pass
+            if seq_count >= 5:
+                expected_line_items = seq_count
+        except Exception:
+            pass
+
+        if expected_line_items is not None and expected_line_items > 0:
+            line_retention = transformed_rows / expected_line_items
+            if line_retention < 0.4:
+                raise OverCleaningViolation(
+                    f"Over-Cleaning Violation: Transformed dataset retained only {transformed_rows} rows out of "
+                    f"~{expected_line_items} expected line items ({line_retention*100:.1f}% line retention). "
+                    f"Blind dropna() or destructive over-filtering detected in hierarchical ERP dataset."
+                )
+        else:
+            if retention_ratio < 0.08 and transformed_rows < 15:
+                raise OverCleaningViolation(
+                    f"Over-Cleaning Violation: Transformed dataset retained only {transformed_rows} rows out of "
+                    f"{raw_rows} raw rows ({retention_ratio*100:.1f}% retention). "
+                    f"Severe record loss detected in hierarchical dataset."
+                )
+
+    else:
+        # Standard tabular / relational dataset:
+        if strict and retention_ratio < 0.70:
+            loss_pct = (1.0 - retention_ratio) * 100
+            raise OverCleaningViolation(
+                f"Over-Cleaning Warning: Transformed dataset lost {loss_pct:.1f}% of records "
+                f"({transformed_rows} rows remaining from {raw_rows} original rows). "
+                f"Verify if blind dropna() or excessive deduplication was executed."
+            )
+
+    # 3. Numeric & Financial Conservation Check
+    if pd is not None:
+        try:
+            raw_pdf = raw_df.to_pandas() if hasattr(raw_df, "to_pandas") else raw_df
+            tx_pdf = transformed_df.to_pandas() if hasattr(transformed_df, "to_pandas") else transformed_df
+
+            money_keywords = ["amount", "total", "price", "net", "gross", "debit", "credit", "balance", "cost", "sum"]
+            raw_num_cols = [c for c in raw_pdf.columns if any(k in str(c).lower() for k in money_keywords)]
+            tx_num_cols = [c for c in tx_pdf.columns if any(k in str(c).lower() for k in money_keywords)]
+
+            if raw_num_cols and tx_num_cols:
+                raw_sums = []
+                for c in raw_num_cols:
+                    clean_s = raw_pdf[c].astype(str).str.replace(",", "", regex=False).str.replace("$", "", regex=False).str.replace("₹", "", regex=False)
+                    nums = pd.to_numeric(clean_s, errors="coerce").dropna()
+                    if len(nums) > 0 and nums.sum() > 0:
+                        raw_sums.append(nums.sum())
+
+                tx_sums = []
+                for c in tx_num_cols:
+                    clean_s = tx_pdf[c].astype(str).str.replace(",", "", regex=False).str.replace("$", "", regex=False).str.replace("₹", "", regex=False)
+                    nums = pd.to_numeric(clean_s, errors="coerce").dropna()
+                    if len(nums) > 0:
+                        tx_sums.append(nums.sum())
+
+                if raw_sums:
+                    max_raw = max(raw_sums)
+                    max_tx = max(tx_sums) if tx_sums else 0.0
+                    if max_raw > 100.0 and max_tx <= 0.0:
+                        raise OverCleaningViolation(
+                            f"Financial Conservation Violation: Raw dataset had substantial quantitative volume (sum ~{max_raw:,.2f}) "
+                            f"but transformed dataset sum is 0.00. Quantitative columns were corrupted or zeroed out."
+                        )
+        except Exception as e:
+            if isinstance(e, OverCleaningViolation):
+                raise
+
+    return True, f"Volumetric & retention safety verified ({transformed_rows:,} rows retained from {raw_rows:,})."
 
 
 # =============================================================================

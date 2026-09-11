@@ -29,3 +29,31 @@ def test_differential_privacy_mock_generation():
     orig_revs = df["revenue"].to_list()
     # At least some difference guaranteed by DP noise
     assert mock_revs != orig_revs
+
+
+def test_structural_erp_mock_generation():
+    """Validates dynamic 4-row structural mock generation for hierarchical ERP datasets."""
+    from deepanalyze.sentinel import generate_structural_erp_mock
+
+    erp_df = pl.DataFrame({
+        "Date": ["Doc. No", "IV-11319", "Seq", "1000", "Wrapped line part 2"],
+        " : ": [None, None, "GL Code", "500-000", None],
+        "Value": ["Doc. Date", "2025-08-01", None, "14,520.00", None]
+    })
+
+    mock_rows = generate_structural_erp_mock(erp_df)
+    assert len(mock_rows) == 4
+
+    # Row 0: Master Header (contains doc id and date)
+    assert any("DOC" in str(v) or "IV" in str(v) for v in mock_rows[0].values() if v)
+    assert any("2026" in str(v) for v in mock_rows[0].values() if v)
+
+    # Row 1: Line Item (contains sequence 1000 and item description)
+    assert any(str(v) == "1000" for v in mock_rows[1].values() if v)
+    assert any("Primary Line Item Description" in str(v) for v in mock_rows[1].values() if v)
+
+    # Row 2: Wrapped Continuation (description text only, seq is None)
+    assert any("wrapped specification details" in str(v) for v in mock_rows[2].values() if v)
+
+    # Row 3: Line Item 2 (contains sequence 2000)
+    assert any(str(v) == "2000" for v in mock_rows[3].values() if v)
