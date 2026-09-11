@@ -590,11 +590,11 @@ class RollbackManager:
 _GLOBAL_ROLLBACK = RollbackManager(max_depth=5)
 
 
-def push_snapshot(target_name: str, df: pl.DataFrame) -> None:
+def push_snapshot(target_name: str, df: Any) -> None:
     _GLOBAL_ROLLBACK.push(target_name, df)
 
 
-def pop_snapshot(target_name: str) -> Optional[pl.DataFrame]:
+def pop_snapshot(target_name: str) -> Optional[Any]:
     return _GLOBAL_ROLLBACK.pop(target_name)
 
 
