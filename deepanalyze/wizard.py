@@ -18,6 +18,7 @@ import traceback
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import polars as pl
+import pandas as pd
 from rich.console import Console, Group
 from rich.markup import escape
 from rich.panel import Panel
@@ -98,7 +99,7 @@ def copy_to_clipboard(text: str) -> bool:
     """Copies text to the system clipboard across macOS, Linux, and Windows."""
     # 1. Try pyperclip if installed
     try:
-        import pyperclip
+        import pyperclip  # type: ignore
         pyperclip.copy(text)
         return True
     except Exception:
@@ -189,9 +190,8 @@ def ingest_file(file_path: str) -> pl.DataFrame:
     elif ext in (".xlsx", ".xls"):
         # Prioritize pandas with header=None to preserve 100% of columns and rows in unflattened ERP spreadsheets
         try:
-            import pandas as pd
             df_pd = pd.read_excel(clean_path, header=None)
-            df_pd.columns = [str(c) for c in df_pd.columns]
+            df_pd.columns = [c if isinstance(c, str) else str(c) for c in df_pd.columns]
             for col in df_pd.columns:
                 if df_pd[col].dtype == "object":
                     df_pd[col] = df_pd[col].map(lambda x: str(x) if pd.notna(x) else None)
@@ -220,7 +220,6 @@ def ingest_file(file_path: str) -> pl.DataFrame:
             if isinstance(raw_json, dict) and len(raw_json) > 0:
                 first_val = next(iter(raw_json.values()))
                 if isinstance(first_val, dict):
-                    import pandas as pd
                     records = [{"item_key": k, **v} for k, v in raw_json.items()]
                     pdf = pd.DataFrame(records)
                     for c in pdf.columns:
@@ -431,11 +430,15 @@ class AirGapWizard:
             cleaned_input = clean_filepath(path_input)
 
             if self.user_ns and cleaned_input in self.user_ns and hasattr(self.user_ns[cleaned_input], "shape"):
-                df = self.user_ns[cleaned_input]
+                raw_in_df = self.user_ns[cleaned_input]
                 df_name = cleaned_input
                 dataset_base_name = df_name
-                if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
-                    df = pl.from_pandas(df)
+                if isinstance(raw_in_df, pl.DataFrame):
+                    df = raw_in_df
+                elif hasattr(raw_in_df, "to_dict"):
+                    df = pl.from_pandas(raw_in_df if isinstance(raw_in_df, pd.DataFrame) else pd.DataFrame(raw_in_df))
+                else:
+                    df = pl.DataFrame(raw_in_df)
                 self.console.print(f"[INFO] Bound to in-memory DataFrame `[bold]{df_name}[/bold]` ({df.height} rows x {df.width} columns).")
             else:
                 try:
@@ -451,8 +454,15 @@ class AirGapWizard:
                     self.console.print(f"[bold red]Ingestion Error:[/bold red] {e}")
                     return None
         else:
-            if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
-                df = pl.from_pandas(df)
+            if df is not None:
+                if hasattr(df, "to_dict") and not isinstance(df, pl.DataFrame):
+                    df = pl.from_pandas(df if isinstance(df, pd.DataFrame) else pd.DataFrame(df))
+                elif not isinstance(df, pl.DataFrame):
+                    df = pl.DataFrame(df)
+
+        if df is None:
+            self.console.print("[bold red]No valid DataFrame provided or loaded.[/bold red]")
+            return None
 
         # Mode Selection: Express Clean vs Enterprise Auditor Mode
         if mode is None:
@@ -464,7 +474,7 @@ class AirGapWizard:
                 return None
             is_express_mode = (mode_choice == "1" or "express" in mode_choice.lower())
         else:
-            is_express_mode = (str(mode).lower() in ("1", "express", "quick"))
+            is_express_mode = (mode.lower() in ("1", "express", "quick"))
 
         workbook_topology = None
         multi_sheets = None
@@ -664,7 +674,13 @@ class AirGapWizard:
             clean_choice = Prompt.ask("Select cleaning approach [1-5]", default="1").strip()
             if clean_choice == "1":
                 self.console.print("\n[bold green]Executing Autonomous In-Memory Flattening...[/bold green]")
-                cleaned_df = flatten_hierarchical_erp(df)
+                flattened = flatten_hierarchical_erp(df)
+                if isinstance(flattened, pl.DataFrame):
+                    cleaned_df = flattened
+                elif hasattr(flattened, "to_dict"):
+                    cleaned_df = pl.from_pandas(flattened if isinstance(flattened, pd.DataFrame) else pd.DataFrame(flattened))
+                else:
+                    cleaned_df = pl.DataFrame(flattened)
                 total_nulls = sum([cleaned_df[c].null_count() for c in cleaned_df.columns])
                 self.console.print(
                     f"[bold green]SUCCESS:[/bold green] Deconstructed into [bold cyan]{cleaned_df.height:,}[/bold cyan] rows "
@@ -724,7 +740,10 @@ class AirGapWizard:
                     masked_multi_sheets[sname] = mask_structural_erp(sdf)
                 else:
                     masked_multi_sheets[sname] = tokenize_dataframe(sdf, policy)
-            masked_df = masked_multi_sheets[workbook_topology.primary_sheet]
+            if workbook_topology and workbook_topology.primary_sheet in masked_multi_sheets:
+                masked_df = masked_multi_sheets[workbook_topology.primary_sheet]
+            else:
+                masked_df = next(iter(masked_multi_sheets.values()))
             self.console.print(f"[INFO] Completed synchronized tokenization across all {len(multi_sheets)} sheets.")
         else:
             if arch_key == "ERP_RAGGED":
@@ -1064,11 +1083,13 @@ class AirGapWizard:
                         export_sheets = masked_multi_sheets if (masked_multi_sheets and len(masked_multi_sheets) > 1) else (multi_sheets if (multi_sheets and len(multi_sheets) > 1) else None)
                         try:
                             if ext == ".xlsx" and export_sheets:
-                                import pandas as pd
                                 with pd.ExcelWriter(dup_path, engine="openpyxl") as writer:
                                     for sname, sdf in export_sheets.items():
                                         pdf = sdf.to_pandas() if hasattr(sdf, "to_pandas") else sdf
-                                        pdf.to_excel(writer, sheet_name=sname, index=False)
+                                        if isinstance(pdf, pd.DataFrame):
+                                            pdf.to_excel(writer, sheet_name=sname, index=False)
+                                        elif hasattr(pdf, "to_pandas"):
+                                            pdf.to_pandas().to_excel(writer, sheet_name=sname, index=False)
                             elif ext == ".xlsx":
                                 masked_df.write_excel(dup_path)
                             elif ext == ".csv":
@@ -1301,7 +1322,7 @@ class AirGapWizard:
                                                         target_name=df_name,
                                                         schema_info=schema_info
                                                     )
-                                                    diag_esc = escape(str(diag))
+                                                    diag_esc = escape(diag)
                                                     self.console.print(Panel(
                                                         Group(
                                                             Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
@@ -1367,7 +1388,7 @@ class AirGapWizard:
                                         record_execution_failure(df_name, code_text, err, full_tb, current_df, repair_prompt)
 
                                         err_esc = escape(str(err))
-                                        rep_esc = escape(str(repair_prompt))
+                                        rep_esc = escape(repair_prompt)
                                         self.console.print(Panel(
                                             Text.from_markup(
                                                 f"[bold red]Execution Error:[/bold red]\n{err_esc}\n\n"
@@ -1406,7 +1427,7 @@ class AirGapWizard:
                                                     target_name=df_name,
                                                     schema_info=schema_info
                                                 )
-                                                diag_esc = escape(str(diag))
+                                                diag_esc = escape(diag)
                                                 self.console.print(Panel(
                                                     Group(
                                                         Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
@@ -1491,7 +1512,7 @@ class AirGapWizard:
                                         record_execution_failure(df_name, block_text, err, full_tb, current_df, repair_prompt)
 
                                         err_esc = escape(str(err))
-                                        rep_esc = escape(str(repair_prompt))
+                                        rep_esc = escape(repair_prompt)
                                         self.console.print(Panel(
                                             Text.from_markup(
                                                 f"[bold red]Execution Error in Block {block_num}:[/bold red]\n{err_esc}\n\n"
@@ -1530,7 +1551,7 @@ class AirGapWizard:
                                                     target_name=df_name,
                                                     schema_info=schema_info
                                                 )
-                                                diag_esc = escape(str(diag))
+                                                diag_esc = escape(diag)
                                                 self.console.print(Panel(
                                                     Group(
                                                         Text.from_markup(f"[bold cyan]Diagnosis:[/bold cyan] {diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
@@ -1609,6 +1630,7 @@ class AirGapWizard:
             # -------------------------------------------------------------
             elif wizard_stage == "step10":
                 self.console.print("\n[bold cyan]Step 10: Automated Data Engineering & Feature Synthesis Engine[/bold cyan]")
+                exec_scope = self.user_ns if self.user_ns is not None else globals()
                 if final_df is not None and hasattr(final_df, "columns"):
                     opps = profile_engineering_opportunities(final_df)
                     total_opps = sum(len(v) for v in opps.values())
@@ -1652,15 +1674,19 @@ class AirGapWizard:
 
                                 if fe_code:
                                     self.console.print("[bold cyan]Aligning and stitching columns with local DeepAnalyze 8B model...[/bold cyan]")
-                                    s_stitch, stitched_fe, diag = stitch_code_with_local_model(fe_code, final_df, df_var=df_name)
+                                    stitch_target = final_df if isinstance(final_df, pl.DataFrame) else (pl.from_pandas(final_df) if hasattr(final_df, "to_pandas") else df)
+                                    s_stitch, stitched_fe, diag = stitch_code_with_local_model(fe_code, stitch_target, df_var=df_name)
                                     self.console.print(Panel(Syntax(stitched_fe, "python", theme="monokai", line_numbers=True), title="Stitched Engineering Code (Polars/Pandas)", border_style="cyan"))
-                                    fe_scope = {"df": final_df, df_name: final_df, "pl": pl}
+                                    fe_scope: Dict[str, Any] = {"df": final_df, df_name: final_df, "pl": pl}
                                     try:
                                         execute_code_safely(stitched_fe, fe_scope, timeout_sec=20.0)
-                                        final_df = fe_scope.get(df_name, fe_scope.get("df", final_df))
+                                        fe_res = fe_scope.get(df_name, fe_scope.get("df", final_df))
+                                        if isinstance(fe_res, (pl.DataFrame, pd.DataFrame)):
+                                            final_df = fe_res
                                         exec_scope[df_name] = final_df
                                         exec_scope["df"] = final_df
-                                        self.console.print(f"[bold green]Frontier Feature Engineering Successfully Stitched & Executed in RAM![/bold green] ({final_df.width} columns)")
+                                        col_count = final_df.width if isinstance(final_df, pl.DataFrame) else (final_df.shape[1] if hasattr(final_df, "shape") else 0)
+                                        self.console.print(f"[bold green]Frontier Feature Engineering Successfully Stitched & Executed in RAM![/bold green] ({col_count} columns)")
                                     except Exception as fe_err:
                                         self.console.print(f"[bold red]Feature execution error:[/bold red] {fe_err}")
 
@@ -1681,7 +1707,7 @@ class AirGapWizard:
                         title="Clean Data Airlock Status",
                         border_style="yellow"
                     ))
-                elif final_df is not None and hasattr(final_df, "shape") and hasattr(df, "shape"):
+                elif final_df is not None and isinstance(final_df, (pl.DataFrame, pd.DataFrame)) and isinstance(df, (pl.DataFrame, pd.DataFrame)):
                     r_diff = len(final_df) - len(df)
                     c_diff = len(final_df.columns) - len(df.columns)
                     self.console.print(Panel(
@@ -1728,20 +1754,23 @@ class AirGapWizard:
                     clean_out_name = Prompt.ask("Enter export filename", default=default_out)
                     clean_out_path = os.path.join(dataset_dir, clean_out_name)
                     try:
-                        if hasattr(final_df, "to_excel"):
+                        if isinstance(final_df, pd.DataFrame):
                             if clean_out_path.endswith(".csv"):
                                 final_df.to_csv(clean_out_path, index=False)
                             elif clean_out_path.endswith(".parquet"):
                                 final_df.to_parquet(clean_out_path, index=False)
                             else:
                                 final_df.to_excel(clean_out_path, index=False)
-                        else:
+                        elif isinstance(final_df, pl.DataFrame):
                             if clean_out_path.endswith(".csv"):
                                 final_df.write_csv(clean_out_path)
                             elif clean_out_path.endswith(".parquet"):
                                 final_df.write_parquet(clean_out_path)
                             else:
                                 final_df.write_excel(clean_out_path)
+                        elif hasattr(final_df, "to_pandas"):
+                            pdf_export = final_df.to_pandas()
+                            pdf_export.to_excel(clean_out_path, index=False)
                         self.console.print(f"[bold green][Exported][/bold green] Clean dataset exported successfully to: `[bold]{clean_out_path}[/bold]`")
 
                         # Automated Pytest Pipeline Regression Test Suite
@@ -1793,9 +1822,10 @@ class AirGapWizard:
                         policy=policy,
                         dataset_name=dataset_base_name
                     )
+                final_pl = final_df if isinstance(final_df, pl.DataFrame) else (pl.from_pandas(final_df) if hasattr(final_df, "to_pandas") else df)
                 create_compliance_audit_certificate(
                     df,
-                    final_df if isinstance(final_df, pl.DataFrame) else df,
+                    final_pl,
                     policy,
                     output_path=cert_path,
                     kanon_report=kanon_report if "kanon_report" in locals() else None,
@@ -1805,7 +1835,11 @@ class AirGapWizard:
                 self.console.print(f"[INFO] Formal compliance audit report generated at `[bold]{cert_path}[/bold]`.")
                 break
 
-        return final_df
+        if isinstance(final_df, pl.DataFrame):
+            return final_df
+        elif hasattr(final_df, "to_pandas"):
+            return pl.from_pandas(final_df if isinstance(final_df, pd.DataFrame) else pd.DataFrame(final_df))
+        return df if isinstance(df, pl.DataFrame) else None
 
 
 def wizard(df: Optional[Any] = None, df_name: str = "df", **kwargs: Any) -> Any:

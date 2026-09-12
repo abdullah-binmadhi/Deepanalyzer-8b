@@ -594,6 +594,7 @@ def flatten_hierarchical_erp(
 def generate_powerquery_recipe(
     df: Union[pl.DataFrame, pd.DataFrame],
     dataset_name: str = "dataset",
+    file_path: Optional[str] = None,
 ) -> str:
     """Generates a dynamic step-by-step Excel / Power BI Power Query guide and M-code recipe."""
     schema = sniff_erp_layout(df)
@@ -906,3 +907,6 @@ def clean_erp_report(file_path_or_df) -> pd.DataFrame:
 # df_clean.to_excel("Cleaned_Master_Detail.xlsx", index=False)
 ```
 """
+
+
+generate_guided_cleaning_markdown = generate_powerquery_recipe

@@ -117,7 +117,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
         elif target_df is None and isinstance(target_name, str) and os.path.exists(target_name):
             try:
                 if target_name.endswith((".xlsx", ".xls")):
-                    import openpyxl
+                    import openpyxl  # type: ignore
                     wb = openpyxl.load_workbook(target_name, read_only=True)
                     multi_sheets = {}
                     for s in wb.sheetnames:
@@ -214,7 +214,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
 
                 repaired_code = clean_markdown_code_blocks(repaired_code)
 
-                diag_esc = escape(str(diagnosis))
+                diag_esc = escape(diagnosis)
                 console.print(Panel(
                     Group(
                         Text.from_markup(f"[bold cyan]Forensic Diagnosis:[/bold cyan]\n{diag_esc}\n\n[bold green]Patched Code Synthesized:[/bold green]"),
@@ -366,7 +366,7 @@ def deepanalyze_magic_handler(line: str, cell: Optional[str] = None, ipython: An
 
             # 3. Post-execution token reconciliation
             updated_df = user_ns.get(target_name)
-            if hasattr(updated_df, "shape"):
+            if updated_df is not None and hasattr(updated_df, "shape"):
                 reconciled_df = detokenize_dataframe(updated_df)
                 user_ns[target_name] = reconciled_df
 
