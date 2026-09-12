@@ -552,10 +552,15 @@ class AirGapWizard:
 
         if is_express_mode:
             if workbook_topology and len(workbook_topology.sheets) > 1:
-                df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                pri_sheet = workbook_topology.sheets.get(workbook_topology.primary_sheet)
+                if pri_sheet and pri_sheet.df is not None:
+                    df = pri_sheet.df
                 df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
                 multi_sheets = {s: p.df for s, p in workbook_topology.sheets.items() if p.df is not None}
                 self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
+            if df is None:
+                self.console.print("[bold red]No valid DataFrame found for processing.[/bold red]")
+                return None
             detected_key, human_name, explanation = detect_dataset_architecture(df)
             arch_key = detected_key
             self.console.print(f"[bold green][Analysis][/bold green] Detected '[bold cyan]{human_name}[/bold cyan]'. {explanation}")
@@ -577,7 +582,9 @@ class AirGapWizard:
 
                 if ms_choice.strip() == "2":
                     multi_sheets = None
-                    df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                    pri_sheet = workbook_topology.sheets.get(workbook_topology.primary_sheet)
+                    if pri_sheet and pri_sheet.df is not None:
+                        df = pri_sheet.df
                     df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
                 elif ms_choice.strip() == "3":
                     s_names = list(workbook_topology.sheets.keys())
@@ -589,13 +596,20 @@ class AirGapWizard:
                     except Exception:
                         chosen_name = s_names[0]
                     multi_sheets = None
-                    df = workbook_topology.sheets[chosen_name].df
+                    chosen_sheet = workbook_topology.sheets.get(chosen_name)
+                    if chosen_sheet and chosen_sheet.df is not None:
+                        df = chosen_sheet.df
                     df_name = re.sub(r"[^a-zA-Z0-9_]", "_", chosen_name).strip("_").lower() or "df"
                 else:
-                    df = workbook_topology.sheets[workbook_topology.primary_sheet].df
+                    pri_sheet = workbook_topology.sheets.get(workbook_topology.primary_sheet)
+                    if pri_sheet and pri_sheet.df is not None:
+                        df = pri_sheet.df
                     df_name = re.sub(r"[^a-zA-Z0-9_]", "_", workbook_topology.primary_sheet).strip("_").lower() or "df"
                     self.console.print(f"[INFO] Multi-sheet consolidation active: Primary sheet is '[bold green]{workbook_topology.primary_sheet}[/bold green]'.")
             else:
+                if df is None:
+                    self.console.print("[bold red]No valid DataFrame found for processing.[/bold red]")
+                    return None
                 single_prof = profile_dataframe(df, name=df_name)
                 workbook_topology = WorkbookTopology(
                     file_path=cleaned_input or "",
@@ -621,6 +635,10 @@ class AirGapWizard:
                     self.console.print(f"[bold cyan][Data Intelligence Diagnostics][/bold cyan] Found {len(diagnostics)} data anomalies:")
                     for diag in diagnostics[:5]:
                         self.console.print(f"  • {diag}")
+
+            if df is None:
+                self.console.print("[bold red]No valid DataFrame found for processing.[/bold red]")
+                return None
 
             arch_options = [
                 "Clean Relational / Tabular (Standard Columns)",
@@ -729,6 +747,10 @@ class AirGapWizard:
                     "- Zero null guarantee",
                     border_style="cyan"
                 ))
+
+        if df is None:
+            self.console.print("[bold red]No valid DataFrame found for processing.[/bold red]")
+            return None
 
         # Step 5: Full-File Deep Scan & Pattern Categorization
         self.console.print("\n[bold cyan]Step 5: Full-File Deep Scan & Pattern Categorization[/bold cyan]")
@@ -1674,7 +1696,15 @@ class AirGapWizard:
 
                                 if fe_code:
                                     self.console.print("[bold cyan]Aligning and stitching columns with local DeepAnalyze 8B model...[/bold cyan]")
-                                    stitch_target = final_df if isinstance(final_df, pl.DataFrame) else (pl.from_pandas(final_df) if hasattr(final_df, "to_pandas") else df)
+                                    if isinstance(final_df, pl.DataFrame):
+                                        stitch_target = final_df
+                                    elif isinstance(final_df, pd.DataFrame):
+                                        stitch_target = pl.from_pandas(final_df)
+                                    elif hasattr(final_df, "to_pandas"):
+                                        pdf_c = final_df.to_pandas()
+                                        stitch_target = pl.from_pandas(pdf_c) if isinstance(pdf_c, pd.DataFrame) else df
+                                    else:
+                                        stitch_target = df
                                     s_stitch, stitched_fe, diag = stitch_code_with_local_model(fe_code, stitch_target, df_var=df_name)
                                     self.console.print(Panel(Syntax(stitched_fe, "python", theme="monokai", line_numbers=True), title="Stitched Engineering Code (Polars/Pandas)", border_style="cyan"))
                                     fe_scope: Dict[str, Any] = {"df": final_df, df_name: final_df, "pl": pl}
@@ -1822,7 +1852,15 @@ class AirGapWizard:
                         policy=policy,
                         dataset_name=dataset_base_name
                     )
-                final_pl = final_df if isinstance(final_df, pl.DataFrame) else (pl.from_pandas(final_df) if hasattr(final_df, "to_pandas") else df)
+                if isinstance(final_df, pl.DataFrame):
+                    final_pl = final_df
+                elif isinstance(final_df, pd.DataFrame):
+                    final_pl = pl.from_pandas(final_df)
+                elif hasattr(final_df, "to_pandas"):
+                    pdf_c = final_df.to_pandas()
+                    final_pl = pl.from_pandas(pdf_c) if isinstance(pdf_c, pd.DataFrame) else df
+                else:
+                    final_pl = df
                 create_compliance_audit_certificate(
                     df,
                     final_pl,
