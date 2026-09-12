@@ -289,6 +289,32 @@ class TestWizardEnhancements(unittest.TestCase):
         self.assertEqual(mock_render_three_way.call_count, 2)
 
 
+    @patch("subprocess.Popen")
+    @patch("platform.system")
+    def test_copy_to_clipboard_security_and_fallbacks(self, mock_system, mock_popen):
+        from deepanalyze.wizard import copy_to_clipboard
+
+        # Test Windows clip execution (no shell=True)
+        mock_system.return_value = "Windows"
+        mock_process = unittest.mock.MagicMock()
+        mock_process.returncode = 0
+        mock_process.communicate.return_value = (b"", b"")
+        mock_popen.return_value = mock_process
+
+        res = copy_to_clipboard("test_text")
+        self.assertTrue(res)
+        mock_popen.assert_called_with(["clip"], stdin=-1)
+
+        # Test Linux clipboard tool execution with shlex.split
+        mock_system.return_value = "Linux"
+        mock_popen.reset_mock()
+        mock_popen.return_value = mock_process
+
+        res_linux = copy_to_clipboard("test_text")
+        self.assertTrue(res_linux)
+        mock_popen.assert_called_with(["xclip", "-selection", "clipboard"], stdin=-1)
+
+
 if __name__ == "__main__":
     unittest.main()
 
