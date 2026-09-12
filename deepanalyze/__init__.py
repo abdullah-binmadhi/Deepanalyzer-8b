@@ -85,7 +85,6 @@ from .wizard import (
     copy_to_clipboard,
     create_compliance_audit_certificate,
     generate_airgap_payload,
-    wizard,
 )
 from .cockpit_tui import launch_cockpit_tui, DeepAnalyzeCockpitApp
 from .benchmarks import (
