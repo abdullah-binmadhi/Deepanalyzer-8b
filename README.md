@@ -4,9 +4,11 @@
 
 ---
 
-DeepAnalyze is an open-source, deterministic **Data Leak Prevention (DLP) engine and compliance air-gap gateway** for Jupyter, IPython, and the command line. It empowers financial controllers, data teams, and enterprise analysts to leverage frontier cloud AI models (**ChatGPT, Claude, Cursor**) on **messy, unflattened ERP spreadsheets, invoices, accounting ledgers, and clinical records** without exposing confidential business data, personal identities, or proprietary figures.
-
-The engine enforces statutory anonymization in local volatile RAM, produces zero-risk synthetic payloads or full encrypted duplicate files for cloud LLMs, provides an interactive `.py` / `.ipynb` code execution airlock with automatic error retry, reconciles returned transformations locally with zero data leakage, and automatically generates ready-to-paste Excel Power Query companions for non-programmers.
+> **Welcome to DeepAnalyze!** 🛡️
+> Have you ever had a giant, messy spreadsheet full of confidential company secrets, employee salaries, or hospital records that you desperately needed to clean up? 
+> You probably wanted to ask a super-smart Cloud AI (like **ChatGPT, Claude, or Cursor**) to help you write code to fix it. But there is a huge catch: **if you upload real company files to cloud AI over the internet, you could break national privacy laws and leak sensitive data!**
+> 
+> **DeepAnalyze is your computer's personal privacy bodyguard and security airlock.** It runs 100% locally on your machine. It takes your messy spreadsheet, replaces all private names and numbers with safe "stunt double" placeholders in temporary computer memory (RAM), asks the AI to solve the puzzle, tests the AI's code with a digital metal detector, runs it safely behind closed doors, and puts all your real data back together with zero leaks. **Zero private records ever leave your laptop!**
 
 ---
 
@@ -14,7 +16,7 @@ The engine enforces statutory anonymization in local volatile RAM, produces zero
 
 When evaluated for its primary purpose—**an Enterprise Air-Gapped Data Sanitization, Cognitive Resonance Data Physics, ERP Normalization, and LLM Security Pipeline**—DeepAnalyze achieves an exceptional **9.6 / 10**, excelling in deterministic compliance, AST execution safety, and zero data leakage.
 
-The composite score of **8.8 / 10** reflects an honest, balanced engineering trade-off: DeepAnalyze deliberately prioritizes sub-millisecond execution, a minimal memory footprint (< 250 MB), and mathematical determinism over open-ended conversational chat loops or heavy multi-gigabyte transformer models.
+The composite score of **8.8 / 10** reflects an honest, balanced engineering trade-off: DeepAnalyze is intentionally engineered like a lightweight, precision sports car—using less than 250 MB of memory and running in under 15 milliseconds—rather than a giant, heavy chatbot that slows down your whole computer.
 
 ### Comparative Industry Benchmark
 
@@ -36,29 +38,31 @@ The composite score of **8.8 / 10** reflects an honest, balanced engineering tra
 
 ### Scorecard Breakdown
 
-| Category | Score | Engineering Assessment |
+| Category | Score | Real-World High School Breakdown |
 | :--- | :--- | :--- |
-| **Security & Air-Gap Architecture** | **9.8 / 10** | Zero plaintext leakage (0.00%), hard AST sandboxing, differential privacy, k-anonymity validation, and memory-only isolation. |
-| **Data Engineering & Cognitive Physics** | **9.6 / 10** | 18-Brain omni-cognitive mesh, brute-force algebraic discovery ($A \times B \approx C$), multi-sheet topology, and ragged ERP flattening. |
-| **Native Bilingual & Cultural Polymorphism** | **9.5 / 10** | Native Eastern Arabic numeral normalization (`٠-٩`), BiDi stripping, Hijri calendar detection, and 15% ZATCA / 5% GCC statutory VAT compliance. |
-| **Enterprise Exportability** | **9.5 / 10** | Triple-track delivery: autonomous `.md` engineering briefings, ready-to-run Excel Power Query M-code, and automated Pytest CI/CD regression suites. |
-| **Unstructured Open-Domain NER** | **7.8 / 10** | Fast contextual scanner captures names, titles, organizations, and addresses; deliberately avoids heavy transformer weights for sub-15ms speed. |
-| **Conversational Flexibility** | **6.8 / 10** | Deliberately structured 13-step wizard that prioritizes determinism, repeatability, and safety over unconstrained open-ended conversation. |
-| **Overall Composite Score** | **8.8 / 10** | **Unmatched for enterprise air-gapped data sanitization, ERP restructuring, and deterministic LLM compliance.** |
+| **Security & Air-Gap Architecture** | **9.8 / 10** | Zero data leaks (0.00%), digital metal detector for code (AST firewall), crowd-blending privacy (k-anonymity), and secret temporary RAM storage. |
+| **Data Engineering & Cognitive Physics** | **9.6 / 10** | 18 specialized detective brains, automatic math equation discovery ($A \times B \approx C$), multi-sheet map reading, and untangling messy spreadsheets. |
+| **Native Bilingual & Cultural Polymorphism** | **9.5 / 10** | Native support for Eastern Arabic numerals (`٠-٩`), bidirectional Arabic text, Hijri lunar dates, and 15% ZATCA / 5% GCC statutory VAT calculations. |
+| **Enterprise Exportability** | **9.5 / 10** | Triple-track results: clear written reports, ready-to-paste Excel Power Query scripts, and automated test suites that prove the data is clean. |
+| **Unstructured Open-Domain NER** | **7.8 / 10** | Lightning-fast scanner catches names, titles, clinics, and addresses in free text in under 15 milliseconds without heavy multi-gigabyte models. |
+| **Conversational Flexibility** | **6.8 / 10** | A structured, guided 13-step wizard that focuses on getting the job done safely and accurately every time, rather than endless small talk. |
+| **Overall Composite Score** | **8.8 / 10** | **The most secure, reliable way to clean messy business data using Cloud AI without risking your privacy.** |
 
 ---
 
 ## Table of Contents
 
-1. [The Unflattened ERP Challenge & The DeepAnalyze Solution](#1-the-unflattened-erp-challenge--the-deepanalyze-solution)
+1. [The Messy Spreadsheet Challenge & The DeepAnalyze Solution](#1-the-messy-spreadsheet-challenge--the-deepanalyze-solution)
 2. [Key Capabilities & Architecture](#2-key-capabilities--architecture)
    * [2.1 System Architecture & Zero-Leak Compliance Airlock](#21-system-architecture--zero-leak-compliance-airlock)
-   * [2.2 The 18-Brain Omni-Cognitive Architecture](#22-the-18-brain-omni-cognitive-architecture)
-   * [2.3 Core Architectural Pillars](#23-core-architectural-pillars)
+   * [2.2 Untangling Ragged Spreadsheets with Zero Data Loss](#22-untangling-ragged-spreadsheets-with-zero-data-loss)
+   * [2.3 Multi-Sheet Workbooks & Relational Maps](#23-multi-sheet-workbooks--relational-maps)
+   * [2.4 The 18-Brain Detective Team](#24-the-18-brain-detective-team)
+   * [2.5 Core Architectural Pillars (Explained with Metaphors)](#25-core-architectural-pillars-explained-with-metaphors)
 3. [Installation & Environment Setup](#3-installation--environment-setup)
 4. [Ways to Run DeepAnalyze](#4-ways-to-run-deepanalyze)
-   * [Method 1: Interactive Terminal CLI](#method-1-interactive-terminal-cli-zero-code)
-   * [Method 2: Jupyter / IPython Magics](#method-2-jupyter--ipython-interactive-magics)
+   * [Method 1: Interactive Terminal CLI (Zero-Code)](#method-1-interactive-terminal-cli-zero-code)
+   * [Method 2: Jupyter / IPython Interactive Magics](#method-2-jupyter--ipython-interactive-magics)
    * [Method 3: Local Offline Inference Server](#method-3-local-offline-inference-server)
    * [Method 4: Python Programmatic API](#method-4-python-programmatic-api)
 5. [The Complete Interactive Wizard Walkthrough](#5-the-complete-interactive-wizard-walkthrough)
@@ -70,36 +74,39 @@ The composite score of **8.8 / 10** reflects an honest, balanced engineering tra
 
 ---
 
-## 1. The Unflattened ERP Challenge & The DeepAnalyze Solution
+## 1. The Messy Spreadsheet Challenge & The DeepAnalyze Solution
 
-### The Real-World Operational Problem
-Enterprise accounting ledgers, ERP exports (SAP, Oracle, AS400, Microsoft Dynamics), and healthcare records are rarely clean relational tables. Instead, they are ragged, multi-row, unflattened reports featuring:
+### The Real-World Problem: The "Messy Backpack" Spreadsheet
+Real-world company accounting files, ERP exports (like SAP, Oracle, AS400, Microsoft Dynamics), and hospital records are almost never neat tables with clean columns.
 
-* Top report metadata headers (filters, print dates, company addresses across rows 1–18).
-* Buried document numbers and customer names nested inside row cells (e.g. `Column1: IV-11325`, `Column5: 300-P0220`).
-* Separator rows with missing/null values between transaction blocks.
-* Multiple sub-headers (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `Project`, `:`).
+Instead, they look like someone dumped an **unorganized accordion folder or messy backpack** onto the screen:
+* The first 15 rows are random titles, report dates, and company logos.
+* Customer names and invoice numbers are tucked away inside random data cells (like `Column1: INV-11325`, `Column5: Dr. Sarah`).
+* Lines of item descriptions wrap across multiple empty rows.
+* Random blank rows and dashes separate blocks of numbers.
 
-**Standard DLP and PII scanners fail completely on these files.** They inspect column headers looking for labels like `customer_name` or `national_id`. In an unflattened ERP export, customer names appear in data rows beneath `Column1` or `Column7`, so standard scanners miss them entirely. 
+**Why regular privacy tools fail completely:**
+Standard privacy scanners are like a librarian who only reads the label on the cover of a book. They look for clean column headers named `customer_name` or `national_id`. In a messy ERP export, customer names are buried on row 14 under a column just called `Column1`! Standard tools miss them completely.
 
 Organizations face an impossible dilemma:
+1. **The Legal Trap:** You cannot upload confidential spreadsheets to ChatGPT or Claude because national privacy laws (**Saudi PDPL**, **EU GDPR**, **US HIPAA**, **UK DPA**) impose huge fines if citizen or patient records cross borders.
+2. **The Time Sink:** You cannot easily fix the messy layout yourself without spending hours or days writing fragile code.
 
-1. **Legal Risk:** They cannot upload raw spreadsheets to cloud AI due to strict cross-border statutory penalties (**Saudi PDPL & NDMO**, **GDPR**, **HIPAA**, **UK DPA**, **CCPA**).
-2. **Technical Bottleneck:** They cannot easily flatten the complex ragged hierarchy without writing fragile, bespoke code.
+### The DeepAnalyze Solution: The Privacy Airlock
+DeepAnalyze acts as a **zero-code digital airlock** right on your laptop:
 
-### The DeepAnalyze Air-Gap Solution
-DeepAnalyze acts as a zero-code local security airlock between your confidential files and cloud AI:
-
-1. **Cell-Level Geometric Masking:** Evaluates the entire file cell-by-cell. Preserves structural layout keywords (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) so cloud models understand the hierarchical layout, while masking all client names to `XXXX`, invoice numbers to `XX-99999`, and figures to `9,999.00`.
-2. **Volatile In-Memory Isolation:** All raw data, bidirectional lookup tables, and token vaults live strictly in RAM. Zero unencrypted intermediate data touches disk.
-3. **AST Security Firewall:** Intercepts external AI-generated Python code before execution, blocking network sockets, OS system calls, and environment variable exfiltration.
-4. **Dual-Track Delivery:** Provides 1-click execution in RAM (generating `Clean_file.xlsx`), and generates ready-to-paste Excel Power Query M-code (`powerquery_script.m`) with a click-by-click UI guide (`powerquery_guide.md`) so accountants can run and refresh transformations directly inside Microsoft Excel.
+1. **Cell-by-Cell Stunt Doubles (Geometric Masking):** DeepAnalyze scans the entire file cell-by-cell. It preserves the structural skeleton (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) so the AI can understand the layout, but swaps all real customer names to `XXXX`, invoice numbers to `XX-99999`, and dollar amounts to `9,999.00`.
+2. **Secret Notepad in RAM (Volatile Isolation):** All real names and translation codes are kept strictly in your computer's temporary memory (RAM). Nothing sensitive is ever written to your hard drive, and everything is erased the second you close the app.
+3. **Digital Metal Detector (AST Security Firewall):** When the AI sends back Python code to clean the data, DeepAnalyze checks every line of code before running it. If the code tries to connect to the internet, steal passwords, or delete files, it is blocked immediately.
+4. **Two Easy Lanes (Dual-Track Delivery):** Coders get instant 1-click execution in RAM (`Clean_file.xlsx`). Excel lovers get ready-to-paste **Power Query M-code** so they can clean their spreadsheets right inside Microsoft Excel without writing any Python!
 
 ---
 
 ## 2. Key Capabilities & Architecture
 
 ### 2.1 System Architecture & Zero-Leak Compliance Airlock
+
+Here is how your spreadsheet travels through the DeepAnalyze airlock from messy raw input to squeaky-clean output:
 
 ```mermaid
 %%{init: {
@@ -122,20 +129,20 @@ DeepAnalyze acts as a zero-code local security airlock between your confidential
   }
 }}%%
 flowchart TD
-    subgraph INGESTION["1. INGESTION & DYNAMIC SNIFFING LAYER"]
-        RAW["Raw Spreadsheet / ERP Export<br/>(CSV, XLSX, TSV, Parquet)"]
-        SNIFF["Universal Dynamic Layout Sniffer<br/>(sniff_erp_layout: Archetype, Headers, Sequences, Ragged Rows)"]
-        TOPOL["Dynamic Multi-Sheet Topology Engine<br/>(Primary Keys, Candidate Joins, Cross-Sheet ER Diagram)"]
+    subgraph INGESTION["1. INGESTION & SPREADSHEET SNIFFER"]
+        RAW["Raw Messy Spreadsheet<br/>(CSV, XLSX, TSV, Parquet)"]
+        SNIFF["Universal Layout Sniffer<br/>(sniff_erp_layout: Finds headers, skips clutter, tracks columns)"]
+        TOPOL["Multi-Sheet Map Maker<br/>(Finds primary keys, links matching sheets together)"]
         RAW --> SNIFF
         SNIFF --> TOPOL
     end
 
-    subgraph PRIVACY["2. COMPLIANCE & VOLATILE RAM VAULT"]
+    subgraph PRIVACY["2. PRIVACY SHIELD & TEMPORARY RAM VAULT"]
         SCAN["Cell-Level Geometric Masker<br/>(Names -> XXXX, Amounts -> 9,999.00)"]
-        NER["Contextual Free-Text Scanner<br/>(Titles, Surnames, Clinics, Addresses)"]
-        KANON["k-Anonymity (k >= 5) &<br/>l-Diversity (l >= 2) Risk Engine"]
-        VAULT[("Session Token Vault<br/>(Volatile RAM Only - Zero Disk Touch)")]
-        DP["Laplace Differential Privacy Generator<br/>(epsilon = 1.0 Synthetic Schema Mocks)"]
+        NER["Contextual Name Scanner<br/>(Doctor titles, Arabic surnames, clinic names)"]
+        KANON["k-Anonymity (k >= 5) &<br/>l-Diversity (l >= 2) Crowd Blending"]
+        VAULT[("Secret Token Vault<br/>(Temporary RAM Only - Never Touches Disk)")]
+        DP["Laplace Differential Privacy Generator<br/>(Generates realistic fake sample numbers)"]
         
         TOPOL --> SCAN
         SCAN --> NER
@@ -144,11 +151,11 @@ flowchart TD
         VAULT --> DP
     end
 
-    subgraph PAYLOADS["3. DUAL-TRACK EXPORT OPTIONS"]
-        FILE["Encrypted Duplicate File<br/>([dataset]_anonymized.xlsx)"]
-        CLIP["Clipboard Zero-PII Payload<br/>(5-Row Laplace DP Mock + Directives)"]
-        PQ_M["Dynamic Power Query Companion<br/>(Calculated Offsets + Dynamic M-Script + UI Guide)"]
-        GUIDE["Guided Interactive Cleaning Prompt<br/>([dataset]_cleaning_prompt.md)"]
+    subgraph PAYLOADS["3. SAFE EXPORT OPTIONS"]
+        FILE["Encrypted Stunt-Double File<br/>([dataset]_anonymized.xlsx)"]
+        CLIP["Safe Clipboard Snapshot<br/>(5-row fake mini-example + AI instructions)"]
+        PQ_M["Power Query Companion for Excel<br/>(Calculated offsets + ready-to-paste M-code)"]
+        GUIDE["Step-by-Step AI Guide<br/>([dataset]_cleaning_prompt.md)"]
         
         VAULT --> FILE
         DP --> CLIP
@@ -156,9 +163,9 @@ flowchart TD
         SNIFF -.-> GUIDE
     end
 
-    subgraph REASONING["4. AI TRANSFORMATION REASONING"]
+    subgraph REASONING["4. AI WRITES THE CLEANING SCRIPT"]
         CLOUD["Frontier Cloud AI Models<br/>(ChatGPT, Claude, Cursor)"]
-        LOCAL["Offline Local Inference Server<br/>(8B GGUF Model via Metal/CUDA)"]
+        LOCAL["100% Offline Local Model<br/>(8B GGUF Model via Metal/CUDA)"]
         
         CLIP --> CLOUD
         FILE --> CLOUD
@@ -166,26 +173,26 @@ flowchart TD
         CLIP --> LOCAL
     end
 
-    subgraph AIRLOCK["5. EXECUTION AIRLOCK & AST SECURITY FIREWALL"]
-        FIREWALL{"AST Security Sandbox<br/>* Network Sockets: BLOCKED<br/>* os.environ & Paths: BLOCKED<br/>* Timing Delays: LIMITED"}
-        SCOPE["Dual-Engine Execution Scope<br/>(Pre-injected: pd, np, pl)"]
-        STATE_FLAT["Zero-Loss State Machine Flattener<br/>(erp_cleaner: Header Forward-Fill, Wrap Stitcher)"]
-        REPAIR["Interactive Error Self-Healing<br/>(Live Traceback & Retry Loop)"]
+    subgraph AIRLOCK["5. SECURITY AIRLOCK & CODE METAL DETECTOR"]
+        FIREWALL{"AST Security Firewall<br/>* Internet calls: BLOCKED<br/>* File deletion: BLOCKED<br/>* Password snooping: BLOCKED"}
+        SCOPE["Dual-Engine Execution Scope<br/>(Pre-loaded: pandas, numpy, polars)"]
+        STATE_FLAT["Zero-Loss State Machine Flattener<br/>(Fills headers down, stitches wrapped rows)"]
+        REPAIR["Automatic Error Doctor<br/>(Catches typos & helps you retry instantly)"]
         
         CLOUD --> FIREWALL
         LOCAL --> FIREWALL
-        FIREWALL -->|Approved Python Code| SCOPE
+        FIREWALL -->|Approved Safe Code| SCOPE
         FIREWALL -->|Deterministic Engine| STATE_FLAT
-        FIREWALL -.->|Exception| REPAIR
-        REPAIR -.->|Patched Code| FIREWALL
+        FIREWALL -.->|Code Exception| REPAIR
+        REPAIR -.->|Fixed Code| FIREWALL
     end
 
-    subgraph DELIVERY["6. VERIFICATION, DETOKENIZATION & DELIVERY"]
-        DETOK["RAM Detokenization Engine<br/>(Restores genuine values with 100% fidelity)"]
-        SCORE["Real-Time Quality & Diff Scorecard<br/>(Row diffs, null drops, 0-100 Clean Score)"]
-        EXPORT["Clean Dataset Deliverables<br/>(Clean_file.xlsx / Clean_file.csv)"]
-        TESTS["Automated Pytest Regression Suite<br/>(test_clean_pipeline.py for CI/CD)"]
-        AUDIT["Verifiable Compliance Certificate<br/>(compliance_audit.md)"]
+    subgraph DELIVERY["6. RESTORING REAL DATA & DELIVERABLES"]
+        DETOK["RAM Detokenization Engine<br/>(Puts all genuine names & numbers back)"]
+        SCORE["Quality Scorecard (0 to 100)<br/>(Counts duplicates removed & missing values fixed)"]
+        EXPORT["Clean Final Spreadsheet<br/>(Clean_file.xlsx / Clean_file.csv)"]
+        TESTS["Automated Pytest Test Suite<br/>(test_clean_pipeline.py to verify data rules)"]
+        AUDIT["Official Compliance Certificate<br/>(compliance_audit.md proves 100% legal privacy)"]
         
         SCOPE --> DETOK
         STATE_FLAT --> DETOK
@@ -204,47 +211,57 @@ flowchart TD
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                  DEEPANALYZE SYSTEM ARCHITECTURE                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
-  [ INGESTION & DYNAMIC SNIFFING ]
-  Raw Spreadsheet / Ragged ERP Dump (CSV, XLSX, Parquet)
+  [ 1. INGESTION & LAYOUT SNIFFING ]
+  Raw Messy Spreadsheet / Ragged ERP Export (CSV, XLSX, Parquet)
          │
          ▼
-  Universal Dynamic Sniffer (sniff_erp_layout: dynamic archetypes, header cutoffs, token entropy)
+  Universal Layout Sniffer (Finds where real table starts, ignores clutter rows)
          │
          ├────────────────────────────────────────────────────────┬────────────────────────────────────╮
          ▼                                                        ▼                                    ▼
-  [ COMPLIANCE & PRIVACY LAYER ]                           [ SECURE PAYLOADS ]               [ EXCEL POWER QUERY ]
-  * Statutory Policy Resolver (PDPL, GDPR, HIPAA)          * Clipboard Payload (DP Mock)     * Dynamic M-Script
-  * Cell-Level Masker (XXXX, 9,999.00)                     * Encrypted Duplicate XLSX        * Calculated Offsets
-  * Contextual Free-Text Scanner (Titles, Addresses)       * Guided Cleaning Prompt (.md)    * Step-by-Step Guide
-  * k-Anonymity (k >= 5) & l-Diversity (l >= 2)            * 0% Real Production Records      * 1-Click Refresh
-  * In-Memory Token Vault (Volatile RAM Only)                     │                                    │
+  [ 2. PRIVACY & RAM VAULT ]                               [ 3. SAFE PAYLOADS ]              [ 4. EXCEL POWER QUERY ]
+  * Statutory Rules (Saudi PDPL, GDPR, HIPAA)              * Clipboard Snapshot (DP Mock)    * Ready M-Script
+  * Cell-Level Masking (XXXX, 9,999.00)                    * Encrypted Stunt-Double XLSX     * Step-by-Step UI Guide
+  * Free-Text Scanner (Titles, Addresses)                  * Guided Prompt (.md)             * 1-Click Excel Refresh
+  * Crowd Blending (k >= 5, l >= 2)                        * 0% Real Private Records                │
+  * Secret Token Vault (Volatile RAM Only)                        │                                    │
          │                                                        ▼                                    │
-         ▼                                                 [ AI REASONING ]                            │
+         ▼                                                 [ 5. AI REASONING ]                         │
   [ VOLATILE RAM ISOLATION ]                               Cloud LLMs / Local 8B                       │
-  Surrogate token mappings held strictly in RAM            (ChatGPT, Claude, Cursor)                   │
+  Secret agent translation key held strictly in RAM        (ChatGPT, Claude, Cursor)                   │
          │                                                        │                                    │
-         │ (Passes untrusted Python code)                         ▼                                    │
-         │                                         [ AST SECURITY FIREWALL ]                           │
-         │                                         * Blocks sockets, env vars, paths                   │
-         │                                         * Intercepts timing & reflection                    │
-         │                                         * Auto-heals runtime exceptions                     │
+         │ (Passes untrusted AI code)                             ▼                                    │
+         │                                         [ 6. AST SECURITY FIREWALL ]                        │
+         │                                         * Digital metal detector blocks network             │
+         │                                         * Blocks file deletion and snooping                 │
+         │                                         * Friendly error self-healing                       │
          │                                                        │                                    │
          │                                                        ▼                                    │
-         ▼                                         [ ZERO-LOSS STATE MACHINE ]                         │
-  [ DETOKENIZATION & VERIFICATION ] <───────────── [ & SAFE EXECUTION AIRLOCK ]                        │
-  * Reconciles genuine figures in local RAM        * Pre-injects pd, np, pl                            │
-  * 100.00% character fidelity restored            * Header forward-fill + wrap stitcher               │
+         ▼                                         [ 7. ZERO-LOSS STATE MACHINE ]                      │
+  [ 8. RESTORING REAL DATA ] <──────────────────── [ & SAFE EXECUTION AIRLOCK ]                        │
+  * Puts genuine figures back in local RAM         * Pre-loaded with pandas, numpy, polars             │
+  * 100.00% exact character fidelity               * Fills headers down, stitches wrapped rows         │
          │                                                                                             │
          ▼                                                                                             │
-  [ ENTERPRISE DELIVERABLES ] <────────────────────────────────────────────────────────────────────────╯
-  * Clean Dataset: Clean_file.xlsx / Clean_file.csv (Zero Row Truncation)
-  * Quality Scorecard: Real-time row diffs, null drops, 0-100 purity score
-  * Automated Regression Suite: test_clean_pipeline.py (Pytest CI/CD)
-  * Compliance Audit: compliance_audit.md (Statutory Methodology Attestation)
+  [ 9. FINAL DELIVERABLES ] <──────────────────────────────────────────────────────────────────────────╯
+  * Clean Dataset: Clean_file.xlsx / Clean_file.csv (Zero Rows Lost)
+  * Quality Scorecard: 0-100 purity score, null drops, duplicate counts
+  * Automated Test Suite: test_clean_pipeline.py (Pytest verification)
+  * Compliance Audit: compliance_audit.md (Official proof of zero leaks)
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-### 2.2 Universal Dynamic ERP Deconstruction & Zero-Loss State Machine
+---
+
+### 2.2 Untangling Ragged Spreadsheets with Zero Data Loss
+
+When you open a messy ERP accounting report, the invoice number might only be written once at the top of a group of 10 items, while item descriptions wrap across 3 different lines. 
+
+DeepAnalyze uses a **Zero-Loss State Machine (`clean_erp_report`)** that acts like a smart assistant reading a ledger line-by-line:
+1. When it spots an invoice header (`Invoice # 1001, Date: Jan 5`), it remembers it.
+2. It fills that invoice header down next to every single item purchased under that invoice.
+3. If an item description spilled onto the next row, it stitches the text back together.
+4. It throws away repeated page headers and summary dashed lines without losing a single real purchase!
 
 ```mermaid
 %%{init: {
@@ -267,19 +284,19 @@ flowchart TD
   }
 }}%%
 flowchart TD
-    subgraph INPUT["RAW UNSTRUCTURED ERP EXPORT"]
-        M_TOP["Sparse Header Rows<br/>(Report title, date filters, blank offsets)"]
-        M_DOC["Interleaved Document Headers<br/>(Doc No, Doc Date, Customer Code, Name, Grand Total)"]
-        M_LINE["Itemized Transaction Lines<br/>(Sequence, GL Code, Description, Qty, UOM, Amount)"]
-        M_WRAP["Multi-Line Wrapped Text Rows<br/>(Ragged overflow notes, item descriptions)"]
-        M_SUB["Separator Lines & Subtotals<br/>(Dashes, Page Totals, Summary Grand Totals)"]
+    subgraph INPUT["MESSY RAW ERP EXPORT"]
+        M_TOP["Top Clutter Rows<br/>(Report title, date filters, blank lines)"]
+        M_DOC["Document Header Lines<br/>(Doc No, Date, Customer Code, Customer Name, Grand Total)"]
+        M_LINE["Itemized Purchase Lines<br/>(Item sequence, Part Code, Description, Qty, Price, Amount)"]
+        M_WRAP["Multi-Line Wrapped Text Rows<br/>(Spilled description notes)"]
+        M_SUB["Separator Lines & Subtotals<br/>(Dashes, Page Totals, Summary Lines)"]
         M_TOP --> M_DOC --> M_LINE --> M_WRAP --> M_SUB
     end
 
-    subgraph SNIFFER["PHASE 1: DYNAMIC LAYOUT SNIFFER (sniff_erp_layout)"]
-        DET_ARCH["Archetype Classification<br/>(SPARSE_DOCUMENT_HEADER vs REPEATING_BLOCK vs RAGGED_LEDGER)"]
-        DET_KEYS["Column Role Sniffing via Entropy<br/>* Primary Key / Doc Regex (Dynamic Prefix Discovery)<br/>* Numeric Sequence Column<br/>* Date & Customer Identity Columns<br/>* Invoice Total Value Column"]
-        DET_OFF["Dynamic Header Offset Calculation<br/>(Locates true transaction grid without hardcoded row skips)"]
+    subgraph SNIFFER["PHASE 1: SMART LAYOUT SNIFFER (sniff_erp_layout)"]
+        DET_ARCH["Identify Report Style<br/>(Sparse Document Header vs Repeating Block vs Ragged Ledger)"]
+        DET_KEYS["Column Role Detective<br/>* Document Number Pattern<br/>* Sequence Numbers (1, 2, 3...)<br/>* Dates and Customer Names<br/>* Invoice Totals"]
+        DET_OFF["Find Real Table Start<br/>(Calculates how many clutter rows to skip automatically)"]
         
         INPUT ==> DET_ARCH
         DET_ARCH --> DET_KEYS
@@ -287,10 +304,10 @@ flowchart TD
     end
 
     subgraph FLATTENER["PHASE 2: ZERO-LOSS STATE MACHINE (clean_erp_report)"]
-        ST_STATE["State Machine Tracking<br/>curr_master: {doc_no, doc_date, cust_code, cust_name, invoice_total}"]
-        ST_FILL["Context Forward-Fill<br/>Binds master document attributes to subsequent item rows"]
-        ST_WRAP["Ragged Wrap Stitcher<br/>Concatenates multi-line description rows into parent item"]
-        ST_EVICT["Dynamic Boundary Eviction<br/>Eliminates repeated page headers & summary lines without row loss"]
+        ST_STATE["Memory State Tracker<br/>Remembers: {doc_no, doc_date, cust_code, cust_name, invoice_total}"]
+        ST_FILL["Header Forward-Fill<br/>Binds invoice header info to every item row underneath it"]
+        ST_WRAP["Wrapped Text Stitcher<br/>Glues spilled description lines back to their parent item"]
+        ST_EVICT["Clean Up Clutter<br/>Removes page headers and summary dashes without losing real data"]
         
         DET_OFF ==> ST_STATE
         ST_STATE --> ST_FILL
@@ -298,9 +315,9 @@ flowchart TD
         ST_WRAP --> ST_EVICT
     end
 
-    subgraph DUAL_TRACK["PHASE 3: DUAL-TRACK ENTERPRISE EXPORT"]
-        OUT_PY["Track A: Python / Polars Execution<br/>* Clean In-Memory DataFrame<br/>* Preserves 100% genuine line items<br/>* Zero data loss from row 1 to EOF"]
-        OUT_PQ["Track B: Dynamic Power Query M-Code<br/>* Dynamic Table.Skip(offset)<br/>* Dynamic Column Type Projections<br/>* 1-Click Excel Refresh"]
+    subgraph DUAL_TRACK["PHASE 3: READY-TO-USE EXPORTS"]
+        OUT_PY["Track A: Python / Polars Cleaner<br/>* Clean in-memory table<br/>* 100% of purchase rows preserved<br/>* Zero data loss from top to bottom"]
+        OUT_PQ["Track B: Excel Power Query M-Code<br/>* Dynamic Table.Skip(offset)<br/>* Clean typed columns<br/>* 1-Click Refresh in Excel"]
         
         ST_EVICT ==> OUT_PY
         ST_EVICT ==> OUT_PQ
@@ -311,7 +328,13 @@ flowchart TD
     class SNIFFER,FLATTENER core;
 ```
 
-### 2.3 Dynamic Multi-Sheet Workbook Topology & Entity Relationship (ER) Engine
+---
+
+### 2.3 Multi-Sheet Workbooks & Relational Maps
+
+If your Excel file has 3 or 4 sheets (for example: `Orders`, `Customers`, and `Products`), you don't want to clean them in isolation. You need to know how they link together!
+
+DeepAnalyze automatically reads all sheets, detects which column is the unique ID (Primary Key), and figures out which columns connect the sheets together (Foreign Keys), drawing a complete relational map for you:
 
 ```mermaid
 %%{init: {
@@ -339,35 +362,40 @@ erDiagram
     WORKBOOK ||--|{ SHEET_C : contains
 
     SHEET_A {
-        string Primary_Key PK "100% Unique / Zero Nulls"
-        date Transaction_Date "ISO Normalized"
-        string Foreign_Key_B FK "References SHEET_B"
-        float Total_Amount "Invariant Checked"
+        string Primary_Key PK "Unique Invoice Number"
+        date Transaction_Date "Order Date"
+        string Foreign_Key_B FK "Links to Customer in SHEET_B"
+        float Total_Amount "Total Invoice Money"
     }
 
     SHEET_B {
-        string Entity_ID PK "Master Dimension"
-        string Entity_Name "Masked / Detokenized"
-        string Entity_Category "Low Entropy Dimension"
+        string Entity_ID PK "Customer Code"
+        string Entity_Name "Disguised Customer Name"
+        string Entity_Category "Customer Region or Category"
     }
 
     SHEET_C {
-        string Child_ID PK "Detail Ledger"
-        string Foreign_Key_A FK "References SHEET_A (1:N)"
-        float Line_Item_Amount "Reconciles to Total_Amount"
+        string Child_ID PK "Line Item Number"
+        string Foreign_Key_A FK "Links to Invoice in SHEET_A"
+        float Line_Item_Amount "Matches Line Item Total"
     }
 
-    SHEET_A ||--o{ SHEET_C : "1 : N Parent-Child"
-    SHEET_B ||--o{ SHEET_A : "1 : N Lookup Dimension"
+    SHEET_A ||--o{ SHEET_C : "1 Invoice has Many Items"
+    SHEET_B ||--o{ SHEET_A : "1 Customer has Many Invoices"
 ```
 
-### 2.4 The 18-Brain Omni-Cognitive Architecture
+---
 
-DeepAnalyze structures its cognitive analysis into two cooperating hemispheres connected through a central Stigmergic Bayesian Blackboard:
+### 2.4 The 18-Brain Detective Team
 
-* **Left Hemisphere (Brains 1 to 14)**: Cold data physics, matrix topology, algebraic invariants ($A \times B \approx C$), FFT chronometrics, spatial geodesics, process automata, and statutory compliance arbitration.
-* **Right Hemisphere (Brains 15 to 18)**: Emotional intelligence (EQ), cognitive friction scoring, non-accusatory Socratic inquiries, fuzzy behavioral intent recognition, and the humble startup colleague persona wrapper.
-* **Closed-Loop Ouroboros Synapse**: Ingests runtime exception tracebacks from the AST sandbox directly back into the Blackboard, generating instant, surgical repair prompts.
+Inside DeepAnalyze lives an ensemble of **18 specialized detective agents** that work together to inspect your spreadsheet. Think of them as a high-powered student council divided into two specialized teams:
+
+* **The Left Hemisphere (Brains 1 to 14): The Math & Science Squad**  
+  These brains calculate the cold, hard data facts: they count rows, measure randomness (entropy), verify math formulas (like $Quantity \times Price = Total$), check calendar dates, and enforce national privacy laws.
+* **The Right Hemisphere (Brains 15 to 18): The Communication & People Squad**  
+  These brains make sure the instructions are easy to read: they ask thoughtful questions ("What if we group these ages?"), strip out annoying technical jargon, and write clean prompts like a helpful, humble teammate.
+* **The Ouroboros Synapse: The Automatic Medic**  
+  If the AI writes code that crashes with an error, this brain immediately diagnoses the bug, extracts the exact line that broke, and writes an instant repair patch so you don't have to restart!
 
 ```mermaid
 %%{init: {
@@ -390,31 +418,31 @@ DeepAnalyze structures its cognitive analysis into two cooperating hemispheres c
   }
 }}%%
 flowchart LR
-    subgraph LEFT["LEFT HEMISPHERE: Data Physics & Invariants (Brains 1-14)"]
+    subgraph LEFT["LEFT TEAM: Math, Physics & Privacy Rules (Brains 1-14)"]
         direction TB
-        B1["Brain 1: Topological Cartographer<br/>(Entropy, Header Cutoff, Subtotals)"]
-        B2["Brain 2: Morphological Typologist<br/>(Taxonomy, Arabic Numerals, Regional IDs)"]
-        B3["Brain 3: Forensic Pathologist<br/>(Contamination, Skewness, Outliers)"]
-        B4["Brain 4: Relational Cryptographer<br/>(Candidate Keys, Functional Hierarchies)"]
-        B5["Brain 5: Mathematical Physicist<br/>(A x B ≈ C, 15% ZATCA / 5% GCC VAT)"]
-        B6["Brain 6: Autonomous Feature Alchemist<br/>(Temporal Cycles, Normalization)"]
-        B8["Brain 8: Spatial Cartographer<br/>(Lat/Lon Bounding Box, EPSG, H3)"]
-        B9["Brain 9: Chronometric Signal Processor<br/>(FFT Periodicity, Interval Regularity)"]
-        B10["Brain 10: Process & State Modeler<br/>(Event Logs, State Machines, Matrices)"]
-        B11["Brain 11: Tensor Semanticist<br/>(Embedding Blocks, Manifold Preservation)"]
-        B12["Brain 12: Graph Topologist<br/>(Entity Linkages, PageRank Centrality)"]
-        B13["Brain 13: Statutory Privacy Arbiter<br/>(PDPL, GDPR, Spatial Anonymization)"]
-        B14["Brain 14: Cryptographic Sentinel<br/>(Surrogate Token Masking, NLP Defense)"]
-        B7["Brain 7: Executive Data Physicist<br/>(Mathematical Monologue Engine)"]
+        B1["Brain 1: The Cartographer<br/>(Finds where data lives & skips clutter)"]
+        B2["Brain 2: The Typist<br/>(Recognizes dates, Arabic numbers, currencies)"]
+        B3["Brain 3: The Health Inspector<br/>(Spots corrupted cells, weird outliers)"]
+        B4["Brain 4: The Key Finder<br/>(Identifies unique IDs & connections)"]
+        B5["Brain 5: The Math Teacher<br/>(Discovers equations: Qty x Price ≈ Total)"]
+        B6["Brain 6: The Alchemist<br/>(Creates clean new columns automatically)"]
+        B8["Brain 8: The GPS Navigator<br/>(Finds latitude, longitude & addresses)"]
+        B9["Brain 9: The Clockwatcher<br/>(Detects daily/weekly recurring patterns)"]
+        B10["Brain 10: The Process Modeler<br/>(Tracks step-by-step state changes)"]
+        B11["Brain 11: The Meaning Detective<br/>(Groups similar words together)"]
+        B12["Brain 12: The Network Mapper<br/>(Draws connection graphs between items)"]
+        B13["Brain 13: The Privacy Judge<br/>(Enforces Saudi PDPL, GDPR, HIPAA)"]
+        B14["Brain 14: The Disguise Master<br/>(Replaces secrets with stunt-double tokens)"]
+        B7["Brain 7: The Chief Scientist<br/>(Combines all math findings)"]
     end
 
-    subgraph SYNAPSE["CENTRAL SYNAPTIC CORE: Stigmergic Blackboard"]
+    subgraph SYNAPSE["CENTRAL WHITEBOARD: Where the Team Shares Notes"]
         direction TB
-        BB_BELIEF[("Continuous Bayesian Beliefs<br/>P_new(A) = P(A) + C - (P(A) x C)")]
-        BB_MONO["Shared Internal Monologue Bus"]
-        BB_ANOM["Forensic Anomaly & Skew Registry"]
-        BB_INVAR["Algebraic Invariant Bus<br/>(Reconciliation Rules)"]
-        BB_FRICT["Cognitive Friction Evaluator<br/>(F = Anomalies + Ragged Offsets)"]
+        BB_BELIEF[("Team Consensus<br/>(Combines clues into high-confidence facts)")]
+        BB_MONO["Internal Discussion Bus"]
+        BB_ANOM["List of Spotted Spreadsheet Errors"]
+        BB_INVAR["List of Discovered Math Rules"]
+        BB_FRICT["Clutter & Difficulty Score"]
         
         BB_BELIEF <--> BB_MONO
         BB_MONO <--> BB_ANOM
@@ -422,33 +450,33 @@ flowchart LR
         BB_INVAR <--> BB_FRICT
     end
 
-    subgraph RIGHT["RIGHT HEMISPHERE: Emotional Intelligence & Synthesis (Brains 15-18)"]
+    subgraph RIGHT["RIGHT TEAM: Communication & Teamwork (Brains 15-18)"]
         direction TB
-        B15["Brain 15: Socratic Inquirer<br/>(Curious Collaborative Questions)"]
-        B16["Brain 16: Empathetic Translator<br/>(Friction Scorer & Anti-Jargon Directives)"]
-        B17["Brain 17: Intuitive Detective<br/>(Fuzzy Behavioral Intent: Urgent / Review)"]
-        B18["Brain 18: Narrative Weaver<br/>(Humble Startup Colleague Persona)"]
+        B15["Brain 15: Socratic Inquirer<br/>(Asks smart 'What If?' questions)"]
+        B16["Brain 16: Plain-English Translator<br/>(Removes confusing technical jargon)"]
+        B17["Brain 17: Intuitive Detective<br/>(Understands what the user wants to accomplish)"]
+        B18["Brain 18: Helpful Colleague<br/>(Writes friendly, humble instructions)"]
     end
 
-    subgraph OUT["EXECUTIVE BLUEPRINT"]
-        PROMPT["Master Engineering & Persona Prompt<br/>(Bilingual, Deterministic, Zero Ego)"]
+    subgraph OUT["MASTER BLUEPRINT"]
+        PROMPT["Clear Master Prompt for Cloud AI<br/>(Zero jargon, zero leaks, 100% accurate)"]
     end
 
-    subgraph OUROBOROS["OUROBOROS AUTONOMOUS REPAIR LOOP"]
-        CRASH["AST Sandbox Exception Traceback"]
-        AUTOPSY["Surgical Crash Autopsy<br/>(Entity & Root Cause Extraction)"]
-        PATCH["Targeted Micro-Repair Prompt"]
+    subgraph OUROBOROS["OUROBOROS AUTOMATIC MEDIC"]
+        CRASH["Code Exception Error"]
+        AUTOPSY["Instant Error Diagnosis"]
+        PATCH["Surgical Bugfix Patch"]
         CRASH --> AUTOPSY --> PATCH
     end
 
-    %% Synaptic Interconnections
-    B1 & B2 & B3 & B4 & B5 & B6 & B8 & B9 & B10 & B11 & B12 & B13 & B14 & B7 ==>|Evidence Vectors| SYNAPSE
-    SYNAPSE ==>|Cognitive State & Friction| B15 & B16 & B17 & B18
-    B15 & B16 & B17 -->|Behavioral Directives| B18
-    B18 ==>|Synthesizes Master Prompt| PROMPT
+    %% Connections
+    B1 & B2 & B3 & B4 & B5 & B6 & B8 & B9 & B10 & B11 & B12 & B13 & B14 & B7 ==>|Evidence Clues| SYNAPSE
+    SYNAPSE ==>|Findings & Clutter Score| B15 & B16 & B17 & B18
+    B15 & B16 & B17 -->|Communication Rules| B18
+    B18 ==>|Generates Clean Prompt| PROMPT
     
-    %% Closed Loop Feedback
-    PATCH ==>|Injects Repair Directives| SYNAPSE
+    %% Feedback
+    PATCH ==>|Sends Fix to Team| SYNAPSE
 
     classDef default fill:#ffffff,stroke:#94a3b8,stroke-width:1px,color:#0f172a;
     classDef core fill:#f1f5f9,stroke:#334155,stroke-width:1.5px,color:#0f172a;
@@ -457,150 +485,124 @@ flowchart LR
     class PROMPT,PATCH,CRASH,AUTOPSY accent;
 ```
 
-```text
-  LEFT HEMISPHERE: Data Physics                     SYNAPTIC CORE                      RIGHT HEMISPHERE: Emotional Intelligence
-╭─────────────────────────────────────────╮    ╭───────────────────────────────╮    ╭─────────────────────────────────────────╮
-│ [B1]  Topological Cartographer (Entropy)│───▶│                               │◀───│ [B15] Socratic Inquirer ("What If?")    │
-│ [B2]  Morphological Typologist (Taxonomy│───▶│      STIGMERGIC BLACKBOARD    │◀───│ [B16] Empathetic Translator (Anti-Jargon)│
-│ [B3]  Forensic Pathologist (Contaminants│───▶│                               │◀───│ [B17] Intuitive Detective (Fuzzy Intent) │
-│ [B4]  Relational Cryptographer (Keys)   │───▶│  * Bayesian Belief Updating   │    ╰────────────────────┬────────────────────╯
-│ [B5]  Mathematical Physicist (A*B≈C)    │───▶│    P(A) = P(A) + C - (P(A)*C) │                         │
-│ [B6]  Autonomous Feature Alchemist      │───▶│  * Anomaly & Invariant Bus    │                         ▼
-│ [B8]  Spatial Cartographer (GPS/CRS/H3) │───▶│  * Cognitive Friction Score   │    ╭─────────────────────────────────────────╮
-│ [B9]  Chronometric Processor (FFT)      │───▶│  * Shared Internal Monologue  │───▶│ [B18] Narrative Weaver                  │
-│ [B10] Process & State Modeler (Automata)│───▶│                               │    │       (Startup Colleague Persona)       │
-│ [B11] Tensor Semanticist (Manifolds)    │───▶╰───────────────▲───────────────╯    ╰────────────────────┬────────────────────╯
-│ [B12] Graph Topologist (PageRank/Edges) │───▶                │                                         │
-│ [B13] Statutory Arbiter (PDPL/GDPR)     │───▶                │                                         ▼
-│ [B14] Cryptographic Sentinel (Masking)  │───▶                │                        Master Data Engineering Prompt
-│ [B7]  Executive Physics Engine          │───▶                │                 
-╰─────────────────────────────────────────╯                    │                 
-                       ▲                                       │                 
-                       │         OUROBOROS AUTONOMOUS LOOP     │                 
-                       ╰───────────────────────────────────────┴── Sandbox Traceback Exception
-```
+---
 
-### 2.3 Core Architectural Pillars
+### 2.5 Core Architectural Pillars (Explained with Metaphors)
 
-* **Cell-Level Geometric Masking:** DeepAnalyze evaluates every row and cell rather than checking only headers. It preserves report structure keywords (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) while masking customer names to `XXXX`, invoice numbers to `XX-99999`, and figures to `9,999.00`.
-* **Zero-Leak In-Memory Vault:** Bidirectional token tables exist strictly in volatile RAM. Sensitive data never touches disk or swap files, and all surrogates are purged when the session closes.
-* **Re-Identification Defense (k-Anonymity & l-Diversity):** Evaluates combinations of quasi-identifiers (Age, Gender, Postal Code, Department) to enforce $k \ge 5$ equivalence classes and $l \ge 2$ diversity on sensitive attributes.
-* **Contextual Free-Text NER:** Masks professional titles, relational prefixes, multi-part Arabic surnames (`Al-`, `Bin`), organizations, and street addresses inside narrative notes without loading multi-gigabyte models.
-* **Dual Output Modes (File vs. Clipboard):**
-  * *Encrypted Duplicate File (`[name]_anonymized.xlsx`):* Preserves 100% of sheet coordinates across 16+ columns with surrogate tokens, ready for file upload to Claude or ChatGPT.
-  * *Clipboard Payload (Differential Privacy Mock):* A 5-row schema mock with calibrated Laplace noise ($\epsilon = 1.0$), ensuring zero verbatim records enter chat windows.
-* **AST Security Firewall:** Parses untrusted Python syntax trees before execution, blocking sockets (`requests`, `socket`, `urllib`), environment variables (`os.environ`), sensitive paths (`/etc/`, `~/.ssh/`), and timing side-channels (`time.sleep` > 1.0s).
-* **Dual-Engine Scope:** Pre-injects `pandas as pd`, `numpy as np`, and `polars as pl` into scope, catching syntax or runtime errors with live self-healing retry prompts.
-* **11-Test Privacy Benchmark & Egress Safety Gate:** Runs a real-time Tier 1 pre-flight check (< 150 ms) covering canary leaks, regex direct matches, $k$-anonymity, $l$-diversity, NNDR, and NMI before prompting for encrypted file download, backed by a Tier 2 deep audit suite ($t$-closeness, linkability, MIA, AST firewall, and 100% round-trip reconciliation) automatically compiled into `compliance_audit.md`.
-* **Excel Power Query Dual-Track:** Generates validated Power Query M-code (`powerquery_script.m`) and an illustrated click-by-click guide (`powerquery_guide.md`) so finance teams can refresh transformations natively inside Microsoft Excel.
+* **1. Cell-Level Stunt Doubles (Geometric Masking):**  
+  * *Metaphor:* A store mannequin. If a fashion designer wants to show how to sew a jacket, they use a plastic mannequin that has the exact height and shape of a human without being a real person. DeepAnalyze creates a mannequin version of your spreadsheet with fake names like `XXXX` and fake numbers like `9,999.00`.
+* **2. The Secret Notepad in RAM (Volatile Vault):**  
+  * *Metaphor:* Secret agent code names. The host hands everyone a badge (`Agent Falcon`). The host keeps the real names on a notepad in their pocket. When the party is over, the notepad is shredded. No names are ever saved to disk.
+* **3. Blending Into the Crowd ($k$-Anonymity & $l$-Diversity):**  
+  * *Metaphor:* The school cafeteria in costume. If you are the only student wearing a dinosaur costume, everyone knows it's you ($k=1$). But if at least 5 students in every room wear the exact same costume, you blend in completely ($k \ge 5$).
+* **4. Realistic Fake Numbers (Differential Privacy):**  
+  * *Metaphor:* An anonymous survey with coin flips. You add calibrated statistical background noise so the AI sees realistic prices and spreads without seeing a single real customer's exact bank balance.
+* **5. The Digital Metal Detector (AST Security Firewall):**  
+  * *Metaphor:* Airport security. Before any code written by the AI is allowed to run, our security scanner inspects every line. If it sees attempts to reach the internet, delete files, or read passwords, it is stopped cold.
+* **6. Two Convenient Lanes (Dual-Track Delivery):**  
+  * *Metaphor:* Grocery store checkout. Python coders can run their script with 1 click in RAM; Excel users get a ready-to-paste Power Query button for Microsoft Excel.
 
 ---
 
 ## 3. Installation & Environment Setup
 
+Setting up DeepAnalyze is as easy as downloading a video game mod:
+
 ### Prerequisites
 
-* **Operating System:** macOS (Apple Silicon Metal supported), Linux (Ubuntu, Debian, RHEL), or Windows 10/11.
+* **Computer:** Mac (M1, M2, M3, M4 Apple Silicon supported!), Linux, or Windows 10/11.
 * **Python:** Python 3.9, 3.10, 3.11, or 3.12.
-* **Package Manager:** `pip` or `conda`.
+* **Installer:** `pip` or `conda`.
 
-### Installation Steps
+### Quick Setup Steps
 
 ```bash
-# 1. Clone the repository
+# 1. Download the project code
 git clone https://github.com/your-org/deepanalyze.git
 cd deepanalyze
 
-# 2. Create and activate a virtual environment (recommended)
+# 2. Create and turn on a private virtual environment
 python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 
-# 3. Install in editable mode with all dependencies
+# 3. Install DeepAnalyze and its tools
 pip install -e .
 
-# 4. Verify installation by running test suite
+# 4. Run the automated test suite to prove everything works
 pytest
 ```
-
-### Dependencies Installed Automatically
-
-* `polars`, `pyarrow`: Blazing-fast memory-efficient columnar data engine.
-* `pandas`, `numpy`, `openpyxl`: Excel ingestion and cloud AI Pandas/NumPy execution compatibility.
-* `rich`: Beautiful interactive terminal tables, syntax highlighting, and progress panels.
-* `ipython`: Jupyter notebook magics and interactive shell integration.
-* `pyperclip`: Cross-platform clipboard integration for instant payload delivery.
-* `orjson`, `httpx`: High-throughput serialization and local inference socket communication.
 
 ---
 
 ## 4. Ways to Run DeepAnalyze
 
-DeepAnalyze provides 4 streamlined modes tailored for business analysts, notebook researchers, and pipeline engineers:
+DeepAnalyze gives you 4 flexible ways to run depending on your favorite workflow:
 
 ### Method 1: Interactive Terminal CLI (Zero-Code)
-Launch the wizard directly in your terminal:
+The easiest way for anyone who doesn't want to write code. Just open your terminal and type:
+
 ```bash
-# Option A: Start wizard with file prompt
+# Option A: Start the wizard and type or drag-and-drop your file
 deepanalyze wizard
 
 # Option B: Pass your spreadsheet directly
 deepanalyze wizard "/path/to/invoice_ledger.xlsx"
 ```
 
-* **Workflow**: Guides you through 13 automated steps, masks sensitive data in RAM, and copies the safe LLM prompt to your clipboard.
+* **How it feels:** A friendly, numbered step-by-step game setup wizard. It walks you through picking your privacy rules, disguises your data in RAM, and copies the safe AI prompt to your clipboard!
 
 ---
 
 ### Method 2: Jupyter / IPython Interactive Magics
-Analyze DataFrames inside Jupyter Notebook, JupyterLab, or VS Code:
+If you work inside Jupyter Notebooks, JupyterLab, or VS Code:
 
 ```python
-# Cell 1: Register DeepAnalyze extension
+# Cell 1: Load the DeepAnalyze magic command
 %load_ext deepanalyze
 
-# Cell 2: Launch the interactive zero-code wizard
+# Cell 2: Launch the interactive zero-code wizard right in your notebook
 %deepanalyze
 
-# Cell 3: Launch the full-screen Interactive Cockpit TUI (Textual Dashboard)
+# Cell 3: Launch the full-screen terminal dashboard
 %deepanalyze_dash --target df
 ```
 
-#### Fast Directives (Direct Execution):
+#### Fast Directives (Instant Shortcuts):
 ```python
-# 1-Line Air-Gap Copy: Tokenizes df and copies prompt directly to clipboard
+# 1-Line Air-Gap Copy: Disguise your table and copy prompt to clipboard
 %deepanalyze --airgap --origin "Saudi Arabia" --jurisdiction "PDPL" --target df "Clean and unpivot"
 
-# Safe Execution Airlock: Audits syntax via AST Firewall and executes in RAM
+# Safe Execution Airlock: Run AI-generated code behind the AST Firewall
 %%deepanalyze --run --target df
 df['total_amount'] = df['quantity'] * df['unit_price']
 
-# Autonomous Ouroboros Self-Repair: Diagnose last crash & auto-fix with local 8B model (or custom prompt)
-%deepanalyze --fix "handle outliers in total_amount"
-
-# Instant Rollback: Undo transformations up to 5 history snapshots
+# Time Machine Undo: Accidentally mess up your table? Step backwards up to 5 times!
 %deepanalyze --undo --target df
 
-# Audit Export: Generate formal statutory compliance certificate
+# Self-Repair Doctor: Diagnose an error and auto-fix code
+%deepanalyze --fix "handle outliers in total_amount"
+
+# Compliance Certificate: Export an official audit report
 %deepanalyze --audit --out compliance_audit.md
 ```
 
 ---
 
 ### Method 3: Local Offline Inference Server
-Run 100% offline using a local 8B GGUF model without sending data outside your machine:
+Want to clean data while sitting on an airplane with Wi-Fi turned off? You can run DeepAnalyze with a local 8B AI model completely offline:
 
 ```bash
-# Auto-detects Apple Silicon Metal or NVIDIA CUDA
+# Automatically detects your Mac Metal or NVIDIA graphics card
 ./start_server.sh
 
-# Or launch directly with custom model path and port
+# Or start directly with your custom model file
 deepanalyze server start -m ./models/deepanalyze-8b-q4_k_m.gguf -p 8080
 ```
 
 ---
 
 ### Method 4: Python Programmatic API
-Integrate air-gap sanitization directly into your Python scripts and ETL pipelines:
+For software engineers who want to plug DeepAnalyze into their automated data pipelines:
 
 ```python
 import pandas as pd
@@ -608,19 +610,19 @@ from deepanalyze.vault import tokenize_dataframe, detokenize_dataframe
 from deepanalyze.policies import resolve_policy
 from deepanalyze.firewall import audit_code, execute_code_safely
 
-# 1. Load sensitive data
+# 1. Load your sensitive spreadsheet
 df = pd.read_excel("payroll_ledger.xlsx")
 
-# 2. Tokenize in volatile RAM (0% plaintext leakage)
+# 2. Disguise sensitive names in volatile RAM (0% leaks)
 policy = resolve_policy(origin="Saudi Arabia", target="PDPL")
 masked_df, token_vault = tokenize_dataframe(df, policy)
 
-# 3. Safely audit and execute untrusted external code
+# 3. Test untrusted code with the digital metal detector and run it safely
 untrusted_ai_code = "df['net_pay'] = df['base_salary'] - df['deductions']"
-audit_code(untrusted_ai_code)  # Blocks sockets, env vars, paths
+audit_code(untrusted_ai_code)  # Blocks internet calls, file deletion, and snooping
 transformed_df = execute_code_safely(untrusted_ai_code, masked_df)
 
-# 4. Detokenize back to genuine figures in local RAM
+# 4. Restore genuine names from the temporary vault
 clean_df = detokenize_dataframe(transformed_df)
 clean_df.to_excel("Clean_payroll.xlsx", index=False)
 ```
@@ -629,57 +631,17 @@ clean_df.to_excel("Clean_payroll.xlsx", index=False)
 
 ## 5. The Complete Interactive Wizard Walkthrough
 
-When you run `%deepanalyze`, `da.wizard()`, or `python -m deepanalyze`, the system starts with dual-path execution:
+When you run `%deepanalyze` or `deepanalyze wizard`, here is what happens across the 13 guided steps:
 
-### Step 1: Mode Selection & Resilient Ingestion
-
-* **Prompt**: Select execution path:
-  * `[1] Express Clean (1-Click / Zero-Touch)`: Automatic primary sheet resolution, Saudi PDPL defaults, auto-tokenization, benchmark auto-generalization ($k \ge 5$), zero-prompt transformation, and instant deliverables.
-  * `[2] Enterprise / Auditor Mode (Full 13-Step Control)`: Full granular compliance arbitration, statutory overrides, interactive teaching loops, and custom DLP rule engineering.
-* **Engine Action**: Strips quotes/spaces, discovers all sheet tabs, and detects top metadata offsets while preserving all columns in local volatile RAM.
-* **Output**: Ingested raw table in local RAM.
-
-### Step 2: Country of Origin (Question 1)
-
-* **Prompt**: Select operational location (`Saudi Arabia (KSA)`, `Poland (EU)`, `United States (US)`, `United Kingdom (UK)`, `Universal / Other`).
-* **Engine Action**: Filters relevant data protection statutes for the operating jurisdiction.
-
-### Step 3: Statutory Compliance Framework (Question 2)
-
-* **Prompt**: Select governing regulation or choose `Not Sure (Auto-Detect)`.
-* **Engine Action**: Binds national rules (e.g. KSA $->$ Saudi PDPL & NDMO; EU $->$ GDPR; US $->$ HIPAA).
-
-### Step 4: Dataset Architecture & Multi-Sheet Topology (Question 3)
-
-* **Prompt**: Displays **Workbook Topology Card** and **Dynamic Multi-Sheet ER Schema**; asks whether to handle all sheets together.
-* **Engine Action**: Automatically parses all sheets, inspects column cardinatlities, classifies sheet roles (`TRANSACTION_LEDGER`, `LOOKUP_DIMENSION`), identifies primary keys and foreign key join candidates, detects subtotal summary rows, and generates interactive ASCII and Mermaid ER diagrams dynamically.
-* **Output**: Synchronized multi-sheet relational scope.
-
-### Step 5: Full-File Deep Scan & Pattern Categorization
-
-* **Prompt**: Automatic execution across every cell and row.
-* **Engine Action**: Categorizes entities into geometric patterns (`Names -> XXXX`, `Invoices -> XX-99999`, `Amounts -> 9,999.00`, `GL Codes -> 999-999`).
-* **Output**: Safe surrogate mappings held strictly in volatile RAM.
-
-### Step 6: Dataset Inventory Catalog & Analytical Profile Exploration
-
-* **Prompt**: Displays Rich inventory table with types, null rates, cardinality, and sample values.
-* **Engine Action**: Performs **k-Anonymity & Re-Identification Audit** on quasi-identifiers, enforcing $k \ge 5$ equivalence classes and $l \ge 2$ diversity.
-* **Output**: Clear color-coded privacy flags (`MUST_ENCRYPT`, `RECOMMENDED_TO_MASK`, `SAFE`).
-
-### Step 7: Informed Value Teaching & Disambiguation Loop
-
-* **Prompt**: *"Are there more columns or data elements you want me to encrypt? [y/N]"*
-* **Engine Action**: Accepts column names or numbers, infers regex patterns, and re-masks matching values across the entire dataset in RAM.
-
-### Step 7.5: Human Intuition & Custom Objectives Hook
-
-* **Prompt**: *"Do you have special business requests or column extraction rules for the cloud AI? [y/N]"*
-* **Engine Action**: Ingests custom user requirements (e.g. *"Extract RAM into ram_gb"*, *"Enforce VAT 15%"*) to inject into the prompt.
-
-### Step 8: Master Prompt Synthesis, Interactive Review & Pre-Flight Privacy Gateway
-
-* **Prompt**: Displays the generated master prompt, executes the **Tier 1 Pre-Flight Privacy Gateway**, and prompts for encrypted duplicate export:
+* **Step 1: Pick Your Mode & Load File:** Choose between **Express 1-Click Clean** or **Full Auditor Mode**. Drag-and-drop your file from your desktop. DeepAnalyze reads all columns, even if row 1 is full of clutter.
+* **Step 2: Country of Origin:** Tell DeepAnalyze what country your data comes from (`Saudi Arabia`, `European Union`, `United States`, etc.).
+* **Step 3: Privacy Law:** Select the law that protects your data (like Saudi **PDPL**, **GDPR**, or **HIPAA**). If you aren't sure, select **"Not Sure"** and DeepAnalyze chooses the right law for you automatically!
+* **Step 4: Dataset Style & Multi-Sheet Map:** Select your spreadsheet type. DeepAnalyze inspects all sheets, discovers links between them, and draws a map showing how they connect.
+* **Step 5: Full Deep Scan:** DeepAnalyze searches every single cell, row, and note to find names, IDs, phones, and bank accounts, swapping them for safe tokens (`XXXX`, `9,999.00`).
+* **Step 6: Privacy Inspection:** Displays a clean summary table showing what was disguised, and checks that people can't be singled out ($k$-Anonymity $k \ge 5$).
+* **Step 7: Teach Custom Codes:** Did the scanner miss an internal company code like `500-000`? Just type one example, and DeepAnalyze learns the pattern across the whole file.
+* **Step 7.5: Custom Business Wishes:** Tell DeepAnalyze any specific goals you have (like *"Calculate 15% VAT"* or *"Extract RAM sizes"*).
+* **Step 8: Master Prompt & Pre-Flight Privacy Gateway:** DeepAnalyze runs a battery of 4 instant safety checks in RAM before letting anything leave:
 
 ```text
 [PRE-FLIGHT PRIVACY GATEWAY]
@@ -695,192 +657,114 @@ T1.4    | Homogeneity (l-Diversity) | l = 3   | l >= 2 (Distinct Attr) | NIST SP
 Status: 4/4 CRITERIA SATISFIED
 ```
 
-* **Engine Action & Interactive Branching**:
-  * Executes the **18-Brain Omni-Cognitive Council** (Left Hemisphere Data Physics + Right Hemisphere EQ & Startup Colleague Persona).
-  * Automatically normalizes Eastern Arabic numerals (`٠-٩`), BiDi marks, Hijri dates, and 15% ZATCA / 5% GCC VAT invariants.
-  * Injects a 5-row Laplace Differential Privacy synthetic schema mock ($\epsilon=1.0$).
-  * Runs the **Tier 1 Pre-Flight Gate** (< 15 ms in volatile RAM):
-    * **Case A: Any Tier 1 Check Fails (e.g. $k < 5$ or Plaintext PII detected):**
+You can now copy the safe prompt to your clipboard or download an encrypted stunt-double spreadsheet (`[dataset]_anonymized.xlsx`).
 
-      ```text
-      Status: 1 CRITERION FAILED (T1.3: k-Anonymity = 2; 14 unique row signatures detected)
-      Risk: Potential singling-out vulnerability under EU WP29 / HIPAA Expert Determination.
+* **Step 9: Choose How You Want to Clean It:** Choose between running the deterministic Python flattener, copying instructions for ChatGPT/Claude, or generating an Excel Power Query script.
+* **Step 10: Automatic Data Enrichment:** Proposes helpful new features (like pulling the day of the week out of dates, or calculating price ratios).
+* **Step 11: Safety Metal Detector & Error Doctor:** Paste the AI's code. The AST Firewall inspects it. If the code has a typo, DeepAnalyze catches it, displays the error, and lets you paste the fix without crashing!
+* **Step 12: Quality Scorecard (0 to 100):** DeepAnalyze grades your clean data, puts all genuine names back, saves your clean file (`Clean_file.xlsx`), and generates a test file (`test_clean_pipeline.py`).
+* **Step 13: Official Certificate:** DeepAnalyze writes a verifiable certificate (`compliance_audit.md`) proving that your data processing followed 100% of national privacy standards:
 
-      Options:
-        [1] Auto-generalize quasi-identifiers (Bin ages, truncate postal codes)
-        [2] Select additional columns to encrypt
-        [3] Abort export
-      Select action [1/2/3] (default: 1): 
-      ```
-
-    * **Case B: All Tier 1 Checks Pass:**
-
-      ```text
-      Status: 4/4 CRITERIA SATISFIED
-      Statutory Baseline: Local data isolation verified. Zero production direct identifiers present.
-
-      Download encrypted dataset duplicate? [Y/n]: 
-      ```
-
-* **Output**: Saves `[dataset]_cleaning_prompt.md`, copies text to clipboard, and optionally exports `[dataset]_anonymized.xlsx` (volatile session keys held strictly in RAM).
-
-### Step 9: Interactive Delivery Selection & Guided Step-by-Step Cleaning
-
-* **Prompt**: Select transformation pathway:
-  * `[1] In-Place Python Cleaning (Zero-Data-Loss State Machine)`: Runs the deterministic RAM cleaner (`erp_cleaner.py`), automatically forward-filling headers, stitching multi-line wrapped text rows, and eliminating repeated page separators without dropping genuine transactions.
-  * `[2] Guided Step-by-Step Cleaning Prompt`: Displays and exports surgical instructions for Frontier LLMs (`[dataset]_cleaning_prompt.md`), providing the exact algorithmic steps for Python or Power Query M.
-  * `[3] Dynamic Power Query Companion`: Generates dynamically sniffed M-code (`powerquery_script.m`) with calculated header offsets and typed projections for Microsoft Excel.
-* **Frontier API Gateway (Optional BYOK)**: If OpenAI, Anthropic, OpenRouter, or Custom API keys are detected, DeepAnalyze allows 1-click **Direct Frontier Execution**. The briefing is pre-scanned by a strict deterministic DLP airlock before transmission, eliminating manual copy-pasting while maintaining zero-PII guarantees.
-* **Engine Action**: Pre-loads `pd`, `np`, `pl`, and multi-sheet context dictionaries into execution scope.
-
-### Step 10: Automated Data Engineering Engine
-
-* **Prompt**: Proposes post-cleaning predictive feature enrichment.
-* **Engine Action**: Profiles cleaned data for temporal features (year, month, day of week), numerical ratios ($z$-scores, log transforms, IQR outliers), categorical frequency encoding, and text word counts in pure, fast Polars.
-* **Dual-Model Stitcher**: Adapts and aligns foreign frontier code to the exact local schema using the local 8B model with division-by-zero protection.
-
-### Step 11: Syntax Preview, AST Security Sandbox & Autonomous Healing
-
-* **Prompt**: Displays syntax-highlighted code preview.
-* **Engine Action**: Audits AST syntax tree, blocking network libraries, environment variables (`os.environ`), and sensitive paths (`/etc/`, `~/.ssh/`).
-* **Auto-Repair**: On execution crash, the local model autonomously synthesizes a corrected patch in volatile RAM.
-
-### Step 12: Real-Time Quality Scorecard & Interactive Terminal Cockpit
-
-* **Prompt**: Displays side-by-side tabular diff and prompts to open the **Interactive Terminal Cockpit**.
-* **Terminal Cockpit (ANSI Dashboard)**:
-  * **Structural Geometry, Hygiene & Purity, and Airlock Trust KPI Cards**.
-  * **3-Way Sample Previews**: Head snapshots of Original, Encrypted Buffer, and Cleaned datasets.
-  * **Consolidated Audit Matrix**: Comprehensive side-by-side metrics table.
-  * **Column Shift Inspector**: Audits column-by-column null drops and data type evolutions.
-  * **Feature Studio**: Instant one-click Polars feature generation.
-* **Output**: Clean dataset export (`Clean_file.xlsx` / `.csv` / `.parquet`), `test_clean_pipeline.py`, and Power Query companions.
-
-### Step 13: Statutory Compliance Audit Certificate
-
-* **Prompt**: Automatic generation upon completion.
-* **Engine Action**: Computes SHA-256 session hash, executes the full **11-Test Benchmark Suite** across Tier 1 and Tier 2, and compiles the formal audit report with an attributable Statutory Methodology Attestation.
-* **Output**: Verifiable `compliance_audit.md` certificate containing the complete statutory benchmark matrix:
-
-| Test ID | Test Name | Operational Target | Governing Standard & Technical Clause |
+| Test ID | Test Name | What It Tests For | Real-World Passing Target |
 | :--- | :--- | :--- | :--- |
-| **T1.1** | Canary Token Injection | $0.00\%$ Leakage | **NIST SP 800-188 §3.2** (Unintended Memorization & Direct Egress Defense) |
-| **T1.2** | Deterministic PII Scan | $0$ Plaintext Matches | **Saudi PDPL Art. 29 / GDPR Art. 4(1) / PCI-DSS v4.0 Req 3.4** |
-| **T1.3** | Singling-Out Risk ($k$-Anonymity) | $k \ge 5$ ($0.00\%$ unique rows) | **EU Article 29 Working Party (WP29) / HIPAA Safe Harbor § 164.514(b)** |
-| **T1.4** | Attribute Homogeneity ($l$-Diversity) | $l \ge 2$ across groups | **NIST SP 800-188** (Sensitive Attribute Dispersion) |
-| **T2.5** | Distribution Skew ($t$-Closeness) | $D[P, Q] \le 0.15$ (Wasserstein) | **IEEE Transactions on Data Privacy** (Subgroup Distributional Distance) |
-| **T2.6** | Empirical Linkability (`anonymeter`) | Risk Score $< 0.05$ | **French Data Protection Authority (CNIL) & PETS 2023 Guidelines** |
-| **T2.7** | Nearest-Neighbor Distance (NNDR) | $\text{NNDR} \ge 0.25$ | **ISO/IEC 27559:2022** (Synthetic Data Non-Memorization Verification) |
-| **T2.8** | Membership Inference Attack (MIA) | $\text{AUC} \le 0.55$ (Chance Baseline) | **NIST Privacy Framework v1.1** (Re-identification Surface Minimization) |
-| **T2.9** | Normalized Mutual Information (NMI) | $\text{NMI} < 0.05$ | **Shannon Information Theory** (Residual Entropy Disclosure) |
-| **T2.10**| AST Security Sandbox Audit | $100\%$ Egress Block | **CWE-94 / OWASP Top 10** (Code Injection & Data Exfiltration Prevention) |
-| **T2.11**| Round-Trip Reconciliation | $100.00\%$ Character Fidelity | **ISO 8000 / BCBS 239** (Data Governance & Lineage Integrity) |
-
-```markdown
-### STATUTORY METHODOLOGY ATTESTATION
-This audit verifies that the evaluated data artifacts satisfy the mathematical de-identification, pseudonymization, and sandboxing requirements referenced above. 
-
-Evaluation Methodology:
-1. Direct identifiers are irreversibly masked or surrogate-tokenized within volatile system memory pursuant to GDPR Article 4(5) and Saudi PDPL Article 29.
-2. Quasi-identifiers achieve mathematical equivalence class thresholds (k >= 5, l >= 2) consistent with HIPAA Safe Harbor and EU WP29 de-identification methodologies.
-3. Code execution pathways are audited against static abstract syntax tree (AST) constraint policies, eliminating network egress and host filesystem mutation risks prior to runtime execution.
-```
+| **T1.1** | Canary Token Injection | Verifies no hidden canary secrets leaked into the prompt. | **0.00% leaks (Exact 0)** |
+| **T1.2** | Deterministic PII Scan | Checks for real Saudi National IDs, SSNs, credit cards, or phones. | **0 plaintext matches** |
+| **T1.3** | Singling-Out Risk ($k$-Anonymity) | Confirms every person belongs to a crowd of matching peers. | **$k \ge 5$** |
+| **T1.4** | Attribute Homogeneity ($l$-Diversity) | Confirms sensitive attributes within each group are diverse. | **$l \ge 2$ distinct values** |
+| **T2.5** | Distribution Skew ($t$-Closeness) | Ensures data doesn't skew drastically away from natural spreads. | **Wasserstein distance $\le 0.15$** |
+| **T2.6** | Empirical Linkability (`anonymeter`) | Simulates a hacker trying to connect data to public voter lists. | **Risk score $< 0.05$ (CNIL standard)** |
+| **T2.7** | Nearest-Neighbor Distance (NNDR) | Verifies synthetic rows aren't memorized clones of real rows. | **NNDR $\ge 0.25$ (ISO 27559)** |
+| **T2.8** | Membership Inference Attack (MIA) | Verifies an attacker cannot guess who was in the dataset. | **$\text{AUC} \le 0.55$ (Random chance)** |
+| **T2.9** | Normalized Mutual Information (NMI) | Verifies non-sensitive columns cannot leak sensitive secrets. | **$\text{NMI} < 0.05$** |
+| **T2.10**| AST Security Sandbox Audit | Verifies 100% of network leak and file deletion attacks are blocked. | **100% egress block rate** |
+| **T2.11**| Round-Trip Reconciliation | Verifies every single row and number is restored with 100% accuracy. | **100.00% character fidelity** |
 
 ---
 
 ## 6. Excel Power Query Dual-Track (For Non-Programmers)
 
-In addition to automated Python execution in RAM, DeepAnalyze provides a **Dual-Track Delivery** for finance professionals, accountants, and non-analysts who work exclusively in Microsoft Excel.
+Not a programmer? Don't worry! DeepAnalyze was built from day one to support accountants and business analysts who live in **Microsoft Excel**.
 
-The Dynamic Power Query Engine (`powerquery.py`) uses statistical layout sniffing (`sniff_erp_layout`) to calculate the exact header offset row (`header_row_idx`), discover key prefix patterns dynamically, and generate resilient M-code tailored to any dataset schema without hardcoded row slicing.
+When you choose Power Query in Step 9:
+1. DeepAnalyze creates a ready-to-paste script: `powerquery_script.m`.
+2. It writes a click-by-click instruction guide: `powerquery_guide.md`.
 
-When selecting delivery format `[3] Power Query (M-Code)` in Step 9:
-
-1. `powerquery_script.m`: Ready-to-paste dynamic Power Query M-code saved directly to disk.
-2. `powerquery_guide.md`: A complete, click-by-click UI walkthrough with exact Excel steps (no redundant code dumps).
-
-### The 60-Second Copy-Paste (Recommended):
-
-1. In Excel, go to **Data** $->$ **Get Data** $->$ **From File** $->$ **From Excel Workbook**.
-2. Select your file and choose your sheet $->$ click **Transform Data**.
-3. In Power Query Editor, go to the **Home** tab and click **Advanced Editor**.
-4. Select all (`Cmd+A` / `Ctrl+A`), delete existing text, and paste the dynamic code from [`powerquery_script.m`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/powerquery_script.m):
+### The 60-Second Copy-Paste in Excel:
+1. In Excel, go to **Data** $\rightarrow$ **Get Data** $\rightarrow$ **From File** $\rightarrow$ **From Excel Workbook**.
+2. Pick your messy file and click **Transform Data**.
+3. In Power Query Editor, click the **Home** tab and open **Advanced Editor**.
+4. Select all text (`Ctrl+A` or `Cmd+A`), delete it, and paste the code from [`powerquery_script.m`](file:///Users/abdullahbinmadhi/Desktop/deepanalyze/powerquery_script.m):
 
 ```powerquery
 let
-    // 1. Ingest Excel Workbook dynamically
+    // 1. Open Excel Workbook
     Source = Excel.Workbook(File.Contents("YOUR_FILE_PATH_HERE.xlsx"), null, true),
     Navigation = Source{[Item="Report", Kind="Sheet"]}[Data],
 
-    // 2. Remove metadata rows using dynamically calculated offset (e.g. Table.Skip)
+    // 2. Skip clutter rows automatically
     #"Removed Top Rows" = Table.Skip(Navigation, DynamicHeaderOffset),
 
-    // 3. Ensure primary column is text for dynamic pattern matching
+    // 3. Make sure first column is text
     #"Changed Type Col1" = Table.TransformColumnTypes(#"Removed Top Rows", {{"Column1", type text}}),
 
-    // 4. Exclude summary grand totals (null-safe guard against separator rows)
+    // 4. Remove summary grand totals safely
     #"Filtered Grand Total" = Table.SelectRows(#"Changed Type Col1", each ([Column1] = null or not Text.Contains([Column1], "Grand Total"))),
 
-    // 5. Extract document-level headers using dynamic prefix recognition
+    // 5. Extract document headers
     #"Add doc_no" = Table.AddColumn(#"Filtered Grand Total", "doc_no", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column1] else null),
     #"Add doc_date" = Table.AddColumn(#"Add doc_no", "doc_date", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column3] else null),
     #"Add customer_code" = Table.AddColumn(#"Add doc_date", "customer_code", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column5] else null),
     #"Add customer_name" = Table.AddColumn(#"Add customer_code", "customer_name", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column7] else null),
     #"Add invoice_total" = Table.AddColumn(#"Add customer_name", "invoice_total", each if [Column1] <> null and Text.StartsWith([Column1], DynamicPrefix) then [Column16] else null),
 
-    // 6. Forward-fill document headers down to all transaction line items
+    // 6. Fill document headers down to all items
     #"Filled Down Headers" = Table.FillDown(#"Add invoice_total", {"doc_no", "doc_date", "customer_code", "customer_name", "invoice_total"}),
 
-    // 7. Filter to itemized line items and preserve sequence
+    // 7. Filter to real item lines
     #"Type Sequence" = Table.TransformColumnTypes(#"Filled Down Headers", {{"Column1", Int64.Type}}),
     #"Handled Errors" = Table.ReplaceErrorValues(#"Type Sequence", {"Column1", null}),
     #"Filtered Line Items" = Table.SelectRows(#"Handled Errors", each ([Column1] <> null)),
 
-    // 8. Select and rename final typed business columns dynamically
+    // 8. Select and rename clean columns
     #"Final Projection" = Table.SelectColumns(#"Filtered Line Items", FinalColumnsList),
     #"Enforced Types" = Table.TransformColumnTypes(#"Final Projection", TypedSchemaList)
 in
     #"Enforced Types"
 ```
 
-5. Click **Done** $->$ **Close & Load**.
-6. **Monthly Refresh:** Every month you receive a new ERP export, simply click **Data $->$ Refresh All**!
+5. Click **Done**, then click **Close & Load**.
+6. **Monthly 1-Click Refresh:** Next month when your accounting software gives you a new messy report, just open Excel and click **Data $\rightarrow$ Refresh All**! Done!
 
 ---
 
 ## 7. Command Reference & Directives Cheat Sheet
 
-| Directive / CLI Flag | Operating Context | Purpose | Syntax Example |
+| Command / Flag | Where to Run | What It Does in Plain English | Example |
 | :--- | :--- | :--- | :--- |
-| `deepanalyze wizard` | Shell / Terminal | Launches full 13-step zero-code airlock wizard | `deepanalyze wizard [optional_file_path]` |
-| `deepanalyze server start` | Shell / Terminal | Starts local GGUF inference server | `deepanalyze server start -m model.gguf -p 8080` |
-| `%deepanalyze` | Jupyter / IPython | Launches full interactive wizard in notebook | `%deepanalyze` |
-| `--airgap` | Jupyter / IPython | Direct anonymization & payload copy to clipboard | `%deepanalyze --airgap --origin "Saudi Arabia" --jurisdiction "PDPL" --target df "Clean dates"` |
-| `%%deepanalyze --run` | Jupyter Cell Magic | Audits syntax with AST Firewall and executes in RAM | `%%deepanalyze --run --target df`<br>`df['Total'] = df['Qty'] * df['Price']` |
-| `--fix` | Jupyter / IPython | Autonomous Ouroboros diagnosis & repair via local 8B model or custom prompt | `%deepanalyze --fix "handle outliers in price"` |
-| `--undo` | Jupyter / IPython | Rolls back DataFrame state (up to 5 history snapshots) | `%deepanalyze --undo --target df` |
-| `--audit` | Jupyter / IPython | Exports verifiable compliance certificate | `%deepanalyze --audit --out compliance_audit.md` |
+| `deepanalyze wizard` | Terminal / Shell | Launches full 13-step zero-code airlock wizard | `deepanalyze wizard [optional_file_path]` |
+| `deepanalyze server start` | Terminal / Shell | Starts local 100% offline AI inference server | `deepanalyze server start -m model.gguf -p 8080` |
+| `%deepanalyze` | Jupyter Notebook | Launches full interactive wizard in your notebook | `%deepanalyze` |
+| `--airgap` | Jupyter Notebook | Fast anonymization & copies safe prompt to clipboard | `%deepanalyze --airgap --origin "Saudi Arabia" --jurisdiction "PDPL" --target df "Clean dates"` |
+| `%%deepanalyze --run` | Jupyter Cell Magic | Audits code with AST Firewall and runs safely in RAM | `%%deepanalyze --run --target df`<br>`df['Total'] = df['Qty'] * df['Price']` |
+| `--fix` | Jupyter Notebook | Automatic Medic: diagnoses crash & auto-fixes code | `%deepanalyze --fix "handle outliers in price"` |
+| `--undo` | Jupyter Notebook | Time Machine Undo: rolls table back up to 5 steps | `%deepanalyze --undo --target df` |
+| `--audit` | Jupyter Notebook | Exports verifiable compliance certificate | `%deepanalyze --audit --out compliance_audit.md` |
 
 ---
 
 ## 8. Local Inference Server & Speculative Acceleration
 
-DeepAnalyze includes an integrated, high-throughput local inference manager (`server.py` and `start_server.sh`) powered by `llama-server`.
+DeepAnalyze includes an integrated local model runner (`server.py` and `start_server.sh`) powered by `llama-server`.
 
-### Hardware Acceleration Auto-Detection
-
-* **macOS (Apple Silicon M1/M2/M3/M4):** Automatically activates **Apple Metal** unified memory acceleration (`-ngl 99`, `-fa on`, Flash Attention, 16K context).
-* **Linux (NVIDIA / AMD):** Automatically binds CUDA or ROCm GPU acceleration (`-ngl 99`).
-* **Transport:** Binds to Unix Domain Sockets (`/tmp/llama.sock`) for ultra-low latency local IPC with zero TCP overhead.
-
-### Speculative Decoding (2.5x Generation Speedup)
-DeepAnalyze supports pairing an 8B target model with a fast speculative draft model (such as `Qwen2.5-Coder-1.5B`). The draft model speculatively generates token candidates that the 8B model verifies in parallel:
+* **Apple Silicon (Mac M1/M2/M3/M4):** Automatically turns on **Apple Metal** graphics acceleration so models run at high speed using unified memory.
+* **Linux (NVIDIA / AMD):** Automatically binds CUDA or ROCm GPU acceleration.
+* **Super-Fast Speculative Decoding:** Uses a small, lightning-fast "drafting model" (like `Qwen2.5-Coder-1.5B`) to predict tokens while the main 8B model verifies them, speeding up code generation by **2.5x**!
 
 ```bash
-# Start server with speculative draft acceleration
+# Start local offline server with acceleration
 ./start_server.sh
 
-# Or via CLI
+# Or start directly via CLI
 deepanalyze server start \
   --model ./models/deepanalyze-8b-q4_k_m.gguf \
   --draft-model ./models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf \
@@ -892,40 +776,30 @@ deepanalyze server start \
 
 ## 9. Architecture, Security & Compliance FAQ
 
-### Q1: How does DeepAnalyze protect messy ERP reports where columns are missing or names are buried in rows?
-**Answer:** Standard PII scanners evaluate column headers (e.g. `customer_name`), which fails completely on unflattened ERP reports where client names and invoice numbers are buried in row cells under headers like `Date : From 1/8/2025`. DeepAnalyze applies **Cell-Level Geometric Masking**: it preserves structural layout keywords (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) so an external AI can understand the hierarchical geometry, while masking all client names to `XXXX`, invoice numbers to `XX-99999`, and figures to `9,999.00`.
+### Q1: How does DeepAnalyze protect messy spreadsheets where names are buried inside rows?
+**Answer:** Standard scanners only check column headers (like looking for `customer_name`), which completely fails when names are buried in data cells under a header like `Date : From 1/8/2025`. DeepAnalyze uses **Cell-Level Geometric Masking**: it preserves structural keywords (`Doc. No`, `Doc Date`, `Seq`, `GL Code`, `:`) so the AI understands the layout, while masking all client names to `XXXX`, invoice numbers to `XX-99999`, and money figures to `9,999.00`.
 
-### Q2: What happens if I select "Not Sure" for compliance or dataset type?
-**Answer:** DeepAnalyze contains built-in statutory and geometric heuristics. If "Not Sure" is chosen for compliance, it maps your operating country to the governing national statute (e.g. Saudi Arabia $->$ Saudi PDPL & NDMO Standards; Poland $->$ GDPR & UODO). If "Not Sure" is chosen for dataset type, it inspects colon frequencies, multi-level headers, and ragged structures to detect whether the dataset is an unflattened ERP report or clean tabular data.
+### Q2: What happens if I choose "Not Sure" for the compliance rule or dataset type?
+**Answer:** DeepAnalyze has smart built-in detectors. If "Not Sure" is chosen for the law, it looks at your computer's country and automatically picks the right statute (e.g. Saudi Arabia $\rightarrow$ **Saudi PDPL & NDMO**; Poland $\rightarrow$ **GDPR**). If "Not Sure" is chosen for the dataset, it scans the spreadsheet for colons, ragged rows, and headers to figure out automatically if it's an unflattened ERP report or a normal table.
 
-### Q3: How does the interactive value teaching feature work?
-**Answer:** If the scanner misses an internal business code (e.g. General Ledger Code `500-000` or sequence number `10000`), simply type the column name and an example value. DeepAnalyze infers regex patterns and length constraints on the fly, registers a dynamic token rule, and re-masks all matching occurrences across thousands of rows.
+### Q3: How does the "value teaching" feature work?
+**Answer:** If the scanner misses an internal business code (like general ledger code `500-000` or custom sequence number `10000`), simply type the column name and one example value. DeepAnalyze learns the pattern on the fly, creates a dynamic rule, and disguises all matching codes across the entire file.
 
 ### Q4: What is the difference between an encrypted duplicate file and a clipboard payload?
-**Answer:**
+* **Encrypted Duplicate File (`[name]_anonymized.xlsx`):** A complete "stunt double" of your entire spreadsheet saved to disk. 100% of the columns and rows are kept, but every sensitive entity and dollar amount is replaced with safe surrogate values. You can upload this entire file to ChatGPT or Claude.
+* **Clipboard Payload:** A lightweight 5-row synthetic mini-mock with safe fake numbers copied directly to your clipboard for quick paste into chat interfaces.
 
-* **Encrypted Duplicate File (`[name]_anonymized.xlsx`):** A complete duplicate spreadsheet saved to disk where 100% of the row/column structure is retained, but every sensitive entity and dollar amount is replaced with safe surrogate values. You can upload this entire file to cloud AI models.
-* **Clipboard Payload:** A lightweight 5-row differential synthetic mock and prompt instructions copied directly to your clipboard for quick paste into chat interfaces.
+### Q5: What if the cloud AI writes code with bugs or syntax errors?
+**Answer:** DeepAnalyze catches any execution errors in local RAM. Instead of crashing your session, it shows you the exact error and asks: `"Would you like to paste the corrected code? [y/N]"`. You just paste the error back to the AI, get the fixed code, paste it, and keep going!
 
-### Q5: What if the cloud AI generates code with bugs or syntax errors?
-**Answer:** DeepAnalyze catches execution exceptions in local RAM. Instead of crashing your session, it displays the exact error message and prompts: `"Would you like to paste the corrected code? [y/N]"`. This allows you to iteratively debug with the cloud AI without losing state.
-
-### Q6: How does DeepAnalyze guarantee zero data leakage?
-**Answer:** External cloud models only ever see surrogate tokens (`XXXX`, `XX-99999`). When Python code is pasted back, the AST Security Firewall audits the code, blocking network libraries (`socket`, `requests`, `urllib`), environment variable access (`os.environ`), and system commands. Detokenization back to genuine values happens strictly in local RAM.
+### Q6: How does DeepAnalyze guarantee zero data leaks?
+**Answer:** The external AI only ever sees fake stunt-double data. When the AI gives you back a Python cleaning script, our **AST Security Firewall** inspects the code before running it. It blocks any code that tries to connect to the internet (`socket`, `requests`, `urllib`), steal passwords (`os.environ`), or delete files. Detokenization back to genuine values happens strictly in your computer's local RAM.
 
 ### Q7: What if the cloud AI writes code using Pandas and NumPy instead of Polars?
-**Answer:** DeepAnalyze features a native Dual-Engine execution layer. Cloud LLMs overwhelmingly write data wrangling code using `pandas` (`pd`) and `numpy` (`np`). DeepAnalyze pre-injects `pandas as pd`, `numpy as np`, and `polars as pl` into the local execution scope, automatically detects Pandas operations (`df.iloc`, `df.apply`, `df['col']`, `pd.to_datetime`, `np.where`), and provides `df` in the expected format.
+**Answer:** DeepAnalyze features a native **Dual-Engine Execution Layer**. Cloud AI models love writing data code using `pandas` (`pd`) and `numpy` (`np`). DeepAnalyze automatically pre-loads `pandas as pd`, `numpy as np`, and `polars as pl`. Whether the incoming code uses Pandas (`df.iloc`, `df['col']`) or Polars (`pl.col`), DeepAnalyze runs it seamlessly.
 
-### Q8: What if I am not a programmer and want to clean the spreadsheet in Excel?
-**Answer:** DeepAnalyze generates ready-to-paste Power Query M-code (`powerquery_script.m`) and a comprehensive UI guide (`powerquery_guide.md`). Accountants and business users can paste the M-code into Excel's Advanced Editor and clean the spreadsheet natively in Excel. Future monthly files can be refreshed with a single click (**Data $->$ Refresh All**).
-
-### Q9: Why did Power Query previously give an error about keyword `<'section'>`?
-**Answer:** In the Power Query M language, `section` is a reserved keyword. This error occurs if:
-
-1. The word `section` is typed or pasted without double quotes (`"section"`).
-2. Code starting with `section Section1; shared ...` is pasted into Excel's Advanced Editor (which only accepts expression documents `let ... in ...`).
-3. Code is pasted into the single-line Formula Bar (`fx`) or Step Script box instead of opening the **Advanced Editor** (Home $->$ Advanced Editor).
-All scripts generated by DeepAnalyze now use fully validated expression syntax with null-safe guards and correct list-of-lists typing.
+### Q8: What if I don't know Python and want to clean my data in Excel?
+**Answer:** DeepAnalyze generates ready-to-paste **Power Query M-Code** (`powerquery_script.m`) and a click-by-click UI guide (`powerquery_guide.md`). You can paste the code into Excel's Advanced Editor and clean the data natively in Excel without writing any Python. Plus, you can refresh future monthly files with a single click (**Data $\rightarrow$ Refresh All**).
 
 ---
 
@@ -934,9 +808,9 @@ All scripts generated by DeepAnalyze now use fully validated expression syntax w
 ### Source Tree
 ```text
 deepanalyze/
-├── __init__.py      # Public API exports & IPython extension lifecycle
+├── __init__.py      # Public API exports & IPython extension setup
 ├── wizard.py        # Zero-Code Interactive 13-Step Air-Gap Wizard
-├── brain.py         # 18-Brain Omni-Cognitive Resonance Engine (Left Data Physics + Right EQ & Startup Colleague Persona)
+├── brain.py         # 18-Brain Omni-Cognitive Council (Left Data Physics + Right EQ & Startup Persona)
 ├── profiler.py      # Deep Exploration, Topology Discovery & Autonomous Briefing
 ├── promptgen.py     # Prompt Synthesis Engine, Human Intuition & Interactive Review Loop
 ├── policies.py      # Jurisdictional Compliance Engine & "Not Sure" Statute Resolver
@@ -951,7 +825,7 @@ deepanalyze/
 ├── erp_cleaner.py   # Universal Dynamic Layout Sniffer & Zero-Data-Loss State Machine
 ├── cockpit_tui.py   # Full-Screen Textual Interactive Cockpit TUI (TCSS Grid & Widgets)
 ├── cockpit.py       # Terminal ANSI KPI Scorecard & Column Shift Inspector
-├── frontier.py      # Frontier Model API Airlock Gateway (BYOK Direct Execution with Zero-PII Guarantee)
+├── frontier.py      # Frontier Model API Airlock Gateway (BYOK Direct Execution with Zero-PII)
 ├── data_engineering.py # Automated Feature Discovery & Polars Predictive Enhancement Engine
 ├── transformer.py   # High-Performance Deterministic ERP Flattening Engines
 ├── magics.py        # IPython Directives (%deepanalyze, %deepanalyze_dash, --airgap, --run, --fix, --undo, --audit)
@@ -960,18 +834,18 @@ deepanalyze/
 ```
 
 ### Pre-Commit Test Suite
-Every release is validated against 167 rigorous security, performance, and bilingual cognitive tests:
+Every release is validated against 167 rigorous security, performance, and bilingual tests:
 ```bash
 pytest
 ```
 
-* `tests/test_benchmarks.py`: Validates all 11 Air-Gap Privacy & Security Benchmarks across Tier 1 (canary injection, regex PII scanning, k-anonymity, l-diversity, NNDR memorization, NMI proxy leakage) and Tier 2 (t-closeness EMD distribution skewness, empirical anonymeter linkability, MIA shadow inference, AST firewall policy, and 100.00% deterministic reconciliation fidelity) alongside automatic inclusion in `compliance_audit.md`.
-* `tests/test_erp_cleaner.py`: Validates the Universal Dynamic Layout Sniffer (`sniff_erp_layout`), dynamic prefix discovery, zero data loss state-machine flattener, and multi-line ragged wrap stitching across diverse ERP formats.
-* `tests/test_brain.py`: Validates the complete 18-Brain Omni-Cognitive Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography (density mapping, header cutoffs, Arabic report headers & footers), morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama, and Unicode composite keys), forensic pathology (contamination & skewness), relational cryptography (candidate keys & functional hierarchies), mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), autonomous feature alchemy, multi-modal spatial cartography (bounding box & GPS coordinates), chronometrics (periodicity & FFT), process state modeling, tensor semantic manifold preservation, graph network topology, statutory privacy arbitration (ZATCA, NDMO, GDPR overrides), cryptographic surrogate decoding, Stigmergic Bayesian belief consensus updates, Ouroboros crash autopsies with surgical micro-repair prompts, Socratic inquiry questions, Empathetic cognitive friction translation, Intuitive human behavioral intent detection, and Narrative Weaver Startup Colleague persona synthesis.
-* `tests/test_fix.py`: Validates the closed-loop Ouroboros `--fix` directive, local model health probing, autonomous forensic diagnosis and surgical repair with local 8B GGUF model, custom steering prompts, AST security firewall validation on model-synthesized code, LIFO rollback integration, and graceful clipboard autopsy fallback when offline.
+* `tests/test_benchmarks.py`: Validates all 11 Air-Gap Privacy & Security Benchmarks across Tier 1 (canary injection, regex PII scanning, k-anonymity, l-diversity, NNDR memorization, NMI proxy leakage) and Tier 2 (t-closeness EMD distribution skewness, empirical anonymeter linkability, MIA shadow inference, AST firewall policy, and 100.00% deterministic reconciliation fidelity).
+* `tests/test_erp_cleaner.py`: Validates the Universal Dynamic Layout Sniffer (`sniff_erp_layout`), dynamic prefix discovery, zero-loss state-machine flattener, and multi-line ragged wrap stitching across diverse ERP formats.
+* `tests/test_brain.py`: Validates the complete 18-Brain Omni-Cognitive Council with Native Bilingual & Cultural Polymorphism: Shannon entropy calculation, topological cartography, morphological fingerprinting (UUID, IP, date, currency, Hijri temporal calendar, ZATCA VAT IDs, Saudi CR/Iqama), forensic pathology, relational cryptography, mathematical physics ($A \times B \approx C$ algebraic discovery and 15% ZATCA / 5% GCC statutory VAT invariants), spatial cartography, chronometrics, process modeling, tensor manifolds, graph topology, statutory privacy arbitration, Ouroboros crash autopsies, Socratic inquiry, Empathetic friction translation, and Startup Colleague persona synthesis.
+* `tests/test_fix.py`: Validates the closed-loop Ouroboros `--fix` directive, local model health probing, autonomous forensic diagnosis and surgical repair with local 8B model, and AST security firewall validation.
 * `tests/test_profiler.py`: Validates column profiling, mixed date format detection, accounting negative brackets `(1,000.00)`, dirty currency stripping, whitespace anomaly detection, subtotal row discovery, and autonomous prompt engineering briefing synthesis.
 * `tests/test_multisheet.py`: Validates multi-sheet workbook topology profiling, relational foreign key candidate inference, synchronized multi-sheet tokenization preserving join integrity, multi-sheet DP mock generation, and multi-sheet airlock code execution.
-* `tests/test_promptgen.py`: Validates domain tech spec extraction (RAM/ROM/Battery/Processor), clinical healthcare instructions, ERP multi-tier ledger transformations, custom business logic injection, differential privacy mock integration, disk prompt export, and offline graceful degradation.
+* `tests/test_promptgen.py`: Validates domain tech spec extraction, clinical healthcare instructions, ERP multi-tier ledger transformations, custom business logic injection, differential privacy mock integration, disk prompt export, and offline graceful degradation.
 * `tests/test_vault_speed.py`: Validates 100,000 rows tokenized in < 50 ms.
 * `tests/test_leakage.py`: Proves 0% plaintext leakage across international identifiers.
 * `tests/test_firewall.py`: Verifies 100% of forbidden calls, env vars, sensitive filepaths, timing attacks, and reflection are blocked.
@@ -986,4 +860,3 @@ pytest
 * `tests/test_pandas_numpy_airlock.py`: Validates native execution of Pandas and NumPy data wrangling code without Polars conversion errors.
 * `tests/test_erp_airlock.py`: Validates multi-column ERP flattening, header promotion, and automated sanitization.
 * `tests/test_powerquery_and_ingest.py`: Validates full 16-column Excel preservation, Power Query M-code parsing, and 100% ERP transformation fidelity.
-
