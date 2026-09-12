@@ -12,6 +12,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import subprocess
 import sys
 import traceback
@@ -113,13 +114,14 @@ def copy_to_clipboard(text: str) -> bool:
             p.communicate(text.encode("utf-8"))
             return p.returncode == 0
         elif sys_name == "Windows":
-            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE, shell=True)
+            # Avoid shell=True to prevent potential shell injection vulnerabilities
+            p = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
             p.communicate(text.encode("utf-16"))
             return p.returncode == 0
         elif sys_name == "Linux":
             for tool in ["xclip -selection clipboard", "xsel -b"]:
                 try:
-                    p = subprocess.Popen(tool.split(), stdin=subprocess.PIPE)
+                    p = subprocess.Popen(shlex.split(tool), stdin=subprocess.PIPE)
                     p.communicate(text.encode("utf-8"))
                     if p.returncode == 0:
                         return True
